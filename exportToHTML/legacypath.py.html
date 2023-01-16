@@ -1,0 +1,489 @@
+<html>
+<head>
+<title>legacypath.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+legacypath.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Add backward compatibility support for the legacy py path type.&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">shlex</span>
+<span class="s2">import </span><span class="s1">subprocess</span>
+<span class="s2">from </span><span class="s1">pathlib </span><span class="s2">import </span><span class="s1">Path</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TYPE_CHECKING</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">import </span><span class="s1">attr</span>
+<span class="s2">from </span><span class="s1">iniconfig </span><span class="s2">import </span><span class="s1">SectionWrapper</span>
+
+<span class="s2">from </span><span class="s1">_pytest.cacheprovider </span><span class="s2">import </span><span class="s1">Cache</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">final</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">LEGACY_PATH</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">legacy_path</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">Config</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">hookimpl</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">PytestPluginManager</span>
+<span class="s2">from </span><span class="s1">_pytest.deprecated </span><span class="s2">import </span><span class="s1">check_ispytest</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">fixture</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">FixtureRequest</span>
+<span class="s2">from </span><span class="s1">_pytest.main </span><span class="s2">import </span><span class="s1">Session</span>
+<span class="s2">from </span><span class="s1">_pytest.monkeypatch </span><span class="s2">import </span><span class="s1">MonkeyPatch</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Collector</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Item</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Node</span>
+<span class="s2">from </span><span class="s1">_pytest.pytester </span><span class="s2">import </span><span class="s1">HookRecorder</span>
+<span class="s2">from </span><span class="s1">_pytest.pytester </span><span class="s2">import </span><span class="s1">Pytester</span>
+<span class="s2">from </span><span class="s1">_pytest.pytester </span><span class="s2">import </span><span class="s1">RunResult</span>
+<span class="s2">from </span><span class="s1">_pytest.terminal </span><span class="s2">import </span><span class="s1">TerminalReporter</span>
+<span class="s2">from </span><span class="s1">_pytest.tmpdir </span><span class="s2">import </span><span class="s1">TempPathFactory</span>
+
+<span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s2">from </span><span class="s1">typing_extensions </span><span class="s2">import </span><span class="s1">Final</span>
+
+    <span class="s2">import </span><span class="s1">pexpect</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">Testdir:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Similar to :class:`Pytester`, but this class works with legacy legacy_path objects instead. 
+ 
+    All methods just forward to an internal :class:`Pytester` instance, converting results 
+    to `legacy_path` objects as necessary. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__test__ = </span><span class="s2">False</span>
+
+    <span class="s1">CLOSE_STDIN: </span><span class="s3">&quot;Final&quot; </span><span class="s1">= Pytester.CLOSE_STDIN</span>
+    <span class="s1">TimeoutExpired: </span><span class="s3">&quot;Final&quot; </span><span class="s1">= Pytester.TimeoutExpired</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">pytester: Pytester</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">_ispytest: bool = </span><span class="s2">False</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self._pytester = pytester</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">tmpdir(self) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;Temporary directory where tests are executed.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.path)</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">test_tmproot(self) -&gt; LEGACY_PATH:</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester._test_tmproot)</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">request(self):</span>
+        <span class="s2">return </span><span class="s1">self._pytester._request</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">plugins(self):</span>
+        <span class="s2">return </span><span class="s1">self._pytester.plugins</span>
+
+    <span class="s1">@plugins.setter</span>
+    <span class="s2">def </span><span class="s1">plugins(self</span><span class="s2">, </span><span class="s1">plugins):</span>
+        <span class="s1">self._pytester.plugins = plugins</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">monkeypatch(self) -&gt; MonkeyPatch:</span>
+        <span class="s2">return </span><span class="s1">self._pytester._monkeypatch</span>
+
+    <span class="s2">def </span><span class="s1">make_hook_recorder(self</span><span class="s2">, </span><span class="s1">pluginmanager) -&gt; HookRecorder:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.make_hook_recorder`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.make_hook_recorder(pluginmanager)</span>
+
+    <span class="s2">def </span><span class="s1">chdir(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.chdir`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.chdir()</span>
+
+    <span class="s2">def </span><span class="s1">finalize(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester._finalize`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester._finalize()</span>
+
+    <span class="s2">def </span><span class="s1">makefile(self</span><span class="s2">, </span><span class="s1">ext</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.makefile`.&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">ext </span><span class="s2">and not </span><span class="s1">ext.startswith(</span><span class="s3">&quot;.&quot;</span><span class="s1">):</span>
+            <span class="s4"># pytester.makefile is going to throw a ValueError in a way that</span>
+            <span class="s4"># testdir.makefile did not, because</span>
+            <span class="s4"># pathlib.Path is stricter suffixes than py.path</span>
+            <span class="s4"># This ext arguments is likely user error, but since testdir has</span>
+            <span class="s4"># allowed this, we will prepend &quot;.&quot; as a workaround to avoid breaking</span>
+            <span class="s4"># testdir usage that worked before</span>
+            <span class="s1">ext = </span><span class="s3">&quot;.&quot; </span><span class="s1">+ ext</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.makefile(ext</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs))</span>
+
+    <span class="s2">def </span><span class="s1">makeconftest(self</span><span class="s2">, </span><span class="s1">source) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.makeconftest`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.makeconftest(source))</span>
+
+    <span class="s2">def </span><span class="s1">makeini(self</span><span class="s2">, </span><span class="s1">source) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.makeini`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.makeini(source))</span>
+
+    <span class="s2">def </span><span class="s1">getinicfg(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; SectionWrapper:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getinicfg`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getinicfg(source)</span>
+
+    <span class="s2">def </span><span class="s1">makepyprojecttoml(self</span><span class="s2">, </span><span class="s1">source) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.makepyprojecttoml`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.makepyprojecttoml(source))</span>
+
+    <span class="s2">def </span><span class="s1">makepyfile(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.makepyfile`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.makepyfile(*args</span><span class="s2">, </span><span class="s1">**kwargs))</span>
+
+    <span class="s2">def </span><span class="s1">maketxtfile(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.maketxtfile`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.maketxtfile(*args</span><span class="s2">, </span><span class="s1">**kwargs))</span>
+
+    <span class="s2">def </span><span class="s1">syspathinsert(self</span><span class="s2">, </span><span class="s1">path=</span><span class="s2">None</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.syspathinsert`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.syspathinsert(path)</span>
+
+    <span class="s2">def </span><span class="s1">mkdir(self</span><span class="s2">, </span><span class="s1">name) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.mkdir`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.mkdir(name))</span>
+
+    <span class="s2">def </span><span class="s1">mkpydir(self</span><span class="s2">, </span><span class="s1">name) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.mkpydir`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.mkpydir(name))</span>
+
+    <span class="s2">def </span><span class="s1">copy_example(self</span><span class="s2">, </span><span class="s1">name=</span><span class="s2">None</span><span class="s1">) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.copy_example`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._pytester.copy_example(name))</span>
+
+    <span class="s2">def </span><span class="s1">getnode(self</span><span class="s2">, </span><span class="s1">config: Config</span><span class="s2">, </span><span class="s1">arg) -&gt; Optional[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getnode`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getnode(config</span><span class="s2">, </span><span class="s1">arg)</span>
+
+    <span class="s2">def </span><span class="s1">getpathnode(self</span><span class="s2">, </span><span class="s1">path):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getpathnode`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getpathnode(path)</span>
+
+    <span class="s2">def </span><span class="s1">genitems(self</span><span class="s2">, </span><span class="s1">colitems: List[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]) -&gt; List[Item]:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.genitems`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.genitems(colitems)</span>
+
+    <span class="s2">def </span><span class="s1">runitem(self</span><span class="s2">, </span><span class="s1">source):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runitem`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runitem(source)</span>
+
+    <span class="s2">def </span><span class="s1">inline_runsource(self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">*cmdlineargs):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.inline_runsource`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.inline_runsource(source</span><span class="s2">, </span><span class="s1">*cmdlineargs)</span>
+
+    <span class="s2">def </span><span class="s1">inline_genitems(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.inline_genitems`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.inline_genitems(*args)</span>
+
+    <span class="s2">def </span><span class="s1">inline_run(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">plugins=()</span><span class="s2">, </span><span class="s1">no_reraise_ctrlc: bool = </span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.inline_run`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.inline_run(</span>
+            <span class="s1">*args</span><span class="s2">, </span><span class="s1">plugins=plugins</span><span class="s2">, </span><span class="s1">no_reraise_ctrlc=no_reraise_ctrlc</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">runpytest_inprocess(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runpytest_inprocess`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runpytest_inprocess(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">runpytest(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runpytest`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runpytest(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">parseconfig(self</span><span class="s2">, </span><span class="s1">*args) -&gt; Config:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.parseconfig`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.parseconfig(*args)</span>
+
+    <span class="s2">def </span><span class="s1">parseconfigure(self</span><span class="s2">, </span><span class="s1">*args) -&gt; Config:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.parseconfigure`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.parseconfigure(*args)</span>
+
+    <span class="s2">def </span><span class="s1">getitem(self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">funcname=</span><span class="s3">&quot;test_func&quot;</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getitem`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getitem(source</span><span class="s2">, </span><span class="s1">funcname)</span>
+
+    <span class="s2">def </span><span class="s1">getitems(self</span><span class="s2">, </span><span class="s1">source):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getitems`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getitems(source)</span>
+
+    <span class="s2">def </span><span class="s1">getmodulecol(self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">configargs=()</span><span class="s2">, </span><span class="s1">withinit=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.getmodulecol`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.getmodulecol(</span>
+            <span class="s1">source</span><span class="s2">, </span><span class="s1">configargs=configargs</span><span class="s2">, </span><span class="s1">withinit=withinit</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">collect_by_name(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">modcol: Collector</span><span class="s2">, </span><span class="s1">name: str</span>
+    <span class="s1">) -&gt; Optional[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.collect_by_name`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.collect_by_name(modcol</span><span class="s2">, </span><span class="s1">name)</span>
+
+    <span class="s2">def </span><span class="s1">popen(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">cmdargs</span><span class="s2">,</span>
+        <span class="s1">stdout=subprocess.PIPE</span><span class="s2">,</span>
+        <span class="s1">stderr=subprocess.PIPE</span><span class="s2">,</span>
+        <span class="s1">stdin=CLOSE_STDIN</span><span class="s2">,</span>
+        <span class="s1">**kw</span><span class="s2">,</span>
+    <span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.popen`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.popen(cmdargs</span><span class="s2">, </span><span class="s1">stdout</span><span class="s2">, </span><span class="s1">stderr</span><span class="s2">, </span><span class="s1">stdin</span><span class="s2">, </span><span class="s1">**kw)</span>
+
+    <span class="s2">def </span><span class="s1">run(self</span><span class="s2">, </span><span class="s1">*cmdargs</span><span class="s2">, </span><span class="s1">timeout=</span><span class="s2">None, </span><span class="s1">stdin=CLOSE_STDIN) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.run`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.run(*cmdargs</span><span class="s2">, </span><span class="s1">timeout=timeout</span><span class="s2">, </span><span class="s1">stdin=stdin)</span>
+
+    <span class="s2">def </span><span class="s1">runpython(self</span><span class="s2">, </span><span class="s1">script) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runpython`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runpython(script)</span>
+
+    <span class="s2">def </span><span class="s1">runpython_c(self</span><span class="s2">, </span><span class="s1">command):</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runpython_c`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runpython_c(command)</span>
+
+    <span class="s2">def </span><span class="s1">runpytest_subprocess(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">timeout=</span><span class="s2">None</span><span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.runpytest_subprocess`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.runpytest_subprocess(*args</span><span class="s2">, </span><span class="s1">timeout=timeout)</span>
+
+    <span class="s2">def </span><span class="s1">spawn_pytest(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">string: str</span><span class="s2">, </span><span class="s1">expect_timeout: float = </span><span class="s5">10.0</span>
+    <span class="s1">) -&gt; </span><span class="s3">&quot;pexpect.spawn&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.spawn_pytest`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.spawn_pytest(string</span><span class="s2">, </span><span class="s1">expect_timeout=expect_timeout)</span>
+
+    <span class="s2">def </span><span class="s1">spawn(self</span><span class="s2">, </span><span class="s1">cmd: str</span><span class="s2">, </span><span class="s1">expect_timeout: float = </span><span class="s5">10.0</span><span class="s1">) -&gt; </span><span class="s3">&quot;pexpect.spawn&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;See :meth:`Pytester.spawn`.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._pytester.spawn(cmd</span><span class="s2">, </span><span class="s1">expect_timeout=expect_timeout)</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">f&quot;&lt;Testdir </span><span class="s2">{</span><span class="s1">self.tmpdir</span><span class="s2">!r}</span><span class="s3">&gt;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s1">str(self.tmpdir)</span>
+
+
+<span class="s2">class </span><span class="s1">LegacyTestdirPlugin:</span>
+    <span class="s1">@staticmethod</span>
+    <span class="s1">@fixture</span>
+    <span class="s2">def </span><span class="s1">testdir(pytester: Pytester) -&gt; Testdir:</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Identical to :fixture:`pytester`, and provides an instance whose methods return 
+        legacy ``LEGACY_PATH`` objects instead when applicable. 
+ 
+        New code should avoid using :fixture:`testdir` in favor of :fixture:`pytester`. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">Testdir(pytester</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+
+
+<span class="s1">@final</span>
+<span class="s1">@attr.s(init=</span><span class="s2">False, </span><span class="s1">auto_attribs=</span><span class="s2">True</span><span class="s1">)</span>
+<span class="s2">class </span><span class="s1">TempdirFactory:</span>
+    <span class="s0">&quot;&quot;&quot;Backward compatibility wrapper that implements :class:``_pytest.compat.LEGACY_PATH`` 
+    for :class:``TempPathFactory``.&quot;&quot;&quot;</span>
+
+    <span class="s1">_tmppath_factory: TempPathFactory</span>
+
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">tmppath_factory: TempPathFactory</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">_ispytest: bool = </span><span class="s2">False</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self._tmppath_factory = tmppath_factory</span>
+
+    <span class="s2">def </span><span class="s1">mktemp(self</span><span class="s2">, </span><span class="s1">basename: str</span><span class="s2">, </span><span class="s1">numbered: bool = </span><span class="s2">True</span><span class="s1">) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;Same as :meth:`TempPathFactory.mktemp`, but returns a ``_pytest.compat.LEGACY_PATH`` object.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._tmppath_factory.mktemp(basename</span><span class="s2">, </span><span class="s1">numbered).resolve())</span>
+
+    <span class="s2">def </span><span class="s1">getbasetemp(self) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;Backward compat wrapper for ``_tmppath_factory.getbasetemp``.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(self._tmppath_factory.getbasetemp().resolve())</span>
+
+
+<span class="s2">class </span><span class="s1">LegacyTmpdirPlugin:</span>
+    <span class="s1">@staticmethod</span>
+    <span class="s1">@fixture(scope=</span><span class="s3">&quot;session&quot;</span><span class="s1">)</span>
+    <span class="s2">def </span><span class="s1">tmpdir_factory(request: FixtureRequest) -&gt; TempdirFactory:</span>
+        <span class="s0">&quot;&quot;&quot;Return a :class:`pytest.TempdirFactory` instance for the test session.&quot;&quot;&quot;</span>
+        <span class="s4"># Set dynamically by pytest_configure().</span>
+        <span class="s2">return </span><span class="s1">request.config._tmpdirhandler  </span><span class="s4"># type: ignore</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s1">@fixture</span>
+    <span class="s2">def </span><span class="s1">tmpdir(tmp_path: Path) -&gt; LEGACY_PATH:</span>
+        <span class="s0">&quot;&quot;&quot;Return a temporary directory path object which is unique to each test 
+        function invocation, created as a sub directory of the base temporary 
+        directory. 
+ 
+        By default, a new base temporary directory is created each test session, 
+        and old bases are removed after 3 sessions, to aid in debugging. If 
+        ``--basetemp`` is used then it is cleared each session. See :ref:`base 
+        temporary directory`. 
+ 
+        The returned object is a `legacy_path`_ object. 
+ 
+        .. _legacy_path: https://py.readthedocs.io/en/latest/path.html 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">legacy_path(tmp_path)</span>
+
+
+<span class="s2">def </span><span class="s1">Cache_makedir(self: Cache</span><span class="s2">, </span><span class="s1">name: str) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;Return a directory path object with the given name. 
+ 
+    Same as :func:`mkdir`, but returns a legacy py path instance. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(self.mkdir(name))</span>
+
+
+<span class="s2">def </span><span class="s1">FixtureRequest_fspath(self: FixtureRequest) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;(deprecated) The file system path of the test module which collected this test.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(self.path)</span>
+
+
+<span class="s2">def </span><span class="s1">TerminalReporter_startdir(self: TerminalReporter) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;The directory from which pytest was invoked. 
+ 
+    Prefer to use ``startpath`` which is a :class:`pathlib.Path`. 
+ 
+    :type: LEGACY_PATH 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(self.startpath)</span>
+
+
+<span class="s2">def </span><span class="s1">Config_invocation_dir(self: Config) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;The directory from which pytest was invoked. 
+ 
+    Prefer to use :attr:`invocation_params.dir &lt;InvocationParams.dir&gt;`, 
+    which is a :class:`pathlib.Path`. 
+ 
+    :type: LEGACY_PATH 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(str(self.invocation_params.dir))</span>
+
+
+<span class="s2">def </span><span class="s1">Config_rootdir(self: Config) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;The path to the :ref:`rootdir &lt;rootdir&gt;`. 
+ 
+    Prefer to use :attr:`rootpath`, which is a :class:`pathlib.Path`. 
+ 
+    :type: LEGACY_PATH 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(str(self.rootpath))</span>
+
+
+<span class="s2">def </span><span class="s1">Config_inifile(self: Config) -&gt; Optional[LEGACY_PATH]:</span>
+    <span class="s0">&quot;&quot;&quot;The path to the :ref:`configfile &lt;configfiles&gt;`. 
+ 
+    Prefer to use :attr:`inipath`, which is a :class:`pathlib.Path`. 
+ 
+    :type: Optional[LEGACY_PATH] 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(str(self.inipath)) </span><span class="s2">if </span><span class="s1">self.inipath </span><span class="s2">else None</span>
+
+
+<span class="s2">def </span><span class="s1">Session_stardir(self: Session) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;The path from which pytest was invoked. 
+ 
+    Prefer to use ``startpath`` which is a :class:`pathlib.Path`. 
+ 
+    :type: LEGACY_PATH 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(self.startpath)</span>
+
+
+<span class="s2">def </span><span class="s1">Config__getini_unknown_type(</span>
+    <span class="s1">self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">type: str</span><span class="s2">, </span><span class="s1">value: Union[str</span><span class="s2">, </span><span class="s1">List[str]]</span>
+<span class="s1">):</span>
+    <span class="s2">if </span><span class="s1">type == </span><span class="s3">&quot;pathlist&quot;</span><span class="s1">:</span>
+        <span class="s4"># TODO: This assert is probably not valid in all cases.</span>
+        <span class="s2">assert </span><span class="s1">self.inipath </span><span class="s2">is not None</span>
+        <span class="s1">dp = self.inipath.parent</span>
+        <span class="s1">input_values = shlex.split(value) </span><span class="s2">if </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">str) </span><span class="s2">else </span><span class="s1">value</span>
+        <span class="s2">return </span><span class="s1">[legacy_path(str(dp / x)) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">input_values]</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">f&quot;unknown configuration type: </span><span class="s2">{</span><span class="s1">type</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s2">, </span><span class="s1">value)</span>
+
+
+<span class="s2">def </span><span class="s1">Node_fspath(self: Node) -&gt; LEGACY_PATH:</span>
+    <span class="s0">&quot;&quot;&quot;(deprecated) returns a legacy_path copy of self.path&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">legacy_path(self.path)</span>
+
+
+<span class="s2">def </span><span class="s1">Node_fspath_set(self: Node</span><span class="s2">, </span><span class="s1">value: LEGACY_PATH) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">self.path = Path(value)</span>
+
+
+<span class="s1">@hookimpl(tryfirst=</span><span class="s2">True</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">pytest_load_initial_conftests(early_config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Monkeypatch legacy path attributes in several classes, as early as possible.&quot;&quot;&quot;</span>
+    <span class="s1">mp = MonkeyPatch()</span>
+    <span class="s1">early_config.add_cleanup(mp.undo)</span>
+
+    <span class="s4"># Add Cache.makedir().</span>
+    <span class="s1">mp.setattr(Cache</span><span class="s2">, </span><span class="s3">&quot;makedir&quot;</span><span class="s2">, </span><span class="s1">Cache_makedir</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+    <span class="s4"># Add FixtureRequest.fspath property.</span>
+    <span class="s1">mp.setattr(FixtureRequest</span><span class="s2">, </span><span class="s3">&quot;fspath&quot;</span><span class="s2">, </span><span class="s1">property(FixtureRequest_fspath)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+    <span class="s4"># Add TerminalReporter.startdir property.</span>
+    <span class="s1">mp.setattr(</span>
+        <span class="s1">TerminalReporter</span><span class="s2">, </span><span class="s3">&quot;startdir&quot;</span><span class="s2">, </span><span class="s1">property(TerminalReporter_startdir)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span>
+    <span class="s1">)</span>
+
+    <span class="s4"># Add Config.{invocation_dir,rootdir,inifile} properties.</span>
+    <span class="s1">mp.setattr(Config</span><span class="s2">, </span><span class="s3">&quot;invocation_dir&quot;</span><span class="s2">, </span><span class="s1">property(Config_invocation_dir)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+    <span class="s1">mp.setattr(Config</span><span class="s2">, </span><span class="s3">&quot;rootdir&quot;</span><span class="s2">, </span><span class="s1">property(Config_rootdir)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+    <span class="s1">mp.setattr(Config</span><span class="s2">, </span><span class="s3">&quot;inifile&quot;</span><span class="s2">, </span><span class="s1">property(Config_inifile)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+    <span class="s4"># Add Session.startdir property.</span>
+    <span class="s1">mp.setattr(Session</span><span class="s2">, </span><span class="s3">&quot;startdir&quot;</span><span class="s2">, </span><span class="s1">property(Session_stardir)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+    <span class="s4"># Add pathlist configuration type.</span>
+    <span class="s1">mp.setattr(Config</span><span class="s2">, </span><span class="s3">&quot;_getini_unknown_type&quot;</span><span class="s2">, </span><span class="s1">Config__getini_unknown_type)</span>
+
+    <span class="s4"># Add Node.fspath property.</span>
+    <span class="s1">mp.setattr(Node</span><span class="s2">, </span><span class="s3">&quot;fspath&quot;</span><span class="s2">, </span><span class="s1">property(Node_fspath</span><span class="s2">, </span><span class="s1">Node_fspath_set)</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+
+<span class="s1">@hookimpl</span>
+<span class="s2">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Installs the LegacyTmpdirPlugin if the ``tmpdir`` plugin is also installed.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">config.pluginmanager.has_plugin(</span><span class="s3">&quot;tmpdir&quot;</span><span class="s1">):</span>
+        <span class="s1">mp = MonkeyPatch()</span>
+        <span class="s1">config.add_cleanup(mp.undo)</span>
+        <span class="s4"># Create TmpdirFactory and attach it to the config object.</span>
+        <span class="s4">#</span>
+        <span class="s4"># This is to comply with existing plugins which expect the handler to be</span>
+        <span class="s4"># available at pytest_configure time, but ideally should be moved entirely</span>
+        <span class="s4"># to the tmpdir_factory session fixture.</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">tmp_path_factory = config._tmp_path_factory  </span><span class="s4"># type: ignore[attr-defined]</span>
+        <span class="s2">except </span><span class="s1">AttributeError:</span>
+            <span class="s4"># tmpdir plugin is blocked.</span>
+            <span class="s2">pass</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">_tmpdirhandler = TempdirFactory(tmp_path_factory</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+            <span class="s1">mp.setattr(config</span><span class="s2">, </span><span class="s3">&quot;_tmpdirhandler&quot;</span><span class="s2">, </span><span class="s1">_tmpdirhandler</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+        <span class="s1">config.pluginmanager.register(LegacyTmpdirPlugin</span><span class="s2">, </span><span class="s3">&quot;legacypath-tmpdir&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@hookimpl</span>
+<span class="s2">def </span><span class="s1">pytest_plugin_registered(plugin: object</span><span class="s2">, </span><span class="s1">manager: PytestPluginManager) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s4"># pytester is not loaded by default and is commonly loaded from a conftest,</span>
+    <span class="s4"># so checking for it in `pytest_configure` is not enough.</span>
+    <span class="s1">is_pytester = plugin </span><span class="s2">is </span><span class="s1">manager.get_plugin(</span><span class="s3">&quot;pytester&quot;</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">is_pytester </span><span class="s2">and not </span><span class="s1">manager.is_registered(LegacyTestdirPlugin):</span>
+        <span class="s1">manager.register(LegacyTestdirPlugin</span><span class="s2">, </span><span class="s3">&quot;legacypath-pytester&quot;</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

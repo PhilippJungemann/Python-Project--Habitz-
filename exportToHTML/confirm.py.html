@@ -1,0 +1,150 @@
+<html>
+<head>
+<title>confirm.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+confirm.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">prompt_toolkit </span><span class="s0">import </span><span class="s1">PromptSession</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.formatted_text </span><span class="s0">import </span><span class="s1">to_formatted_text</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.key_binding </span><span class="s0">import </span><span class="s1">KeyBindings</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.keys </span><span class="s0">import </span><span class="s1">Keys</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">merge_styles</span><span class="s0">, </span><span class="s1">Style</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Any</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">NO_OR_YES</span><span class="s0">,</span>
+    <span class="s1">YES</span><span class="s0">,</span>
+    <span class="s1">NO</span><span class="s0">,</span>
+    <span class="s1">YES_OR_NO</span><span class="s0">,</span>
+    <span class="s1">DEFAULT_STYLE</span><span class="s0">,</span>
+    <span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">def </span><span class="s1">confirm(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">default: bool = </span><span class="s0">True,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">auto_enter: bool = </span><span class="s0">True,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s2">&quot;&quot;&quot;A yes or no question. The user can either confirm or deny. 
+ 
+    This question type can be used to prompt the user for a confirmation 
+    of a yes-or-no question. If the user just hits enter, the default 
+    value will be returned. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.confirm(&quot;Are you amazed?&quot;).ask() 
+        ? Are you amazed? Yes 
+        True 
+ 
+    .. image:: ../images/confirm.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+ 
+    Args: 
+        message: Question text. 
+ 
+        default: Default value will be returned if the user just hits 
+                 enter. 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?``. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+        auto_enter: If set to `False`, the user needs to press the 'enter' key to 
+            accept their answer. If set to `True`, a valid input will be 
+            accepted without the need to press 'Enter'. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using `.ask()`). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">merged_style = merge_styles([DEFAULT_STYLE</span><span class="s0">, </span><span class="s1">style])</span>
+
+    <span class="s1">status = {</span><span class="s3">&quot;answer&quot;</span><span class="s1">: </span><span class="s0">None, </span><span class="s3">&quot;complete&quot;</span><span class="s1">: </span><span class="s0">False</span><span class="s1">}</span>
+
+    <span class="s0">def </span><span class="s1">get_prompt_tokens():</span>
+        <span class="s1">tokens = []</span>
+
+        <span class="s1">tokens.append((</span><span class="s3">&quot;class:qmark&quot;</span><span class="s0">, </span><span class="s1">qmark))</span>
+        <span class="s1">tokens.append((</span><span class="s3">&quot;class:question&quot;</span><span class="s0">, </span><span class="s3">&quot; {} &quot;</span><span class="s1">.format(message)))</span>
+
+        <span class="s0">if not </span><span class="s1">status[</span><span class="s3">&quot;complete&quot;</span><span class="s1">]:</span>
+            <span class="s1">instruction = YES_OR_NO </span><span class="s0">if </span><span class="s1">default </span><span class="s0">else </span><span class="s1">NO_OR_YES</span>
+            <span class="s1">tokens.append((</span><span class="s3">&quot;class:instruction&quot;</span><span class="s0">, </span><span class="s3">&quot;{} &quot;</span><span class="s1">.format(instruction)))</span>
+
+        <span class="s0">if </span><span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">answer = YES </span><span class="s0">if </span><span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] </span><span class="s0">else </span><span class="s1">NO</span>
+            <span class="s1">tokens.append((</span><span class="s3">&quot;class:answer&quot;</span><span class="s0">, </span><span class="s1">answer))</span>
+
+        <span class="s0">return </span><span class="s1">to_formatted_text(tokens)</span>
+
+    <span class="s0">def </span><span class="s1">exit_with_result(event):</span>
+        <span class="s1">status[</span><span class="s3">&quot;complete&quot;</span><span class="s1">] = </span><span class="s0">True</span>
+        <span class="s1">event.app.exit(result=status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">])</span>
+
+    <span class="s1">bindings = KeyBindings()</span>
+
+    <span class="s1">@bindings.add(Keys.ControlQ</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s1">@bindings.add(Keys.ControlC</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">_(event):</span>
+        <span class="s1">event.app.exit(exception=KeyboardInterrupt</span><span class="s0">, </span><span class="s1">style=</span><span class="s3">&quot;class:aborting&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;n&quot;</span><span class="s1">)</span>
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;N&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">key_n(event):</span>
+        <span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] = </span><span class="s0">False</span>
+        <span class="s0">if </span><span class="s1">auto_enter:</span>
+            <span class="s1">exit_with_result(event)</span>
+
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;y&quot;</span><span class="s1">)</span>
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;Y&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">key_y(event):</span>
+        <span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] = </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">auto_enter:</span>
+            <span class="s1">exit_with_result(event)</span>
+
+    <span class="s1">@bindings.add(Keys.ControlH)</span>
+    <span class="s0">def </span><span class="s1">key_backspace(event):</span>
+        <span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] = </span><span class="s0">None</span>
+
+    <span class="s1">@bindings.add(Keys.ControlM</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">set_answer(event):</span>
+        <span class="s0">if </span><span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">status[</span><span class="s3">&quot;answer&quot;</span><span class="s1">] = default</span>
+
+        <span class="s1">exit_with_result(event)</span>
+
+    <span class="s1">@bindings.add(Keys.Any)</span>
+    <span class="s0">def </span><span class="s1">other(event):</span>
+        <span class="s2">&quot;&quot;&quot;Disallow inserting other text.&quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">return </span><span class="s1">Question(</span>
+        <span class="s1">PromptSession(</span>
+            <span class="s1">get_prompt_tokens</span><span class="s0">, </span><span class="s1">key_bindings=bindings</span><span class="s0">, </span><span class="s1">style=merged_style</span><span class="s0">, </span><span class="s1">**kwargs</span>
+        <span class="s1">).app</span>
+    <span class="s1">)</span>
+</pre>
+</body>
+</html>

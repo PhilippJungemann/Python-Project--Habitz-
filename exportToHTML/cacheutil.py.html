@@ -1,0 +1,135 @@
+<html>
+<head>
+<title>cacheutil.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cacheutil.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This module contains multithread-safe cache implementations. 
+ 
+All Caches have 
+ 
+    getorbuild(key, builder) 
+    delentry(key) 
+ 
+methods and allow configuration when instantiating the cache class. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">time </span><span class="s2">import </span><span class="s1">time </span><span class="s2">as </span><span class="s1">gettime</span>
+
+<span class="s2">class </span><span class="s1">BasicCache(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">maxentries=</span><span class="s3">128</span><span class="s1">):</span>
+        <span class="s1">self.maxentries = maxentries</span>
+        <span class="s1">self.prunenum = int(maxentries - maxentries/</span><span class="s3">8</span><span class="s1">)</span>
+        <span class="s1">self._dict = {}</span>
+
+    <span class="s2">def </span><span class="s1">clear(self):</span>
+        <span class="s1">self._dict.clear()</span>
+
+    <span class="s2">def </span><span class="s1">_getentry(self</span><span class="s2">, </span><span class="s1">key):</span>
+        <span class="s2">return </span><span class="s1">self._dict[key]</span>
+
+    <span class="s2">def </span><span class="s1">_putentry(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">entry):</span>
+        <span class="s1">self._prunelowestweight()</span>
+        <span class="s1">self._dict[key] = entry</span>
+
+    <span class="s2">def </span><span class="s1">delentry(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">del </span><span class="s1">self._dict[key]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">if </span><span class="s1">raising:</span>
+                <span class="s2">raise</span>
+
+    <span class="s2">def </span><span class="s1">getorbuild(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">builder):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">entry = self._getentry(key)</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s1">entry = self._build(key</span><span class="s2">, </span><span class="s1">builder)</span>
+            <span class="s1">self._putentry(key</span><span class="s2">, </span><span class="s1">entry)</span>
+        <span class="s2">return </span><span class="s1">entry.value</span>
+
+    <span class="s2">def </span><span class="s1">_prunelowestweight(self):</span>
+        <span class="s0">&quot;&quot;&quot; prune out entries with lowest weight. &quot;&quot;&quot;</span>
+        <span class="s1">numentries = len(self._dict)</span>
+        <span class="s2">if </span><span class="s1">numentries &gt;= self.maxentries:</span>
+            <span class="s4"># evict according to entry's weight</span>
+            <span class="s1">items = [(entry.weight</span><span class="s2">, </span><span class="s1">key)</span>
+                        <span class="s2">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">entry </span><span class="s2">in </span><span class="s1">self._dict.items()]</span>
+            <span class="s1">items.sort()</span>
+            <span class="s1">index = numentries - self.prunenum</span>
+            <span class="s2">if </span><span class="s1">index &gt; </span><span class="s3">0</span><span class="s1">:</span>
+                <span class="s2">for </span><span class="s1">weight</span><span class="s2">, </span><span class="s1">key </span><span class="s2">in </span><span class="s1">items[:index]:</span>
+                    <span class="s4"># in MT situations the element might be gone</span>
+                    <span class="s1">self.delentry(key</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+
+<span class="s2">class </span><span class="s1">BuildcostAccessCache(BasicCache):</span>
+    <span class="s0">&quot;&quot;&quot; A BuildTime/Access-counting cache implementation. 
+        the weight of a value is computed as the product of 
+ 
+            num-accesses-of-a-value * time-to-build-the-value 
+ 
+        The values with the least such weights are evicted 
+        if the cache maxentries threshold is superceded. 
+        For implementation flexibility more than one object 
+        might be evicted at a time. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># time function to use for measuring build-times</span>
+
+    <span class="s2">def </span><span class="s1">_build(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">builder):</span>
+        <span class="s1">start = gettime()</span>
+        <span class="s1">val = builder()</span>
+        <span class="s1">end = gettime()</span>
+        <span class="s2">return </span><span class="s1">WeightedCountingEntry(val</span><span class="s2">, </span><span class="s1">end-start)</span>
+
+
+<span class="s2">class </span><span class="s1">WeightedCountingEntry(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">oneweight):</span>
+        <span class="s1">self._value = value</span>
+        <span class="s1">self.weight = self._oneweight = oneweight</span>
+
+    <span class="s2">def </span><span class="s1">value(self):</span>
+        <span class="s1">self.weight += self._oneweight</span>
+        <span class="s2">return </span><span class="s1">self._value</span>
+    <span class="s1">value = property(value)</span>
+
+<span class="s2">class </span><span class="s1">AgingCache(BasicCache):</span>
+    <span class="s0">&quot;&quot;&quot; This cache prunes out cache entries that are too old. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">maxentries=</span><span class="s3">128</span><span class="s2">, </span><span class="s1">maxseconds=</span><span class="s3">10.0</span><span class="s1">):</span>
+        <span class="s1">super(AgingCache</span><span class="s2">, </span><span class="s1">self).__init__(maxentries)</span>
+        <span class="s1">self.maxseconds = maxseconds</span>
+
+    <span class="s2">def </span><span class="s1">_getentry(self</span><span class="s2">, </span><span class="s1">key):</span>
+        <span class="s1">entry = self._dict[key]</span>
+        <span class="s2">if </span><span class="s1">entry.isexpired():</span>
+            <span class="s1">self.delentry(key)</span>
+            <span class="s2">raise </span><span class="s1">KeyError(key)</span>
+        <span class="s2">return </span><span class="s1">entry</span>
+
+    <span class="s2">def </span><span class="s1">_build(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">builder):</span>
+        <span class="s1">val = builder()</span>
+        <span class="s1">entry = AgingEntry(val</span><span class="s2">, </span><span class="s1">gettime() + self.maxseconds)</span>
+        <span class="s2">return </span><span class="s1">entry</span>
+
+<span class="s2">class </span><span class="s1">AgingEntry(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">expirationtime):</span>
+        <span class="s1">self.value = value</span>
+        <span class="s1">self.weight = expirationtime</span>
+
+    <span class="s2">def </span><span class="s1">isexpired(self):</span>
+        <span class="s1">t = gettime()</span>
+        <span class="s2">return </span><span class="s1">t &gt;= self.weight</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,405 @@
+<html>
+<head>
+<title>monkeypatch.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+monkeypatch.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Monkeypatching and mocking functionality.&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s2">from </span><span class="s1">contextlib </span><span class="s2">import </span><span class="s1">contextmanager</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Any</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Generator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">MutableMapping</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">overload</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Tuple</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TypeVar</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">final</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">fixture</span>
+<span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestWarning</span>
+
+<span class="s1">RE_IMPORT_ERROR_NAME = re.compile(</span><span class="s3">r&quot;^No module named (.*)$&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">K = TypeVar(</span><span class="s3">&quot;K&quot;</span><span class="s1">)</span>
+<span class="s1">V = TypeVar(</span><span class="s3">&quot;V&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">monkeypatch() -&gt; Generator[</span><span class="s3">&quot;MonkeyPatch&quot;</span><span class="s2">, None, None</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;A convenient fixture for monkey-patching. 
+ 
+    The fixture provides these methods to modify objects, dictionaries or 
+    os.environ:: 
+ 
+        monkeypatch.setattr(obj, name, value, raising=True) 
+        monkeypatch.delattr(obj, name, raising=True) 
+        monkeypatch.setitem(mapping, name, value) 
+        monkeypatch.delitem(obj, name, raising=True) 
+        monkeypatch.setenv(name, value, prepend=None) 
+        monkeypatch.delenv(name, raising=True) 
+        monkeypatch.syspath_prepend(path) 
+        monkeypatch.chdir(path) 
+ 
+    All modifications will be undone after the requesting test function or 
+    fixture has finished. The ``raising`` parameter determines if a KeyError 
+    or AttributeError will be raised if the set/deletion operation has no target. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">mpatch = MonkeyPatch()</span>
+    <span class="s2">yield </span><span class="s1">mpatch</span>
+    <span class="s1">mpatch.undo()</span>
+
+
+<span class="s2">def </span><span class="s1">resolve(name: str) -&gt; object:</span>
+    <span class="s4"># Simplified from zope.dottedname.</span>
+    <span class="s1">parts = name.split(</span><span class="s3">&quot;.&quot;</span><span class="s1">)</span>
+
+    <span class="s1">used = parts.pop(</span><span class="s5">0</span><span class="s1">)</span>
+    <span class="s1">found: object = __import__(used)</span>
+    <span class="s2">for </span><span class="s1">part </span><span class="s2">in </span><span class="s1">parts:</span>
+        <span class="s1">used += </span><span class="s3">&quot;.&quot; </span><span class="s1">+ part</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">found = getattr(found</span><span class="s2">, </span><span class="s1">part)</span>
+        <span class="s2">except </span><span class="s1">AttributeError:</span>
+            <span class="s2">pass</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">continue</span>
+        <span class="s4"># We use explicit un-nesting of the handling block in order</span>
+        <span class="s4"># to avoid nested exceptions.</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">__import__(used)</span>
+        <span class="s2">except </span><span class="s1">ImportError </span><span class="s2">as </span><span class="s1">ex:</span>
+            <span class="s1">expected = str(ex).split()[-</span><span class="s5">1</span><span class="s1">]</span>
+            <span class="s2">if </span><span class="s1">expected == used:</span>
+                <span class="s2">raise</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">ImportError(</span><span class="s3">f&quot;import error in </span><span class="s2">{</span><span class="s1">used</span><span class="s2">}</span><span class="s3">: </span><span class="s2">{</span><span class="s1">ex</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">) </span><span class="s2">from </span><span class="s1">ex</span>
+        <span class="s1">found = annotated_getattr(found</span><span class="s2">, </span><span class="s1">part</span><span class="s2">, </span><span class="s1">used)</span>
+    <span class="s2">return </span><span class="s1">found</span>
+
+
+<span class="s2">def </span><span class="s1">annotated_getattr(obj: object</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">ann: str) -&gt; object:</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">obj = getattr(obj</span><span class="s2">, </span><span class="s1">name)</span>
+    <span class="s2">except </span><span class="s1">AttributeError </span><span class="s2">as </span><span class="s1">e:</span>
+        <span class="s2">raise </span><span class="s1">AttributeError(</span>
+            <span class="s3">&quot;{!r} object at {} has no attribute {!r}&quot;</span><span class="s1">.format(</span>
+                <span class="s1">type(obj).__name__</span><span class="s2">, </span><span class="s1">ann</span><span class="s2">, </span><span class="s1">name</span>
+            <span class="s1">)</span>
+        <span class="s1">) </span><span class="s2">from </span><span class="s1">e</span>
+    <span class="s2">return </span><span class="s1">obj</span>
+
+
+<span class="s2">def </span><span class="s1">derive_importpath(import_path: str</span><span class="s2">, </span><span class="s1">raising: bool) -&gt; Tuple[str</span><span class="s2">, </span><span class="s1">object]:</span>
+    <span class="s2">if not </span><span class="s1">isinstance(import_path</span><span class="s2">, </span><span class="s1">str) </span><span class="s2">or </span><span class="s3">&quot;.&quot; </span><span class="s2">not in </span><span class="s1">import_path:</span>
+        <span class="s2">raise </span><span class="s1">TypeError(</span><span class="s3">f&quot;must be absolute import path string, not </span><span class="s2">{</span><span class="s1">import_path</span><span class="s2">!r}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s1">module</span><span class="s2">, </span><span class="s1">attr = import_path.rsplit(</span><span class="s3">&quot;.&quot;</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s1">target = resolve(module)</span>
+    <span class="s2">if </span><span class="s1">raising:</span>
+        <span class="s1">annotated_getattr(target</span><span class="s2">, </span><span class="s1">attr</span><span class="s2">, </span><span class="s1">ann=module)</span>
+    <span class="s2">return </span><span class="s1">attr</span><span class="s2">, </span><span class="s1">target</span>
+
+
+<span class="s2">class </span><span class="s1">Notset:</span>
+    <span class="s2">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">&quot;&lt;notset&gt;&quot;</span>
+
+
+<span class="s1">notset = Notset()</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">MonkeyPatch:</span>
+    <span class="s0">&quot;&quot;&quot;Helper to conveniently monkeypatch attributes/items/environment 
+    variables/syspath. 
+ 
+    Returned by the :fixture:`monkeypatch` fixture. 
+ 
+    :versionchanged:: 6.2 
+        Can now also be used directly as `pytest.MonkeyPatch()`, for when 
+        the fixture is not available. In this case, use 
+        :meth:`with MonkeyPatch.context() as mp: &lt;context&gt;` or remember to call 
+        :meth:`undo` explicitly. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self._setattr: List[Tuple[object</span><span class="s2">, </span><span class="s1">str</span><span class="s2">, </span><span class="s1">object]] = []</span>
+        <span class="s1">self._setitem: List[Tuple[MutableMapping[Any</span><span class="s2">, </span><span class="s1">Any]</span><span class="s2">, </span><span class="s1">object</span><span class="s2">, </span><span class="s1">object]] = []</span>
+        <span class="s1">self._cwd: Optional[str] = </span><span class="s2">None</span>
+        <span class="s1">self._savesyspath: Optional[List[str]] = </span><span class="s2">None</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s1">@contextmanager</span>
+    <span class="s2">def </span><span class="s1">context(cls) -&gt; Generator[</span><span class="s3">&quot;MonkeyPatch&quot;</span><span class="s2">, None, None</span><span class="s1">]:</span>
+        <span class="s0">&quot;&quot;&quot;Context manager that returns a new :class:`MonkeyPatch` object 
+        which undoes any patching done inside the ``with`` block upon exit. 
+ 
+        Example: 
+ 
+        .. code-block:: python 
+ 
+            import functools 
+ 
+ 
+            def test_partial(monkeypatch): 
+                with monkeypatch.context() as m: 
+                    m.setattr(functools, &quot;partial&quot;, 3) 
+ 
+        Useful in situations where it is desired to undo some patches before the test ends, 
+        such as mocking ``stdlib`` functions that might break pytest itself if mocked (for examples 
+        of this see :issue:`3290`). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">m = cls()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">yield </span><span class="s1">m</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">m.undo()</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">setattr(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">target: str</span><span class="s2">,</span>
+        <span class="s1">name: object</span><span class="s2">,</span>
+        <span class="s1">value: Notset = ...</span><span class="s2">,</span>
+        <span class="s1">raising: bool = ...</span><span class="s2">,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">setattr(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">target: object</span><span class="s2">,</span>
+        <span class="s1">name: str</span><span class="s2">,</span>
+        <span class="s1">value: object</span><span class="s2">,</span>
+        <span class="s1">raising: bool = ...</span><span class="s2">,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">...</span>
+
+    <span class="s2">def </span><span class="s1">setattr(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">target: Union[str</span><span class="s2">, </span><span class="s1">object]</span><span class="s2">,</span>
+        <span class="s1">name: Union[object</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">,</span>
+        <span class="s1">value: object = notset</span><span class="s2">,</span>
+        <span class="s1">raising: bool = </span><span class="s2">True,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Set attribute value on target, memorizing the old value. 
+ 
+        For convenience you can specify a string as ``target`` which 
+        will be interpreted as a dotted import path, with the last part 
+        being the attribute name. For example, 
+        ``monkeypatch.setattr(&quot;os.getcwd&quot;, lambda: &quot;/&quot;)`` 
+        would set the ``getcwd`` function of the ``os`` module. 
+ 
+        Raises AttributeError if the attribute does not exist, unless 
+        ``raising`` is set to False. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">import </span><span class="s1">inspect</span>
+
+        <span class="s2">if </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">Notset):</span>
+            <span class="s2">if not </span><span class="s1">isinstance(target</span><span class="s2">, </span><span class="s1">str):</span>
+                <span class="s2">raise </span><span class="s1">TypeError(</span>
+                    <span class="s3">&quot;use setattr(target, name, value) or &quot;</span>
+                    <span class="s3">&quot;setattr(target, value) with target being a dotted &quot;</span>
+                    <span class="s3">&quot;import string&quot;</span>
+                <span class="s1">)</span>
+            <span class="s1">value = name</span>
+            <span class="s1">name</span><span class="s2">, </span><span class="s1">target = derive_importpath(target</span><span class="s2">, </span><span class="s1">raising)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">if not </span><span class="s1">isinstance(name</span><span class="s2">, </span><span class="s1">str):</span>
+                <span class="s2">raise </span><span class="s1">TypeError(</span>
+                    <span class="s3">&quot;use setattr(target, name, value) with name being a string or &quot;</span>
+                    <span class="s3">&quot;setattr(target, value) with target being a dotted &quot;</span>
+                    <span class="s3">&quot;import string&quot;</span>
+                <span class="s1">)</span>
+
+        <span class="s1">oldval = getattr(target</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">notset)</span>
+        <span class="s2">if </span><span class="s1">raising </span><span class="s2">and </span><span class="s1">oldval </span><span class="s2">is </span><span class="s1">notset:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError(</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">target</span><span class="s2">!r} </span><span class="s3">has no attribute </span><span class="s2">{</span><span class="s1">name</span><span class="s2">!r}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+        <span class="s4"># avoid class descriptors like staticmethod/classmethod</span>
+        <span class="s2">if </span><span class="s1">inspect.isclass(target):</span>
+            <span class="s1">oldval = target.__dict__.get(name</span><span class="s2">, </span><span class="s1">notset)</span>
+        <span class="s1">self._setattr.append((target</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">oldval))</span>
+        <span class="s1">setattr(target</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value)</span>
+
+    <span class="s2">def </span><span class="s1">delattr(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">target: Union[object</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">,</span>
+        <span class="s1">name: Union[str</span><span class="s2">, </span><span class="s1">Notset] = notset</span><span class="s2">,</span>
+        <span class="s1">raising: bool = </span><span class="s2">True,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Delete attribute ``name`` from ``target``. 
+ 
+        If no ``name`` is specified and ``target`` is a string 
+        it will be interpreted as a dotted import path with the 
+        last part being the attribute name. 
+ 
+        Raises AttributeError it the attribute does not exist, unless 
+        ``raising`` is set to False. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">import </span><span class="s1">inspect</span>
+
+        <span class="s2">if </span><span class="s1">isinstance(name</span><span class="s2">, </span><span class="s1">Notset):</span>
+            <span class="s2">if not </span><span class="s1">isinstance(target</span><span class="s2">, </span><span class="s1">str):</span>
+                <span class="s2">raise </span><span class="s1">TypeError(</span>
+                    <span class="s3">&quot;use delattr(target, name) or &quot;</span>
+                    <span class="s3">&quot;delattr(target) with target being a dotted &quot;</span>
+                    <span class="s3">&quot;import string&quot;</span>
+                <span class="s1">)</span>
+            <span class="s1">name</span><span class="s2">, </span><span class="s1">target = derive_importpath(target</span><span class="s2">, </span><span class="s1">raising)</span>
+
+        <span class="s2">if not </span><span class="s1">hasattr(target</span><span class="s2">, </span><span class="s1">name):</span>
+            <span class="s2">if </span><span class="s1">raising:</span>
+                <span class="s2">raise </span><span class="s1">AttributeError(name)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">oldval = getattr(target</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">notset)</span>
+            <span class="s4"># Avoid class descriptors like staticmethod/classmethod.</span>
+            <span class="s2">if </span><span class="s1">inspect.isclass(target):</span>
+                <span class="s1">oldval = target.__dict__.get(name</span><span class="s2">, </span><span class="s1">notset)</span>
+            <span class="s1">self._setattr.append((target</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">oldval))</span>
+            <span class="s1">delattr(target</span><span class="s2">, </span><span class="s1">name)</span>
+
+    <span class="s2">def </span><span class="s1">setitem(self</span><span class="s2">, </span><span class="s1">dic: MutableMapping[K</span><span class="s2">, </span><span class="s1">V]</span><span class="s2">, </span><span class="s1">name: K</span><span class="s2">, </span><span class="s1">value: V) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Set dictionary entry ``name`` to value.&quot;&quot;&quot;</span>
+        <span class="s1">self._setitem.append((dic</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">dic.get(name</span><span class="s2">, </span><span class="s1">notset)))</span>
+        <span class="s1">dic[name] = value</span>
+
+    <span class="s2">def </span><span class="s1">delitem(self</span><span class="s2">, </span><span class="s1">dic: MutableMapping[K</span><span class="s2">, </span><span class="s1">V]</span><span class="s2">, </span><span class="s1">name: K</span><span class="s2">, </span><span class="s1">raising: bool = </span><span class="s2">True</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Delete ``name`` from dict. 
+ 
+        Raises ``KeyError`` if it doesn't exist, unless ``raising`` is set to 
+        False. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">not in </span><span class="s1">dic:</span>
+            <span class="s2">if </span><span class="s1">raising:</span>
+                <span class="s2">raise </span><span class="s1">KeyError(name)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">self._setitem.append((dic</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">dic.get(name</span><span class="s2">, </span><span class="s1">notset)))</span>
+            <span class="s2">del </span><span class="s1">dic[name]</span>
+
+    <span class="s2">def </span><span class="s1">setenv(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">value: str</span><span class="s2">, </span><span class="s1">prepend: Optional[str] = </span><span class="s2">None</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Set environment variable ``name`` to ``value``. 
+ 
+        If ``prepend`` is a character, read the current environment variable 
+        value and prepend the ``value`` adjoined with the ``prepend`` 
+        character. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">str):</span>
+            <span class="s1">warnings.warn(  </span><span class="s4"># type: ignore[unreachable]</span>
+                <span class="s1">PytestWarning(</span>
+                    <span class="s3">&quot;Value of environment variable {name} type should be str, but got &quot;</span>
+                    <span class="s3">&quot;{value!r} (type: {type}); converted to str implicitly&quot;</span><span class="s1">.format(</span>
+                        <span class="s1">name=name</span><span class="s2">, </span><span class="s1">value=value</span><span class="s2">, </span><span class="s1">type=type(value).__name__</span>
+                    <span class="s1">)</span>
+                <span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">stacklevel=</span><span class="s5">2</span><span class="s2">,</span>
+            <span class="s1">)</span>
+            <span class="s1">value = str(value)</span>
+        <span class="s2">if </span><span class="s1">prepend </span><span class="s2">and </span><span class="s1">name </span><span class="s2">in </span><span class="s1">os.environ:</span>
+            <span class="s1">value = value + prepend + os.environ[name]</span>
+        <span class="s1">self.setitem(os.environ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value)</span>
+
+    <span class="s2">def </span><span class="s1">delenv(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">raising: bool = </span><span class="s2">True</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Delete ``name`` from the environment. 
+ 
+        Raises ``KeyError`` if it does not exist, unless ``raising`` is set to 
+        False. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">environ: MutableMapping[str</span><span class="s2">, </span><span class="s1">str] = os.environ</span>
+        <span class="s1">self.delitem(environ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">raising=raising)</span>
+
+    <span class="s2">def </span><span class="s1">syspath_prepend(self</span><span class="s2">, </span><span class="s1">path) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Prepend ``path`` to ``sys.path`` list of import locations.&quot;&quot;&quot;</span>
+
+        <span class="s2">if </span><span class="s1">self._savesyspath </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">self._savesyspath = sys.path[:]</span>
+        <span class="s1">sys.path.insert(</span><span class="s5">0</span><span class="s2">, </span><span class="s1">str(path))</span>
+
+        <span class="s4"># https://github.com/pypa/setuptools/blob/d8b901bc/docs/pkg_resources.txt#L162-L171</span>
+        <span class="s4"># this is only needed when pkg_resources was already loaded by the namespace package</span>
+        <span class="s2">if </span><span class="s3">&quot;pkg_resources&quot; </span><span class="s2">in </span><span class="s1">sys.modules:</span>
+            <span class="s2">from </span><span class="s1">pkg_resources </span><span class="s2">import </span><span class="s1">fixup_namespace_packages</span>
+
+            <span class="s1">fixup_namespace_packages(str(path))</span>
+
+        <span class="s4"># A call to syspathinsert() usually means that the caller wants to</span>
+        <span class="s4"># import some dynamically created files, thus with python3 we</span>
+        <span class="s4"># invalidate its import caches.</span>
+        <span class="s4"># This is especially important when any namespace package is in use,</span>
+        <span class="s4"># since then the mtime based FileFinder cache (that gets created in</span>
+        <span class="s4"># this case already) gets not invalidated when writing the new files</span>
+        <span class="s4"># quickly afterwards.</span>
+        <span class="s2">from </span><span class="s1">importlib </span><span class="s2">import </span><span class="s1">invalidate_caches</span>
+
+        <span class="s1">invalidate_caches()</span>
+
+    <span class="s2">def </span><span class="s1">chdir(self</span><span class="s2">, </span><span class="s1">path: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Change the current working directory to the specified path. 
+ 
+        Path can be a string or a path object. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self._cwd </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">self._cwd = os.getcwd()</span>
+        <span class="s1">os.chdir(path)</span>
+
+    <span class="s2">def </span><span class="s1">undo(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Undo previous changes. 
+ 
+        This call consumes the undo stack. Calling it a second time has no 
+        effect unless you do more monkeypatching after the undo call. 
+ 
+        There is generally no need to call `undo()`, since it is 
+        called automatically during tear-down. 
+ 
+        Note that the same `monkeypatch` fixture is used across a 
+        single test function invocation. If `monkeypatch` is used both by 
+        the test function itself and one of the test fixtures, 
+        calling `undo()` will undo all of the changes made in 
+        both functions. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">reversed(self._setattr):</span>
+            <span class="s2">if </span><span class="s1">value </span><span class="s2">is not </span><span class="s1">notset:</span>
+                <span class="s1">setattr(obj</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">delattr(obj</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s1">self._setattr[:] = []</span>
+        <span class="s2">for </span><span class="s1">dictionary</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">reversed(self._setitem):</span>
+            <span class="s2">if </span><span class="s1">value </span><span class="s2">is </span><span class="s1">notset:</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s2">del </span><span class="s1">dictionary[key]</span>
+                <span class="s2">except </span><span class="s1">KeyError:</span>
+                    <span class="s2">pass  </span><span class="s4"># Was already deleted, so we have the desired state.</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">dictionary[key] = value</span>
+        <span class="s1">self._setitem[:] = []</span>
+        <span class="s2">if </span><span class="s1">self._savesyspath </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">sys.path[:] = self._savesyspath</span>
+            <span class="s1">self._savesyspath = </span><span class="s2">None</span>
+
+        <span class="s2">if </span><span class="s1">self._cwd </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">os.chdir(self._cwd)</span>
+            <span class="s1">self._cwd = </span><span class="s2">None</span>
+</pre>
+</body>
+</html>

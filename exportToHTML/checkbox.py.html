@@ -1,0 +1,298 @@
+<html>
+<head>
+<title>checkbox.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+checkbox.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Callable</span><span class="s0">, </span><span class="s1">Dict</span><span class="s0">, </span><span class="s1">List</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Sequence</span><span class="s0">, </span><span class="s1">Tuple</span><span class="s0">, </span><span class="s1">Union</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit.application </span><span class="s0">import </span><span class="s1">Application</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.key_binding </span><span class="s0">import </span><span class="s1">KeyBindings</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.keys </span><span class="s0">import </span><span class="s1">Keys</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">Style</span><span class="s0">, </span><span class="s1">merge_styles</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.formatted_text </span><span class="s0">import </span><span class="s1">FormattedText</span>
+
+<span class="s0">from </span><span class="s1">questionary </span><span class="s0">import </span><span class="s1">utils</span>
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">DEFAULT_SELECTED_POINTER</span><span class="s0">,</span>
+    <span class="s1">DEFAULT_STYLE</span><span class="s0">,</span>
+    <span class="s1">INVALID_INPUT</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">questionary.prompts </span><span class="s0">import </span><span class="s1">common</span>
+<span class="s0">from </span><span class="s1">questionary.prompts.common </span><span class="s0">import </span><span class="s1">Choice</span><span class="s0">, </span><span class="s1">InquirerControl</span><span class="s0">, </span><span class="s1">Separator</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">def </span><span class="s1">checkbox(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">choices: Sequence[Union[str</span><span class="s0">, </span><span class="s1">Choice</span><span class="s0">, </span><span class="s1">Dict[str</span><span class="s0">, </span><span class="s1">Any]]]</span><span class="s0">,</span>
+    <span class="s1">default: Optional[str] = </span><span class="s0">None,</span>
+    <span class="s1">validate: Callable[[List[str]]</span><span class="s0">, </span><span class="s1">Union[bool</span><span class="s0">, </span><span class="s1">str]] = </span><span class="s0">lambda </span><span class="s1">a: </span><span class="s0">True,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">pointer: Optional[str] = DEFAULT_SELECTED_POINTER</span><span class="s0">,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">initial_choice: Optional[Union[str</span><span class="s0">, </span><span class="s1">Choice</span><span class="s0">, </span><span class="s1">Dict[str</span><span class="s0">, </span><span class="s1">Any]]] = </span><span class="s0">None,</span>
+    <span class="s1">use_arrow_keys: bool = </span><span class="s0">True,</span>
+    <span class="s1">use_jk_keys: bool = </span><span class="s0">True,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s2">&quot;&quot;&quot;Ask the user to select from a list of items. 
+ 
+    This is a multiselect, the user can choose one, none or many of the 
+    items. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.checkbox( 
+        ...    'Select toppings', 
+        ...    choices=[ 
+        ...        &quot;Cheese&quot;, 
+        ...        &quot;Tomato&quot;, 
+        ...        &quot;Pineapple&quot;, 
+        ...    ]).ask() 
+        ? Select toppings done (2 selections) 
+        ['Cheese', 'Pineapple'] 
+ 
+    .. image:: ../images/checkbox.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+ 
+    Args: 
+        message: Question text 
+ 
+        choices: Items shown in the selection, this can contain :class:`Choice` or 
+                 or :class:`Separator` objects or simple items as strings. Passing 
+                 :class:`Choice` objects, allows you to configure the item more 
+                 (e.g. preselecting it or disabling it). 
+ 
+        default: Default return value (single value). If you want to preselect 
+                 multiple items, use ``Choice(&quot;foo&quot;, checked=True)`` instead. 
+ 
+        validate: Require the entered value to pass a validation. The 
+                  value can not be submitted until the validator accepts 
+                  it (e.g. to check minimum password length). 
+ 
+                  This should be a function accepting the input and 
+                  returning a boolean. Alternatively, the return value 
+                  may be a string (indicating failure), which contains 
+                  the error message to be displayed. 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?``. 
+ 
+        pointer: Pointer symbol in front of the currently highlighted element. 
+                 By default this is a ``»``. 
+                 Use ``None`` to disable it. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+        initial_choice: A value corresponding to a selectable item in the choices, 
+                        to initially set the pointer position to. 
+ 
+        use_arrow_keys: Allow the user to select items from the list using 
+                        arrow keys. 
+ 
+        use_jk_keys: Allow the user to select items from the list using 
+                     `j` (down) and `k` (up) keys. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using ``.ask()``). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">if not </span><span class="s1">(use_arrow_keys </span><span class="s0">or </span><span class="s1">use_jk_keys):</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span>
+            <span class="s3">&quot;Some option to move the selection is required. Arrow keys or j/k keys.&quot;</span>
+        <span class="s1">)</span>
+
+    <span class="s1">merged_style = merge_styles(</span>
+        <span class="s1">[</span>
+            <span class="s1">DEFAULT_STYLE</span><span class="s0">,</span>
+            <span class="s4"># Disable the default inverted colours bottom-toolbar behaviour (for</span>
+            <span class="s4"># the error message). However it can be re-enabled with a custom</span>
+            <span class="s4"># style.</span>
+            <span class="s1">Style([(</span><span class="s3">&quot;bottom-toolbar&quot;</span><span class="s0">, </span><span class="s3">&quot;noreverse&quot;</span><span class="s1">)])</span><span class="s0">,</span>
+            <span class="s1">style</span><span class="s0">,</span>
+        <span class="s1">]</span>
+    <span class="s1">)</span>
+
+    <span class="s0">if not </span><span class="s1">callable(validate):</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s3">&quot;validate must be callable&quot;</span><span class="s1">)</span>
+
+    <span class="s1">ic = InquirerControl(</span>
+        <span class="s1">choices</span><span class="s0">, </span><span class="s1">default</span><span class="s0">, </span><span class="s1">pointer=pointer</span><span class="s0">, </span><span class="s1">initial_choice=initial_choice</span>
+    <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">get_prompt_tokens() -&gt; List[Tuple[str</span><span class="s0">, </span><span class="s1">str]]:</span>
+        <span class="s1">tokens = []</span>
+
+        <span class="s1">tokens.append((</span><span class="s3">&quot;class:qmark&quot;</span><span class="s0">, </span><span class="s1">qmark))</span>
+        <span class="s1">tokens.append((</span><span class="s3">&quot;class:question&quot;</span><span class="s0">, </span><span class="s3">&quot; {} &quot;</span><span class="s1">.format(message)))</span>
+
+        <span class="s0">if </span><span class="s1">ic.is_answered:</span>
+            <span class="s1">nbr_selected = len(ic.selected_options)</span>
+            <span class="s0">if </span><span class="s1">nbr_selected == </span><span class="s5">0</span><span class="s1">:</span>
+                <span class="s1">tokens.append((</span><span class="s3">&quot;class:answer&quot;</span><span class="s0">, </span><span class="s3">&quot;done&quot;</span><span class="s1">))</span>
+            <span class="s0">elif </span><span class="s1">nbr_selected == </span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">isinstance(ic.get_selected_values()[</span><span class="s5">0</span><span class="s1">].title</span><span class="s0">, </span><span class="s1">list):</span>
+                    <span class="s1">ts = ic.get_selected_values()[</span><span class="s5">0</span><span class="s1">].title</span>
+                    <span class="s1">tokens.append(</span>
+                        <span class="s1">(</span>
+                            <span class="s3">&quot;class:answer&quot;</span><span class="s0">,</span>
+                            <span class="s3">&quot;&quot;</span><span class="s1">.join([token[</span><span class="s5">1</span><span class="s1">] </span><span class="s0">for </span><span class="s1">token </span><span class="s0">in </span><span class="s1">ts])</span><span class="s0">,  </span><span class="s4"># type:ignore</span>
+                        <span class="s1">)</span>
+                    <span class="s1">)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">tokens.append(</span>
+                        <span class="s1">(</span>
+                            <span class="s3">&quot;class:answer&quot;</span><span class="s0">,</span>
+                            <span class="s3">&quot;[{}]&quot;</span><span class="s1">.format(ic.get_selected_values()[</span><span class="s5">0</span><span class="s1">].title)</span><span class="s0">,</span>
+                        <span class="s1">)</span>
+                    <span class="s1">)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">tokens.append(</span>
+                    <span class="s1">(</span><span class="s3">&quot;class:answer&quot;</span><span class="s0">, </span><span class="s3">&quot;done ({} selections)&quot;</span><span class="s1">.format(nbr_selected))</span>
+                <span class="s1">)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">tokens.append(</span>
+                <span class="s1">(</span>
+                    <span class="s3">&quot;class:instruction&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;(Use arrow keys to move, &quot;</span>
+                    <span class="s3">&quot;&lt;space&gt; to select, &quot;</span>
+                    <span class="s3">&quot;&lt;a&gt; to toggle, &quot;</span>
+                    <span class="s3">&quot;&lt;i&gt; to invert)&quot;</span><span class="s0">,</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">tokens</span>
+
+    <span class="s0">def </span><span class="s1">get_selected_values() -&gt; List[Any]:</span>
+        <span class="s0">return </span><span class="s1">[c.value </span><span class="s0">for </span><span class="s1">c </span><span class="s0">in </span><span class="s1">ic.get_selected_values()]</span>
+
+    <span class="s0">def </span><span class="s1">perform_validation(selected_values: List[str]) -&gt; bool:</span>
+
+        <span class="s1">verdict = validate(selected_values)</span>
+        <span class="s1">valid = verdict </span><span class="s0">is True</span>
+
+        <span class="s0">if not </span><span class="s1">valid:</span>
+            <span class="s0">if </span><span class="s1">verdict </span><span class="s0">is False</span><span class="s1">:</span>
+                <span class="s1">error_text = INVALID_INPUT</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">error_text = str(verdict)</span>
+
+            <span class="s1">error_message = FormattedText([(</span><span class="s3">&quot;class:validation-toolbar&quot;</span><span class="s0">, </span><span class="s1">error_text)])</span>
+
+        <span class="s1">ic.error_message = (</span>
+            <span class="s1">error_message </span><span class="s0">if not </span><span class="s1">valid </span><span class="s0">and </span><span class="s1">ic.submission_attempted </span><span class="s0">else None</span>
+        <span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">valid</span>
+
+    <span class="s1">layout = common.create_inquirer_layout(ic</span><span class="s0">, </span><span class="s1">get_prompt_tokens</span><span class="s0">, </span><span class="s1">**kwargs)</span>
+
+    <span class="s1">bindings = KeyBindings()</span>
+
+    <span class="s1">@bindings.add(Keys.ControlQ</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s1">@bindings.add(Keys.ControlC</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">_(event):</span>
+        <span class="s1">event.app.exit(exception=KeyboardInterrupt</span><span class="s0">, </span><span class="s1">style=</span><span class="s3">&quot;class:aborting&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@bindings.add(</span><span class="s3">&quot; &quot;</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">toggle(_event):</span>
+        <span class="s1">pointed_choice = ic.get_pointed_at().value</span>
+        <span class="s0">if </span><span class="s1">pointed_choice </span><span class="s0">in </span><span class="s1">ic.selected_options:</span>
+            <span class="s1">ic.selected_options.remove(pointed_choice)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">ic.selected_options.append(pointed_choice)</span>
+
+        <span class="s1">perform_validation(get_selected_values())</span>
+
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;i&quot;</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">invert(_event):</span>
+        <span class="s1">inverted_selection = [</span>
+            <span class="s1">c.value</span>
+            <span class="s0">for </span><span class="s1">c </span><span class="s0">in </span><span class="s1">ic.choices</span>
+            <span class="s0">if not </span><span class="s1">isinstance(c</span><span class="s0">, </span><span class="s1">Separator)</span>
+            <span class="s0">and </span><span class="s1">c.value </span><span class="s0">not in </span><span class="s1">ic.selected_options</span>
+            <span class="s0">and not </span><span class="s1">c.disabled</span>
+        <span class="s1">]</span>
+        <span class="s1">ic.selected_options = inverted_selection</span>
+
+        <span class="s1">perform_validation(get_selected_values())</span>
+
+    <span class="s1">@bindings.add(</span><span class="s3">&quot;a&quot;</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">all(_event):</span>
+        <span class="s1">all_selected = </span><span class="s0">True  </span><span class="s4"># all choices have been selected</span>
+        <span class="s0">for </span><span class="s1">c </span><span class="s0">in </span><span class="s1">ic.choices:</span>
+            <span class="s0">if </span><span class="s1">(</span>
+                <span class="s0">not </span><span class="s1">isinstance(c</span><span class="s0">, </span><span class="s1">Separator)</span>
+                <span class="s0">and </span><span class="s1">c.value </span><span class="s0">not in </span><span class="s1">ic.selected_options</span>
+                <span class="s0">and not </span><span class="s1">c.disabled</span>
+            <span class="s1">):</span>
+                <span class="s4"># add missing ones</span>
+                <span class="s1">ic.selected_options.append(c.value)</span>
+                <span class="s1">all_selected = </span><span class="s0">False</span>
+        <span class="s0">if </span><span class="s1">all_selected:</span>
+            <span class="s1">ic.selected_options = []</span>
+
+        <span class="s1">perform_validation(get_selected_values())</span>
+
+    <span class="s0">def </span><span class="s1">move_cursor_down(event):</span>
+        <span class="s1">ic.select_next()</span>
+        <span class="s0">while not </span><span class="s1">ic.is_selection_valid():</span>
+            <span class="s1">ic.select_next()</span>
+
+    <span class="s0">def </span><span class="s1">move_cursor_up(event):</span>
+        <span class="s1">ic.select_previous()</span>
+        <span class="s0">while not </span><span class="s1">ic.is_selection_valid():</span>
+            <span class="s1">ic.select_previous()</span>
+
+    <span class="s0">if </span><span class="s1">use_arrow_keys:</span>
+        <span class="s1">bindings.add(Keys.Down</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)(move_cursor_down)</span>
+        <span class="s1">bindings.add(Keys.Up</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)(move_cursor_up)</span>
+
+    <span class="s0">if </span><span class="s1">use_jk_keys:</span>
+        <span class="s1">bindings.add(</span><span class="s3">&quot;j&quot;</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)(move_cursor_down)</span>
+        <span class="s1">bindings.add(</span><span class="s3">&quot;k&quot;</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)(move_cursor_up)</span>
+
+    <span class="s1">@bindings.add(Keys.ControlM</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">set_answer(event):</span>
+
+        <span class="s1">selected_values = get_selected_values()</span>
+        <span class="s1">ic.submission_attempted = </span><span class="s0">True</span>
+
+        <span class="s0">if </span><span class="s1">perform_validation(selected_values):</span>
+            <span class="s1">ic.is_answered = </span><span class="s0">True</span>
+            <span class="s1">event.app.exit(result=selected_values)</span>
+
+    <span class="s1">@bindings.add(Keys.Any)</span>
+    <span class="s0">def </span><span class="s1">other(_event):</span>
+        <span class="s2">&quot;&quot;&quot;Disallow inserting other text. &quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">return </span><span class="s1">Question(</span>
+        <span class="s1">Application(</span>
+            <span class="s1">layout=layout</span><span class="s0">,</span>
+            <span class="s1">key_bindings=bindings</span><span class="s0">,</span>
+            <span class="s1">style=merged_style</span><span class="s0">,</span>
+            <span class="s1">**utils.used_kwargs(kwargs</span><span class="s0">, </span><span class="s1">Application.__init__)</span><span class="s0">,</span>
+        <span class="s1">)</span>
+    <span class="s1">)</span>
+</pre>
+</body>
+</html>

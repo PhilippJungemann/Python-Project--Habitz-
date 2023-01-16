@@ -1,0 +1,318 @@
+<html>
+<head>
+<title>recwarn.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+recwarn.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Record warnings during test function execution.&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s2">from </span><span class="s1">types </span><span class="s2">import </span><span class="s1">TracebackType</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Any</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Callable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Generator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Iterator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">overload</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Pattern</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Tuple</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Type</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TypeVar</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">final</span>
+<span class="s2">from </span><span class="s1">_pytest.deprecated </span><span class="s2">import </span><span class="s1">check_ispytest</span>
+<span class="s2">from </span><span class="s1">_pytest.deprecated </span><span class="s2">import </span><span class="s1">WARNS_NONE_ARG</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">fixture</span>
+<span class="s2">from </span><span class="s1">_pytest.outcomes </span><span class="s2">import </span><span class="s1">fail</span>
+
+
+<span class="s1">T = TypeVar(</span><span class="s3">&quot;T&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">recwarn() -&gt; Generator[</span><span class="s3">&quot;WarningsRecorder&quot;</span><span class="s2">, None, None</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;Return a :class:`WarningsRecorder` instance that records all warnings emitted by test functions. 
+ 
+    See https://docs.python.org/library/how-to/capture-warnings.html for information 
+    on warning categories. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">wrec = WarningsRecorder(_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">with </span><span class="s1">wrec:</span>
+        <span class="s1">warnings.simplefilter(</span><span class="s3">&quot;default&quot;</span><span class="s1">)</span>
+        <span class="s2">yield </span><span class="s1">wrec</span>
+
+
+<span class="s1">@overload</span>
+<span class="s2">def </span><span class="s1">deprecated_call(</span>
+    <span class="s1">*</span><span class="s2">, </span><span class="s1">match: Optional[Union[str</span><span class="s2">, </span><span class="s1">Pattern[str]]] = ...</span>
+<span class="s1">) -&gt; </span><span class="s3">&quot;WarningsRecorder&quot;</span><span class="s1">:</span>
+    <span class="s1">...</span>
+
+
+<span class="s1">@overload</span>
+<span class="s2">def </span><span class="s1">deprecated_call(func: Callable[...</span><span class="s2">, </span><span class="s1">T]</span><span class="s2">, </span><span class="s1">*args: Any</span><span class="s2">, </span><span class="s1">**kwargs: Any) -&gt; T:</span>
+    <span class="s1">...</span>
+
+
+<span class="s2">def </span><span class="s1">deprecated_call(</span>
+    <span class="s1">func: Optional[Callable[...</span><span class="s2">, </span><span class="s1">Any]] = </span><span class="s2">None, </span><span class="s1">*args: Any</span><span class="s2">, </span><span class="s1">**kwargs: Any</span>
+<span class="s1">) -&gt; Union[</span><span class="s3">&quot;WarningsRecorder&quot;</span><span class="s2">, </span><span class="s1">Any]:</span>
+    <span class="s0">&quot;&quot;&quot;Assert that code produces a ``DeprecationWarning`` or ``PendingDeprecationWarning``. 
+ 
+    This function can be used as a context manager:: 
+ 
+        &gt;&gt;&gt; import warnings 
+        &gt;&gt;&gt; def api_call_v2(): 
+        ...     warnings.warn('use v3 of this api', DeprecationWarning) 
+        ...     return 200 
+ 
+        &gt;&gt;&gt; import pytest 
+        &gt;&gt;&gt; with pytest.deprecated_call(): 
+        ...    assert api_call_v2() == 200 
+ 
+    It can also be used by passing a function and ``*args`` and ``**kwargs``, 
+    in which case it will ensure calling ``func(*args, **kwargs)`` produces one of 
+    the warnings types above. The return value is the return value of the function. 
+ 
+    In the context manager form you may use the keyword argument ``match`` to assert 
+    that the warning matches a text or regex. 
+ 
+    The context manager produces a list of :class:`warnings.WarningMessage` objects, 
+    one for each warning raised. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+    <span class="s2">if </span><span class="s1">func </span><span class="s2">is not None</span><span class="s1">:</span>
+        <span class="s1">args = (func</span><span class="s2">,</span><span class="s1">) + args</span>
+    <span class="s2">return </span><span class="s1">warns((DeprecationWarning</span><span class="s2">, </span><span class="s1">PendingDeprecationWarning)</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+
+
+<span class="s1">@overload</span>
+<span class="s2">def </span><span class="s1">warns(</span>
+    <span class="s1">expected_warning: Union[Type[Warning]</span><span class="s2">, </span><span class="s1">Tuple[Type[Warning]</span><span class="s2">, </span><span class="s1">...]] = ...</span><span class="s2">,</span>
+    <span class="s1">*</span><span class="s2">,</span>
+    <span class="s1">match: Optional[Union[str</span><span class="s2">, </span><span class="s1">Pattern[str]]] = ...</span><span class="s2">,</span>
+<span class="s1">) -&gt; </span><span class="s3">&quot;WarningsChecker&quot;</span><span class="s1">:</span>
+    <span class="s1">...</span>
+
+
+<span class="s1">@overload</span>
+<span class="s2">def </span><span class="s1">warns(</span>
+    <span class="s1">expected_warning: Union[Type[Warning]</span><span class="s2">, </span><span class="s1">Tuple[Type[Warning]</span><span class="s2">, </span><span class="s1">...]]</span><span class="s2">,</span>
+    <span class="s1">func: Callable[...</span><span class="s2">, </span><span class="s1">T]</span><span class="s2">,</span>
+    <span class="s1">*args: Any</span><span class="s2">,</span>
+    <span class="s1">**kwargs: Any</span><span class="s2">,</span>
+<span class="s1">) -&gt; T:</span>
+    <span class="s1">...</span>
+
+
+<span class="s2">def </span><span class="s1">warns(</span>
+    <span class="s1">expected_warning: Union[Type[Warning]</span><span class="s2">, </span><span class="s1">Tuple[Type[Warning]</span><span class="s2">, </span><span class="s1">...]] = Warning</span><span class="s2">,</span>
+    <span class="s1">*args: Any</span><span class="s2">,</span>
+    <span class="s1">match: Optional[Union[str</span><span class="s2">, </span><span class="s1">Pattern[str]]] = </span><span class="s2">None,</span>
+    <span class="s1">**kwargs: Any</span><span class="s2">,</span>
+<span class="s1">) -&gt; Union[</span><span class="s3">&quot;WarningsChecker&quot;</span><span class="s2">, </span><span class="s1">Any]:</span>
+    <span class="s0">r&quot;&quot;&quot;Assert that code raises a particular class of warning. 
+ 
+    Specifically, the parameter ``expected_warning`` can be a warning class or 
+    sequence of warning classes, and the inside the ``with`` block must issue a warning of that class or 
+    classes. 
+ 
+    This helper produces a list of :class:`warnings.WarningMessage` objects, 
+    one for each warning raised. 
+ 
+    This function can be used as a context manager, or any of the other ways 
+    :func:`pytest.raises` can be used:: 
+ 
+        &gt;&gt;&gt; import pytest 
+        &gt;&gt;&gt; with pytest.warns(RuntimeWarning): 
+        ...    warnings.warn(&quot;my warning&quot;, RuntimeWarning) 
+ 
+    In the context manager form you may use the keyword argument ``match`` to assert 
+    that the warning matches a text or regex:: 
+ 
+        &gt;&gt;&gt; with pytest.warns(UserWarning, match='must be 0 or None'): 
+        ...     warnings.warn(&quot;value must be 0 or None&quot;, UserWarning) 
+ 
+        &gt;&gt;&gt; with pytest.warns(UserWarning, match=r'must be \d+$'): 
+        ...     warnings.warn(&quot;value must be 42&quot;, UserWarning) 
+ 
+        &gt;&gt;&gt; with pytest.warns(UserWarning, match=r'must be \d+$'): 
+        ...     warnings.warn(&quot;this is not here&quot;, UserWarning) 
+        Traceback (most recent call last): 
+          ... 
+        Failed: DID NOT WARN. No warnings of type ...UserWarning... were emitted... 
+ 
+    &quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+    <span class="s2">if not </span><span class="s1">args:</span>
+        <span class="s2">if </span><span class="s1">kwargs:</span>
+            <span class="s1">msg = </span><span class="s3">&quot;Unexpected keyword arguments passed to pytest.warns: &quot;</span>
+            <span class="s1">msg += </span><span class="s3">&quot;, &quot;</span><span class="s1">.join(sorted(kwargs))</span>
+            <span class="s1">msg += </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">Use context-manager form instead?&quot;</span>
+            <span class="s2">raise </span><span class="s1">TypeError(msg)</span>
+        <span class="s2">return </span><span class="s1">WarningsChecker(expected_warning</span><span class="s2">, </span><span class="s1">match_expr=match</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">func = args[</span><span class="s4">0</span><span class="s1">]</span>
+        <span class="s2">if not </span><span class="s1">callable(func):</span>
+            <span class="s2">raise </span><span class="s1">TypeError(</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">func</span><span class="s2">!r} </span><span class="s3">object (type: </span><span class="s2">{</span><span class="s1">type(func)</span><span class="s2">}</span><span class="s3">) must be callable&quot;</span><span class="s1">)</span>
+        <span class="s2">with </span><span class="s1">WarningsChecker(expected_warning</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">func(*args[</span><span class="s4">1</span><span class="s1">:]</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+
+
+<span class="s2">class </span><span class="s1">WarningsRecorder(warnings.catch_warnings):</span>
+    <span class="s0">&quot;&quot;&quot;A context manager to record raised warnings. 
+ 
+    Adapted from `warnings.catch_warnings`. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">_ispytest: bool = </span><span class="s2">False</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s5"># Type ignored due to the way typeshed handles warnings.catch_warnings.</span>
+        <span class="s1">super().__init__(record=</span><span class="s2">True</span><span class="s1">)  </span><span class="s5"># type: ignore[call-arg]</span>
+        <span class="s1">self._entered = </span><span class="s2">False</span>
+        <span class="s1">self._list: List[warnings.WarningMessage] = []</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">list(self) -&gt; List[</span><span class="s3">&quot;warnings.WarningMessage&quot;</span><span class="s1">]:</span>
+        <span class="s0">&quot;&quot;&quot;The list of recorded warnings.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._list</span>
+
+    <span class="s2">def </span><span class="s1">__getitem__(self</span><span class="s2">, </span><span class="s1">i: int) -&gt; </span><span class="s3">&quot;warnings.WarningMessage&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Get a recorded warning by index.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._list[i]</span>
+
+    <span class="s2">def </span><span class="s1">__iter__(self) -&gt; Iterator[</span><span class="s3">&quot;warnings.WarningMessage&quot;</span><span class="s1">]:</span>
+        <span class="s0">&quot;&quot;&quot;Iterate through the recorded warnings.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">iter(self._list)</span>
+
+    <span class="s2">def </span><span class="s1">__len__(self) -&gt; int:</span>
+        <span class="s0">&quot;&quot;&quot;The number of recorded warnings.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">len(self._list)</span>
+
+    <span class="s2">def </span><span class="s1">pop(self</span><span class="s2">, </span><span class="s1">cls: Type[Warning] = Warning) -&gt; </span><span class="s3">&quot;warnings.WarningMessage&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Pop the first recorded warning, raise exception if not exists.&quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">w </span><span class="s2">in </span><span class="s1">enumerate(self._list):</span>
+            <span class="s2">if </span><span class="s1">issubclass(w.category</span><span class="s2">, </span><span class="s1">cls):</span>
+                <span class="s2">return </span><span class="s1">self._list.pop(i)</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">raise </span><span class="s1">AssertionError(</span><span class="s3">&quot;%r not found in warning list&quot; </span><span class="s1">% cls)</span>
+
+    <span class="s2">def </span><span class="s1">clear(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Clear the list of recorded warnings.&quot;&quot;&quot;</span>
+        <span class="s1">self._list[:] = []</span>
+
+    <span class="s5"># Type ignored because it doesn't exactly warnings.catch_warnings.__enter__</span>
+    <span class="s5"># -- it returns a List but we only emulate one.</span>
+    <span class="s2">def </span><span class="s1">__enter__(self) -&gt; </span><span class="s3">&quot;WarningsRecorder&quot;</span><span class="s1">:  </span><span class="s5"># type: ignore</span>
+        <span class="s2">if </span><span class="s1">self._entered:</span>
+            <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+            <span class="s2">raise </span><span class="s1">RuntimeError(</span><span class="s3">&quot;Cannot enter %r twice&quot; </span><span class="s1">% self)</span>
+        <span class="s1">_list = super().__enter__()</span>
+        <span class="s5"># record=True means it's None.</span>
+        <span class="s2">assert </span><span class="s1">_list </span><span class="s2">is not None</span>
+        <span class="s1">self._list = _list</span>
+        <span class="s1">warnings.simplefilter(</span><span class="s3">&quot;always&quot;</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">__exit__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">exc_type: Optional[Type[BaseException]]</span><span class="s2">,</span>
+        <span class="s1">exc_val: Optional[BaseException]</span><span class="s2">,</span>
+        <span class="s1">exc_tb: Optional[TracebackType]</span><span class="s2">,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if not </span><span class="s1">self._entered:</span>
+            <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+            <span class="s2">raise </span><span class="s1">RuntimeError(</span><span class="s3">&quot;Cannot exit %r without entering first&quot; </span><span class="s1">% self)</span>
+
+        <span class="s1">super().__exit__(exc_type</span><span class="s2">, </span><span class="s1">exc_val</span><span class="s2">, </span><span class="s1">exc_tb)</span>
+
+        <span class="s5"># Built-in catch_warnings does not reset entered state so we do it</span>
+        <span class="s5"># manually here for this context manager to become reusable.</span>
+        <span class="s1">self._entered = </span><span class="s2">False</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">WarningsChecker(WarningsRecorder):</span>
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">expected_warning: Optional[</span>
+            <span class="s1">Union[Type[Warning]</span><span class="s2">, </span><span class="s1">Tuple[Type[Warning]</span><span class="s2">, </span><span class="s1">...]]</span>
+        <span class="s1">] = Warning</span><span class="s2">,</span>
+        <span class="s1">match_expr: Optional[Union[str</span><span class="s2">, </span><span class="s1">Pattern[str]]] = </span><span class="s2">None,</span>
+        <span class="s1">*</span><span class="s2">,</span>
+        <span class="s1">_ispytest: bool = </span><span class="s2">False,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">super().__init__(_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+
+        <span class="s1">msg = </span><span class="s3">&quot;exceptions must be derived from Warning, not %s&quot;</span>
+        <span class="s2">if </span><span class="s1">expected_warning </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">warnings.warn(WARNS_NONE_ARG</span><span class="s2">, </span><span class="s1">stacklevel=</span><span class="s4">4</span><span class="s1">)</span>
+            <span class="s1">expected_warning_tup = </span><span class="s2">None</span>
+        <span class="s2">elif </span><span class="s1">isinstance(expected_warning</span><span class="s2">, </span><span class="s1">tuple):</span>
+            <span class="s2">for </span><span class="s1">exc </span><span class="s2">in </span><span class="s1">expected_warning:</span>
+                <span class="s2">if not </span><span class="s1">issubclass(exc</span><span class="s2">, </span><span class="s1">Warning):</span>
+                    <span class="s2">raise </span><span class="s1">TypeError(msg % type(exc))</span>
+            <span class="s1">expected_warning_tup = expected_warning</span>
+        <span class="s2">elif </span><span class="s1">issubclass(expected_warning</span><span class="s2">, </span><span class="s1">Warning):</span>
+            <span class="s1">expected_warning_tup = (expected_warning</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">TypeError(msg % type(expected_warning))</span>
+
+        <span class="s1">self.expected_warning = expected_warning_tup</span>
+        <span class="s1">self.match_expr = match_expr</span>
+
+    <span class="s2">def </span><span class="s1">__exit__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">exc_type: Optional[Type[BaseException]]</span><span class="s2">,</span>
+        <span class="s1">exc_val: Optional[BaseException]</span><span class="s2">,</span>
+        <span class="s1">exc_tb: Optional[TracebackType]</span><span class="s2">,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">super().__exit__(exc_type</span><span class="s2">, </span><span class="s1">exc_val</span><span class="s2">, </span><span class="s1">exc_tb)</span>
+
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+
+        <span class="s5"># only check if we're not currently handling an exception</span>
+        <span class="s2">if </span><span class="s1">exc_type </span><span class="s2">is None and </span><span class="s1">exc_val </span><span class="s2">is None and </span><span class="s1">exc_tb </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">self.expected_warning </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s2">if not </span><span class="s1">any(issubclass(r.category</span><span class="s2">, </span><span class="s1">self.expected_warning) </span><span class="s2">for </span><span class="s1">r </span><span class="s2">in </span><span class="s1">self):</span>
+                    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+                    <span class="s1">fail(</span>
+                        <span class="s3">&quot;DID NOT WARN. No warnings of type {} were emitted. &quot;</span>
+                        <span class="s3">&quot;The list of emitted warnings is: {}.&quot;</span><span class="s1">.format(</span>
+                            <span class="s1">self.expected_warning</span><span class="s2">, </span><span class="s1">[each.message </span><span class="s2">for </span><span class="s1">each </span><span class="s2">in </span><span class="s1">self]</span>
+                        <span class="s1">)</span>
+                    <span class="s1">)</span>
+                <span class="s2">elif </span><span class="s1">self.match_expr </span><span class="s2">is not None</span><span class="s1">:</span>
+                    <span class="s2">for </span><span class="s1">r </span><span class="s2">in </span><span class="s1">self:</span>
+                        <span class="s2">if </span><span class="s1">issubclass(r.category</span><span class="s2">, </span><span class="s1">self.expected_warning):</span>
+                            <span class="s2">if </span><span class="s1">re.compile(self.match_expr).search(str(r.message)):</span>
+                                <span class="s2">break</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s1">fail(</span>
+                            <span class="s3">&quot;DID NOT WARN. No warnings of type {} matching&quot;</span>
+                            <span class="s3">&quot; ('{}') were emitted. The list of emitted warnings&quot;</span>
+                            <span class="s3">&quot; is: {}.&quot;</span><span class="s1">.format(</span>
+                                <span class="s1">self.expected_warning</span><span class="s2">,</span>
+                                <span class="s1">self.match_expr</span><span class="s2">,</span>
+                                <span class="s1">[each.message </span><span class="s2">for </span><span class="s1">each </span><span class="s2">in </span><span class="s1">self]</span><span class="s2">,</span>
+                            <span class="s1">)</span>
+                        <span class="s1">)</span>
+</pre>
+</body>
+</html>

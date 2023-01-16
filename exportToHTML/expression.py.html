@@ -1,0 +1,247 @@
+<html>
+<head>
+<title>expression.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+expression.py</font>
+</center></td></tr></table>
+<pre><span class="s0">r&quot;&quot;&quot;Evaluate match expressions, as used by `-k` and `-m`. 
+ 
+The grammar is: 
+ 
+expression: expr? EOF 
+expr:       and_expr ('or' and_expr)* 
+and_expr:   not_expr ('and' not_expr)* 
+not_expr:   'not' not_expr | '(' expr ')' | ident 
+ident:      (\w|:|\+|-|\.|\[|\]|\\|/)+ 
+ 
+The semantics are: 
+ 
+- Empty expression evaluates to False. 
+- ident evaluates to True of False according to a provided matcher function. 
+- or/and/not evaluate according to the usual boolean semantics. 
+&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">ast</span>
+<span class="s2">import </span><span class="s1">enum</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">types</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Callable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Iterator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Mapping</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Sequence</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TYPE_CHECKING</span>
+
+<span class="s2">import </span><span class="s1">attr</span>
+
+<span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">NoReturn</span>
+
+
+<span class="s1">__all__ = [</span>
+    <span class="s3">&quot;Expression&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;ParseError&quot;</span><span class="s2">,</span>
+<span class="s1">]</span>
+
+
+<span class="s2">class </span><span class="s1">TokenType(enum.Enum):</span>
+    <span class="s1">LPAREN = </span><span class="s3">&quot;left parenthesis&quot;</span>
+    <span class="s1">RPAREN = </span><span class="s3">&quot;right parenthesis&quot;</span>
+    <span class="s1">OR = </span><span class="s3">&quot;or&quot;</span>
+    <span class="s1">AND = </span><span class="s3">&quot;and&quot;</span>
+    <span class="s1">NOT = </span><span class="s3">&quot;not&quot;</span>
+    <span class="s1">IDENT = </span><span class="s3">&quot;identifier&quot;</span>
+    <span class="s1">EOF = </span><span class="s3">&quot;end of input&quot;</span>
+
+
+<span class="s1">@attr.s(frozen=</span><span class="s2">True, </span><span class="s1">slots=</span><span class="s2">True, </span><span class="s1">auto_attribs=</span><span class="s2">True</span><span class="s1">)</span>
+<span class="s2">class </span><span class="s1">Token:</span>
+    <span class="s1">type: TokenType</span>
+    <span class="s1">value: str</span>
+    <span class="s1">pos: int</span>
+
+
+<span class="s2">class </span><span class="s1">ParseError(Exception):</span>
+    <span class="s0">&quot;&quot;&quot;The expression contains invalid syntax. 
+ 
+    :param column: The column in the line where the error occurred (1-based). 
+    :param message: A description of the error. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">column: int</span><span class="s2">, </span><span class="s1">message: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.column = column</span>
+        <span class="s1">self.message = message</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">f&quot;at column </span><span class="s2">{</span><span class="s1">self.column</span><span class="s2">}</span><span class="s3">: </span><span class="s2">{</span><span class="s1">self.message</span><span class="s2">}</span><span class="s3">&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">Scanner:</span>
+    <span class="s1">__slots__ = (</span><span class="s3">&quot;tokens&quot;</span><span class="s2">, </span><span class="s3">&quot;current&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">input: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.tokens = self.lex(input)</span>
+        <span class="s1">self.current = next(self.tokens)</span>
+
+    <span class="s2">def </span><span class="s1">lex(self</span><span class="s2">, </span><span class="s1">input: str) -&gt; Iterator[Token]:</span>
+        <span class="s1">pos = </span><span class="s4">0</span>
+        <span class="s2">while </span><span class="s1">pos &lt; len(input):</span>
+            <span class="s2">if </span><span class="s1">input[pos] </span><span class="s2">in </span><span class="s1">(</span><span class="s3">&quot; &quot;</span><span class="s2">, </span><span class="s3">&quot;</span><span class="s2">\t</span><span class="s3">&quot;</span><span class="s1">):</span>
+                <span class="s1">pos += </span><span class="s4">1</span>
+            <span class="s2">elif </span><span class="s1">input[pos] == </span><span class="s3">&quot;(&quot;</span><span class="s1">:</span>
+                <span class="s2">yield </span><span class="s1">Token(TokenType.LPAREN</span><span class="s2">, </span><span class="s3">&quot;(&quot;</span><span class="s2">, </span><span class="s1">pos)</span>
+                <span class="s1">pos += </span><span class="s4">1</span>
+            <span class="s2">elif </span><span class="s1">input[pos] == </span><span class="s3">&quot;)&quot;</span><span class="s1">:</span>
+                <span class="s2">yield </span><span class="s1">Token(TokenType.RPAREN</span><span class="s2">, </span><span class="s3">&quot;)&quot;</span><span class="s2">, </span><span class="s1">pos)</span>
+                <span class="s1">pos += </span><span class="s4">1</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">match = re.match(</span><span class="s3">r&quot;(:?\w|:|\+|-|\.|\[|\]|\\|/)+&quot;</span><span class="s2">, </span><span class="s1">input[pos:])</span>
+                <span class="s2">if </span><span class="s1">match:</span>
+                    <span class="s1">value = match.group(</span><span class="s4">0</span><span class="s1">)</span>
+                    <span class="s2">if </span><span class="s1">value == </span><span class="s3">&quot;or&quot;</span><span class="s1">:</span>
+                        <span class="s2">yield </span><span class="s1">Token(TokenType.OR</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">pos)</span>
+                    <span class="s2">elif </span><span class="s1">value == </span><span class="s3">&quot;and&quot;</span><span class="s1">:</span>
+                        <span class="s2">yield </span><span class="s1">Token(TokenType.AND</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">pos)</span>
+                    <span class="s2">elif </span><span class="s1">value == </span><span class="s3">&quot;not&quot;</span><span class="s1">:</span>
+                        <span class="s2">yield </span><span class="s1">Token(TokenType.NOT</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">pos)</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s2">yield </span><span class="s1">Token(TokenType.IDENT</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">pos)</span>
+                    <span class="s1">pos += len(value)</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s2">raise </span><span class="s1">ParseError(</span>
+                        <span class="s1">pos + </span><span class="s4">1</span><span class="s2">,</span>
+                        <span class="s3">f'unexpected character &quot;</span><span class="s2">{</span><span class="s1">input[pos]</span><span class="s2">}</span><span class="s3">&quot;'</span><span class="s2">,</span>
+                    <span class="s1">)</span>
+        <span class="s2">yield </span><span class="s1">Token(TokenType.EOF</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">pos)</span>
+
+    <span class="s2">def </span><span class="s1">accept(self</span><span class="s2">, </span><span class="s1">type: TokenType</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">reject: bool = </span><span class="s2">False</span><span class="s1">) -&gt; Optional[Token]:</span>
+        <span class="s2">if </span><span class="s1">self.current.type </span><span class="s2">is </span><span class="s1">type:</span>
+            <span class="s1">token = self.current</span>
+            <span class="s2">if </span><span class="s1">token.type </span><span class="s2">is not </span><span class="s1">TokenType.EOF:</span>
+                <span class="s1">self.current = next(self.tokens)</span>
+            <span class="s2">return </span><span class="s1">token</span>
+        <span class="s2">if </span><span class="s1">reject:</span>
+            <span class="s1">self.reject((type</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">reject(self</span><span class="s2">, </span><span class="s1">expected: Sequence[TokenType]) -&gt; </span><span class="s3">&quot;NoReturn&quot;</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s1">ParseError(</span>
+            <span class="s1">self.current.pos + </span><span class="s4">1</span><span class="s2">,</span>
+            <span class="s3">&quot;expected {}; got {}&quot;</span><span class="s1">.format(</span>
+                <span class="s3">&quot; OR &quot;</span><span class="s1">.join(type.value </span><span class="s2">for </span><span class="s1">type </span><span class="s2">in </span><span class="s1">expected)</span><span class="s2">,</span>
+                <span class="s1">self.current.type.value</span><span class="s2">,</span>
+            <span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+
+<span class="s5"># True, False and None are legal match expression identifiers,</span>
+<span class="s5"># but illegal as Python identifiers. To fix this, this prefix</span>
+<span class="s5"># is added to identifiers in the conversion to Python AST.</span>
+<span class="s1">IDENT_PREFIX = </span><span class="s3">&quot;$&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">expression(s: Scanner) -&gt; ast.Expression:</span>
+    <span class="s2">if </span><span class="s1">s.accept(TokenType.EOF):</span>
+        <span class="s1">ret: ast.expr = ast.NameConstant(</span><span class="s2">False</span><span class="s1">)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">ret = expr(s)</span>
+        <span class="s1">s.accept(TokenType.EOF</span><span class="s2">, </span><span class="s1">reject=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">ast.fix_missing_locations(ast.Expression(ret))</span>
+
+
+<span class="s2">def </span><span class="s1">expr(s: Scanner) -&gt; ast.expr:</span>
+    <span class="s1">ret = and_expr(s)</span>
+    <span class="s2">while </span><span class="s1">s.accept(TokenType.OR):</span>
+        <span class="s1">rhs = and_expr(s)</span>
+        <span class="s1">ret = ast.BoolOp(ast.Or()</span><span class="s2">, </span><span class="s1">[ret</span><span class="s2">, </span><span class="s1">rhs])</span>
+    <span class="s2">return </span><span class="s1">ret</span>
+
+
+<span class="s2">def </span><span class="s1">and_expr(s: Scanner) -&gt; ast.expr:</span>
+    <span class="s1">ret = not_expr(s)</span>
+    <span class="s2">while </span><span class="s1">s.accept(TokenType.AND):</span>
+        <span class="s1">rhs = not_expr(s)</span>
+        <span class="s1">ret = ast.BoolOp(ast.And()</span><span class="s2">, </span><span class="s1">[ret</span><span class="s2">, </span><span class="s1">rhs])</span>
+    <span class="s2">return </span><span class="s1">ret</span>
+
+
+<span class="s2">def </span><span class="s1">not_expr(s: Scanner) -&gt; ast.expr:</span>
+    <span class="s2">if </span><span class="s1">s.accept(TokenType.NOT):</span>
+        <span class="s2">return </span><span class="s1">ast.UnaryOp(ast.Not()</span><span class="s2">, </span><span class="s1">not_expr(s))</span>
+    <span class="s2">if </span><span class="s1">s.accept(TokenType.LPAREN):</span>
+        <span class="s1">ret = expr(s)</span>
+        <span class="s1">s.accept(TokenType.RPAREN</span><span class="s2">, </span><span class="s1">reject=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">ret</span>
+    <span class="s1">ident = s.accept(TokenType.IDENT)</span>
+    <span class="s2">if </span><span class="s1">ident:</span>
+        <span class="s2">return </span><span class="s1">ast.Name(IDENT_PREFIX + ident.value</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+    <span class="s1">s.reject((TokenType.NOT</span><span class="s2">, </span><span class="s1">TokenType.LPAREN</span><span class="s2">, </span><span class="s1">TokenType.IDENT))</span>
+
+
+<span class="s2">class </span><span class="s1">MatcherAdapter(Mapping[str</span><span class="s2">, </span><span class="s1">bool]):</span>
+    <span class="s0">&quot;&quot;&quot;Adapts a matcher function to a locals mapping as required by eval().&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">matcher: Callable[[str]</span><span class="s2">, </span><span class="s1">bool]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.matcher = matcher</span>
+
+    <span class="s2">def </span><span class="s1">__getitem__(self</span><span class="s2">, </span><span class="s1">key: str) -&gt; bool:</span>
+        <span class="s2">return </span><span class="s1">self.matcher(key[len(IDENT_PREFIX) :])</span>
+
+    <span class="s2">def </span><span class="s1">__iter__(self) -&gt; Iterator[str]:</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError()</span>
+
+    <span class="s2">def </span><span class="s1">__len__(self) -&gt; int:</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError()</span>
+
+
+<span class="s2">class </span><span class="s1">Expression:</span>
+    <span class="s0">&quot;&quot;&quot;A compiled match expression as used by -k and -m. 
+ 
+    The expression can be evaluated against different matchers. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ = (</span><span class="s3">&quot;code&quot;</span><span class="s2">,</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">code: types.CodeType) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.code = code</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">compile(self</span><span class="s2">, </span><span class="s1">input: str) -&gt; </span><span class="s3">&quot;Expression&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Compile a match expression. 
+ 
+        :param input: The input expression - one line. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">astexpr = expression(Scanner(input))</span>
+        <span class="s1">code: types.CodeType = compile(</span>
+            <span class="s1">astexpr</span><span class="s2">,</span>
+            <span class="s1">filename=</span><span class="s3">&quot;&lt;pytest match expression&gt;&quot;</span><span class="s2">,</span>
+            <span class="s1">mode=</span><span class="s3">&quot;eval&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">Expression(code)</span>
+
+    <span class="s2">def </span><span class="s1">evaluate(self</span><span class="s2">, </span><span class="s1">matcher: Callable[[str]</span><span class="s2">, </span><span class="s1">bool]) -&gt; bool:</span>
+        <span class="s0">&quot;&quot;&quot;Evaluate the match expression. 
+ 
+        :param matcher: 
+            Given an identifier, should return whether it matches or not. 
+            Should be prepared to handle arbitrary strings as input. 
+ 
+        :returns: Whether the expression matches or not. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">ret: bool = eval(self.code</span><span class="s2">, </span><span class="s1">{</span><span class="s3">&quot;__builtins__&quot;</span><span class="s1">: {}}</span><span class="s2">, </span><span class="s1">MatcherAdapter(matcher))</span>
+        <span class="s2">return </span><span class="s1">ret</span>
+</pre>
+</body>
+</html>

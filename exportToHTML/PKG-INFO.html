@@ -1,0 +1,164 @@
+<html>
+<head>
+<title>PKG-INFO</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+PKG-INFO</font>
+</center></td></tr></table>
+<pre><span class="s0">Metadata-Version: 2.1</span>
+<span class="s0">Name: atomicwrites</span>
+<span class="s0">Version: 1.4.1</span>
+<span class="s0">Summary: Atomic file writes.</span>
+<span class="s0">Home-page: https://github.com/untitaker/python-atomicwrites</span>
+<span class="s0">Author: Markus Unterwaditzer</span>
+<span class="s0">Author-email: markus@unterwaditzer.net</span>
+<span class="s0">License: MIT</span>
+<span class="s0">Classifier: License :: OSI Approved :: MIT License</span>
+<span class="s0">Classifier: Programming Language :: Python :: 2</span>
+<span class="s0">Classifier: Programming Language :: Python :: 2.7</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3.4</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3.5</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3.6</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3.7</span>
+<span class="s0">Classifier: Programming Language :: Python :: 3.8</span>
+<span class="s0">Classifier: Programming Language :: Python :: Implementation :: CPython</span>
+<span class="s0">Requires-Python: &gt;=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*</span>
+<span class="s0">License-File: LICENSE</span>
+
+<span class="s0">===================</span>
+<span class="s0">python-atomicwrites</span>
+<span class="s0">===================</span>
+
+<span class="s0">.. image:: https://travis-ci.com/untitaker/python-atomicwrites.svg?branch=master</span>
+    <span class="s0">:target: https://travis-ci.com/untitaker/python-atomicwrites</span>
+<span class="s0">.. image:: https://ci.appveyor.com/api/projects/status/vadc4le3c27to59x/branch/master?svg=true</span>
+   <span class="s0">:target: https://ci.appveyor.com/project/untitaker/python-atomicwrites/branch/master</span>
+<span class="s0">.. image:: https://readthedocs.org/projects/python-atomicwrites/badge/?version=latest</span>
+   <span class="s0">:target: https://python-atomicwrites.readthedocs.io/en/latest/?badge=latest</span>
+   <span class="s0">:alt: Documentation Status</span>
+
+<span class="s0">**Atomic file writes.**</span>
+
+<span class="s0">.. code-block:: python</span>
+
+    <span class="s0">from atomicwrites import atomic_write</span>
+
+    <span class="s0">with atomic_write('foo.txt', overwrite=True) as f:</span>
+        <span class="s0">f.write('Hello world.')</span>
+        <span class="s0"># &quot;foo.txt&quot; doesn't exist yet.</span>
+
+    <span class="s0"># Now it does.</span>
+    
+<span class="s0">See `API documentation &lt;https://python-atomicwrites.readthedocs.io/en/latest/#api&gt;`_ for more</span>
+<span class="s0">low-level interfaces.</span>
+
+<span class="s0">Features that distinguish it from other similar libraries (see `Alternatives and Credit`_):</span>
+
+<span class="s0">- Race-free assertion that the target file doesn't yet exist. This can be</span>
+  <span class="s0">controlled with the ``overwrite`` parameter.</span>
+
+<span class="s0">- Windows support, although not well-tested. The MSDN resources are not very</span>
+  <span class="s0">explicit about which operations are atomic. I'm basing my assumptions off `a</span>
+  <span class="s0">comment</span>
+  <span class="s0">&lt;https://social.msdn.microsoft.com/Forums/windowsdesktop/en-US/449bb49d-8acc-48dc-a46f-0760ceddbfc3/movefileexmovefilereplaceexisting-ntfs-same-volume-atomic?forum=windowssdk#a239bc26-eaf0-4920-9f21-440bd2be9cc8&gt;`_</span>
+  <span class="s0">by `Doug Cook</span>
+  <span class="s0">&lt;https://social.msdn.microsoft.com/Profile/doug%20e.%20cook&gt;`_, who appears</span>
+  <span class="s0">to be a Microsoft employee:</span>
+
+      <span class="s0">Question: Is MoveFileEx atomic if the existing and new</span>
+      <span class="s0">files are both on the same drive?</span>
+
+      <span class="s0">The simple answer is &quot;usually, but in some cases it will silently fall-back</span>
+      <span class="s0">to a non-atomic method, so don't count on it&quot;.</span>
+
+      <span class="s0">The implementation of MoveFileEx looks something like this: [...]</span>
+
+      <span class="s0">The problem is if the rename fails, you might end up with a CopyFile, which</span>
+      <span class="s0">is definitely not atomic.</span>
+
+      <span class="s0">If you really need atomic-or-nothing, you can try calling</span>
+      <span class="s0">NtSetInformationFile, which is unsupported but is much more likely to be</span>
+      <span class="s0">atomic. </span>
+
+<span class="s0">- Simple high-level API that wraps a very flexible class-based API.</span>
+
+<span class="s0">- Consistent error handling across platforms.</span>
+
+
+<span class="s0">How it works</span>
+<span class="s0">============</span>
+
+<span class="s0">It uses a temporary file in the same directory as the given path. This ensures</span>
+<span class="s0">that the temporary file resides on the same filesystem.</span>
+
+<span class="s0">The temporary file will then be atomically moved to the target location: On</span>
+<span class="s0">POSIX, it will use ``rename`` if files should be overwritten, otherwise a</span>
+<span class="s0">combination of ``link`` and ``unlink``. On Windows, it uses MoveFileEx_ through</span>
+<span class="s0">stdlib's ``ctypes`` with the appropriate flags.</span>
+
+<span class="s0">Note that with ``link`` and ``unlink``, there's a timewindow where the file</span>
+<span class="s0">might be available under two entries in the filesystem: The name of the</span>
+<span class="s0">temporary file, and the name of the target file.</span>
+
+<span class="s0">Also note that the permissions of the target file may change this way. In some</span>
+<span class="s0">situations a ``chmod`` can be issued without any concurrency problems, but</span>
+<span class="s0">since that is not always the case, this library doesn't do it by itself.</span>
+
+<span class="s0">.. _MoveFileEx: https://msdn.microsoft.com/en-us/library/windows/desktop/aa365240%28v=vs.85%29.aspx</span>
+
+<span class="s0">fsync</span>
+<span class="s0">-----</span>
+
+<span class="s0">On POSIX, ``fsync`` is invoked on the temporary file after it is written (to</span>
+<span class="s0">flush file content and metadata), and on the parent directory after the file is</span>
+<span class="s0">moved (to flush filename).</span>
+
+<span class="s0">``fsync`` does not take care of disks' internal buffers, but there don't seem</span>
+<span class="s0">to be any standard POSIX APIs for that. On OS X, ``fcntl`` is used with</span>
+<span class="s0">``F_FULLFSYNC`` instead of ``fsync`` for that reason.</span>
+
+<span class="s0">On Windows, `_commit &lt;https://msdn.microsoft.com/en-us/library/17618685.aspx&gt;`_</span>
+<span class="s0">is used, but there are no guarantees about disk internal buffers.</span>
+
+<span class="s0">Alternatives and Credit</span>
+<span class="s0">=======================</span>
+
+<span class="s0">Atomicwrites is directly inspired by the following libraries (and shares a</span>
+<span class="s0">minimal amount of code):</span>
+
+<span class="s0">- The Trac project's `utility functions</span>
+  <span class="s0">&lt;http://www.edgewall.org/docs/tags-trac-0.11.7/epydoc/trac.util-pysrc.html&gt;`_,</span>
+  <span class="s0">also used in `Werkzeug &lt;http://werkzeug.pocoo.org/&gt;`_ and</span>
+  <span class="s0">`mitsuhiko/python-atomicfile</span>
+  <span class="s0">&lt;https://github.com/mitsuhiko/python-atomicfile&gt;`_. The idea to use</span>
+  <span class="s0">``ctypes`` instead of ``PyWin32`` originated there.</span>
+
+<span class="s0">- `abarnert/fatomic &lt;https://github.com/abarnert/fatomic&gt;`_. Windows support</span>
+  <span class="s0">(based on ``PyWin32``) was originally taken from there.</span>
+
+<span class="s0">Other alternatives to atomicwrites include:</span>
+
+<span class="s0">- `sashka/atomicfile &lt;https://github.com/sashka/atomicfile&gt;`_. Originally I</span>
+  <span class="s0">considered using that, but at the time it was lacking a lot of features I</span>
+  <span class="s0">needed (Windows support, overwrite-parameter, overriding behavior through</span>
+  <span class="s0">subclassing).</span>
+
+<span class="s0">- The `Boltons library collection &lt;https://github.com/mahmoud/boltons&gt;`_</span>
+  <span class="s0">features a class for atomic file writes, which seems to have a very similar</span>
+  <span class="s0">``overwrite`` parameter. It is lacking Windows support though.</span>
+
+<span class="s0">License</span>
+<span class="s0">=======</span>
+
+<span class="s0">Licensed under the MIT, see ``LICENSE``.</span>
+</pre>
+</body>
+</html>

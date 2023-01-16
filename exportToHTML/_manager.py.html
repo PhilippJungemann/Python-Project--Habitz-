@@ -1,0 +1,395 @@
+<html>
+<head>
+<title>_manager.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_manager.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+
+<span class="s0">from </span><span class="s1">. </span><span class="s0">import </span><span class="s1">_tracing</span>
+<span class="s0">from </span><span class="s1">._callers </span><span class="s0">import </span><span class="s1">_Result</span><span class="s0">, </span><span class="s1">_multicall</span>
+<span class="s0">from </span><span class="s1">._hooks </span><span class="s0">import </span><span class="s1">HookImpl</span><span class="s0">, </span><span class="s1">_HookRelay</span><span class="s0">, </span><span class="s1">_HookCaller</span><span class="s0">, </span><span class="s1">normalize_hookimpl_opts</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">8</span><span class="s1">):</span>
+    <span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">metadata </span><span class="s0">as </span><span class="s1">importlib_metadata</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">importlib_metadata</span>
+
+
+<span class="s0">def </span><span class="s1">_warn_for_function(warning</span><span class="s0">, </span><span class="s1">function):</span>
+    <span class="s1">warnings.warn_explicit(</span>
+        <span class="s1">warning</span><span class="s0">,</span>
+        <span class="s1">type(warning)</span><span class="s0">,</span>
+        <span class="s1">lineno=function.__code__.co_firstlineno</span><span class="s0">,</span>
+        <span class="s1">filename=function.__code__.co_filename</span><span class="s0">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">PluginValidationError(Exception):</span>
+    <span class="s3">&quot;&quot;&quot;plugin failed validation. 
+ 
+    :param object plugin: the plugin which failed validation, 
+        may be a module or an arbitrary object. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">plugin</span><span class="s0">, </span><span class="s1">message):</span>
+        <span class="s1">self.plugin = plugin</span>
+        <span class="s1">super(Exception</span><span class="s0">, </span><span class="s1">self).__init__(message)</span>
+
+
+<span class="s0">class </span><span class="s1">DistFacade:</span>
+    <span class="s3">&quot;&quot;&quot;Emulate a pkg_resources Distribution&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">dist):</span>
+        <span class="s1">self._dist = dist</span>
+
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">project_name(self):</span>
+        <span class="s0">return </span><span class="s1">self.metadata[</span><span class="s4">&quot;name&quot;</span><span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">attr</span><span class="s0">, </span><span class="s1">default=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">return </span><span class="s1">getattr(self._dist</span><span class="s0">, </span><span class="s1">attr</span><span class="s0">, </span><span class="s1">default)</span>
+
+    <span class="s0">def </span><span class="s1">__dir__(self):</span>
+        <span class="s0">return </span><span class="s1">sorted(dir(self._dist) + [</span><span class="s4">&quot;_dist&quot;</span><span class="s0">, </span><span class="s4">&quot;project_name&quot;</span><span class="s1">])</span>
+
+
+<span class="s0">class </span><span class="s1">PluginManager:</span>
+    <span class="s3">&quot;&quot;&quot;Core :py:class:`.PluginManager` class which manages registration 
+    of plugin objects and 1:N hook calling. 
+ 
+    You can register new hooks by calling :py:meth:`add_hookspecs(module_or_class) 
+    &lt;.PluginManager.add_hookspecs&gt;`. 
+    You can register plugin objects (which contain hooks) by calling 
+    :py:meth:`register(plugin) &lt;.PluginManager.register&gt;`.  The :py:class:`.PluginManager` 
+    is initialized with a prefix that is searched for in the names of the dict 
+    of registered plugin objects. 
+ 
+    For debugging purposes you can call :py:meth:`.PluginManager.enable_tracing` 
+    which will subsequently send debug information to the trace helper. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">project_name):</span>
+        <span class="s1">self.project_name = project_name</span>
+        <span class="s1">self._name2plugin = {}</span>
+        <span class="s1">self._plugin2hookcallers = {}</span>
+        <span class="s1">self._plugin_distinfo = []</span>
+        <span class="s1">self.trace = _tracing.TagTracer().get(</span><span class="s4">&quot;pluginmanage&quot;</span><span class="s1">)</span>
+        <span class="s1">self.hook = _HookRelay()</span>
+        <span class="s1">self._inner_hookexec = _multicall</span>
+
+    <span class="s0">def </span><span class="s1">_hookexec(self</span><span class="s0">, </span><span class="s1">hook_name</span><span class="s0">, </span><span class="s1">methods</span><span class="s0">, </span><span class="s1">kwargs</span><span class="s0">, </span><span class="s1">firstresult):</span>
+        <span class="s5"># called from all hookcaller instances.</span>
+        <span class="s5"># enable_tracing will set its own wrapping function at self._inner_hookexec</span>
+        <span class="s0">return </span><span class="s1">self._inner_hookexec(hook_name</span><span class="s0">, </span><span class="s1">methods</span><span class="s0">, </span><span class="s1">kwargs</span><span class="s0">, </span><span class="s1">firstresult)</span>
+
+    <span class="s0">def </span><span class="s1">register(self</span><span class="s0">, </span><span class="s1">plugin</span><span class="s0">, </span><span class="s1">name=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s3">&quot;&quot;&quot;Register a plugin and return its canonical name or ``None`` if the name 
+        is blocked from registering.  Raise a :py:class:`ValueError` if the plugin 
+        is already registered.&quot;&quot;&quot;</span>
+        <span class="s1">plugin_name = name </span><span class="s0">or </span><span class="s1">self.get_canonical_name(plugin)</span>
+
+        <span class="s0">if </span><span class="s1">plugin_name </span><span class="s0">in </span><span class="s1">self._name2plugin </span><span class="s0">or </span><span class="s1">plugin </span><span class="s0">in </span><span class="s1">self._plugin2hookcallers:</span>
+            <span class="s0">if </span><span class="s1">self._name2plugin.get(plugin_name</span><span class="s0">, </span><span class="s1">-</span><span class="s2">1</span><span class="s1">) </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s0">return  </span><span class="s5"># blocked plugin, return None to indicate no registration</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span>
+                <span class="s4">&quot;Plugin already registered: %s=%s</span><span class="s0">\n</span><span class="s4">%s&quot;</span>
+                <span class="s1">% (plugin_name</span><span class="s0">, </span><span class="s1">plugin</span><span class="s0">, </span><span class="s1">self._name2plugin)</span>
+            <span class="s1">)</span>
+
+        <span class="s5"># XXX if an error happens we should make sure no state has been</span>
+        <span class="s5"># changed at point of return</span>
+        <span class="s1">self._name2plugin[plugin_name] = plugin</span>
+
+        <span class="s5"># register matching hook implementations of the plugin</span>
+        <span class="s1">self._plugin2hookcallers[plugin] = hookcallers = []</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">dir(plugin):</span>
+            <span class="s1">hookimpl_opts = self.parse_hookimpl_opts(plugin</span><span class="s0">, </span><span class="s1">name)</span>
+            <span class="s0">if </span><span class="s1">hookimpl_opts </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">normalize_hookimpl_opts(hookimpl_opts)</span>
+                <span class="s1">method = getattr(plugin</span><span class="s0">, </span><span class="s1">name)</span>
+                <span class="s1">hookimpl = HookImpl(plugin</span><span class="s0">, </span><span class="s1">plugin_name</span><span class="s0">, </span><span class="s1">method</span><span class="s0">, </span><span class="s1">hookimpl_opts)</span>
+                <span class="s1">name = hookimpl_opts.get(</span><span class="s4">&quot;specname&quot;</span><span class="s1">) </span><span class="s0">or </span><span class="s1">name</span>
+                <span class="s1">hook = getattr(self.hook</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, None</span><span class="s1">)</span>
+                <span class="s0">if </span><span class="s1">hook </span><span class="s0">is None</span><span class="s1">:</span>
+                    <span class="s1">hook = _HookCaller(name</span><span class="s0">, </span><span class="s1">self._hookexec)</span>
+                    <span class="s1">setattr(self.hook</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">hook)</span>
+                <span class="s0">elif </span><span class="s1">hook.has_spec():</span>
+                    <span class="s1">self._verify_hook(hook</span><span class="s0">, </span><span class="s1">hookimpl)</span>
+                    <span class="s1">hook._maybe_apply_history(hookimpl)</span>
+                <span class="s1">hook._add_hookimpl(hookimpl)</span>
+                <span class="s1">hookcallers.append(hook)</span>
+        <span class="s0">return </span><span class="s1">plugin_name</span>
+
+    <span class="s0">def </span><span class="s1">parse_hookimpl_opts(self</span><span class="s0">, </span><span class="s1">plugin</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s1">method = getattr(plugin</span><span class="s0">, </span><span class="s1">name)</span>
+        <span class="s0">if not </span><span class="s1">inspect.isroutine(method):</span>
+            <span class="s0">return</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">res = getattr(method</span><span class="s0">, </span><span class="s1">self.project_name + </span><span class="s4">&quot;_impl&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">except </span><span class="s1">Exception:</span>
+            <span class="s1">res = {}</span>
+        <span class="s0">if </span><span class="s1">res </span><span class="s0">is not None and not </span><span class="s1">isinstance(res</span><span class="s0">, </span><span class="s1">dict):</span>
+            <span class="s5"># false positive</span>
+            <span class="s1">res = </span><span class="s0">None</span>
+        <span class="s0">return </span><span class="s1">res</span>
+
+    <span class="s0">def </span><span class="s1">unregister(self</span><span class="s0">, </span><span class="s1">plugin=</span><span class="s0">None, </span><span class="s1">name=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s3">&quot;&quot;&quot;unregister a plugin object and all its contained hook implementations 
+        from internal data structures.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">name </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">assert </span><span class="s1">plugin </span><span class="s0">is not None, </span><span class="s4">&quot;one of name or plugin needs to be specified&quot;</span>
+            <span class="s1">name = self.get_name(plugin)</span>
+
+        <span class="s0">if </span><span class="s1">plugin </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">plugin = self.get_plugin(name)</span>
+
+        <span class="s5"># if self._name2plugin[name] == None registration was blocked: ignore</span>
+        <span class="s0">if </span><span class="s1">self._name2plugin.get(name):</span>
+            <span class="s0">del </span><span class="s1">self._name2plugin[name]</span>
+
+        <span class="s0">for </span><span class="s1">hookcaller </span><span class="s0">in </span><span class="s1">self._plugin2hookcallers.pop(plugin</span><span class="s0">, </span><span class="s1">[]):</span>
+            <span class="s1">hookcaller._remove_plugin(plugin)</span>
+
+        <span class="s0">return </span><span class="s1">plugin</span>
+
+    <span class="s0">def </span><span class="s1">set_blocked(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s3">&quot;&quot;&quot;block registrations of the given name, unregister if already registered.&quot;&quot;&quot;</span>
+        <span class="s1">self.unregister(name=name)</span>
+        <span class="s1">self._name2plugin[name] = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">is_blocked(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s3">&quot;&quot;&quot;return ``True`` if the given plugin name is blocked.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">name </span><span class="s0">in </span><span class="s1">self._name2plugin </span><span class="s0">and </span><span class="s1">self._name2plugin[name] </span><span class="s0">is None</span>
+
+    <span class="s0">def </span><span class="s1">add_hookspecs(self</span><span class="s0">, </span><span class="s1">module_or_class):</span>
+        <span class="s3">&quot;&quot;&quot;add new hook specifications defined in the given ``module_or_class``. 
+        Functions are recognized if they have been decorated accordingly.&quot;&quot;&quot;</span>
+        <span class="s1">names = []</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">dir(module_or_class):</span>
+            <span class="s1">spec_opts = self.parse_hookspec_opts(module_or_class</span><span class="s0">, </span><span class="s1">name)</span>
+            <span class="s0">if </span><span class="s1">spec_opts </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">hc = getattr(self.hook</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, None</span><span class="s1">)</span>
+                <span class="s0">if </span><span class="s1">hc </span><span class="s0">is None</span><span class="s1">:</span>
+                    <span class="s1">hc = _HookCaller(name</span><span class="s0">, </span><span class="s1">self._hookexec</span><span class="s0">, </span><span class="s1">module_or_class</span><span class="s0">, </span><span class="s1">spec_opts)</span>
+                    <span class="s1">setattr(self.hook</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">hc)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s5"># plugins registered this hook without knowing the spec</span>
+                    <span class="s1">hc.set_specification(module_or_class</span><span class="s0">, </span><span class="s1">spec_opts)</span>
+                    <span class="s0">for </span><span class="s1">hookfunction </span><span class="s0">in </span><span class="s1">hc.get_hookimpls():</span>
+                        <span class="s1">self._verify_hook(hc</span><span class="s0">, </span><span class="s1">hookfunction)</span>
+                <span class="s1">names.append(name)</span>
+
+        <span class="s0">if not </span><span class="s1">names:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span>
+                <span class="s4">f&quot;did not find any </span><span class="s0">{</span><span class="s1">self.project_name</span><span class="s0">!r} </span><span class="s4">hooks in </span><span class="s0">{</span><span class="s1">module_or_class</span><span class="s0">!r}</span><span class="s4">&quot;</span>
+            <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">parse_hookspec_opts(self</span><span class="s0">, </span><span class="s1">module_or_class</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s1">method = getattr(module_or_class</span><span class="s0">, </span><span class="s1">name)</span>
+        <span class="s0">return </span><span class="s1">getattr(method</span><span class="s0">, </span><span class="s1">self.project_name + </span><span class="s4">&quot;_spec&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">get_plugins(self):</span>
+        <span class="s3">&quot;&quot;&quot;return the set of registered plugins.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">set(self._plugin2hookcallers)</span>
+
+    <span class="s0">def </span><span class="s1">is_registered(self</span><span class="s0">, </span><span class="s1">plugin):</span>
+        <span class="s3">&quot;&quot;&quot;Return ``True`` if the plugin is already registered.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">plugin </span><span class="s0">in </span><span class="s1">self._plugin2hookcallers</span>
+
+    <span class="s0">def </span><span class="s1">get_canonical_name(self</span><span class="s0">, </span><span class="s1">plugin):</span>
+        <span class="s3">&quot;&quot;&quot;Return canonical name for a plugin object. Note that a plugin 
+        may be registered under a different name which was specified 
+        by the caller of :py:meth:`register(plugin, name) &lt;.PluginManager.register&gt;`. 
+        To obtain the name of an registered plugin use :py:meth:`get_name(plugin) 
+        &lt;.PluginManager.get_name&gt;` instead.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">getattr(plugin</span><span class="s0">, </span><span class="s4">&quot;__name__&quot;</span><span class="s0">, None</span><span class="s1">) </span><span class="s0">or </span><span class="s1">str(id(plugin))</span>
+
+    <span class="s0">def </span><span class="s1">get_plugin(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s3">&quot;&quot;&quot;Return a plugin or ``None`` for the given name.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self._name2plugin.get(name)</span>
+
+    <span class="s0">def </span><span class="s1">has_plugin(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s3">&quot;&quot;&quot;Return ``True`` if a plugin with the given name is registered.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self.get_plugin(name) </span><span class="s0">is not None</span>
+
+    <span class="s0">def </span><span class="s1">get_name(self</span><span class="s0">, </span><span class="s1">plugin):</span>
+        <span class="s3">&quot;&quot;&quot;Return name for registered plugin or ``None`` if not registered.&quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">name</span><span class="s0">, </span><span class="s1">val </span><span class="s0">in </span><span class="s1">self._name2plugin.items():</span>
+            <span class="s0">if </span><span class="s1">plugin == val:</span>
+                <span class="s0">return </span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">_verify_hook(self</span><span class="s0">, </span><span class="s1">hook</span><span class="s0">, </span><span class="s1">hookimpl):</span>
+        <span class="s0">if </span><span class="s1">hook.is_historic() </span><span class="s0">and </span><span class="s1">hookimpl.hookwrapper:</span>
+            <span class="s0">raise </span><span class="s1">PluginValidationError(</span>
+                <span class="s1">hookimpl.plugin</span><span class="s0">,</span>
+                <span class="s4">&quot;Plugin %r</span><span class="s0">\n</span><span class="s4">hook %r</span><span class="s0">\n</span><span class="s4">historic incompatible to hookwrapper&quot;</span>
+                <span class="s1">% (hookimpl.plugin_name</span><span class="s0">, </span><span class="s1">hook.name)</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">hook.spec.warn_on_impl:</span>
+            <span class="s1">_warn_for_function(hook.spec.warn_on_impl</span><span class="s0">, </span><span class="s1">hookimpl.function)</span>
+
+        <span class="s5"># positional arg checking</span>
+        <span class="s1">notinspec = set(hookimpl.argnames) - set(hook.spec.argnames)</span>
+        <span class="s0">if </span><span class="s1">notinspec:</span>
+            <span class="s0">raise </span><span class="s1">PluginValidationError(</span>
+                <span class="s1">hookimpl.plugin</span><span class="s0">,</span>
+                <span class="s4">&quot;Plugin %r for hook %r</span><span class="s0">\n</span><span class="s4">hookimpl definition: %s</span><span class="s0">\n</span><span class="s4">&quot;</span>
+                <span class="s4">&quot;Argument(s) %s are declared in the hookimpl but &quot;</span>
+                <span class="s4">&quot;can not be found in the hookspec&quot;</span>
+                <span class="s1">% (</span>
+                    <span class="s1">hookimpl.plugin_name</span><span class="s0">,</span>
+                    <span class="s1">hook.name</span><span class="s0">,</span>
+                    <span class="s1">_formatdef(hookimpl.function)</span><span class="s0">,</span>
+                    <span class="s1">notinspec</span><span class="s0">,</span>
+                <span class="s1">)</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">hookimpl.hookwrapper </span><span class="s0">and not </span><span class="s1">inspect.isgeneratorfunction(hookimpl.function):</span>
+            <span class="s0">raise </span><span class="s1">PluginValidationError(</span>
+                <span class="s1">hookimpl.plugin</span><span class="s0">,</span>
+                <span class="s4">&quot;Plugin %r for hook %r</span><span class="s0">\n</span><span class="s4">hookimpl definition: %s</span><span class="s0">\n</span><span class="s4">&quot;</span>
+                <span class="s4">&quot;Declared as hookwrapper=True but function is not a generator function&quot;</span>
+                <span class="s1">% (hookimpl.plugin_name</span><span class="s0">, </span><span class="s1">hook.name</span><span class="s0">, </span><span class="s1">_formatdef(hookimpl.function))</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">check_pending(self):</span>
+        <span class="s3">&quot;&quot;&quot;Verify that all hooks which have not been verified against 
+        a hook specification are optional, otherwise raise :py:class:`.PluginValidationError`.&quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">self.hook.__dict__:</span>
+            <span class="s0">if </span><span class="s1">name[</span><span class="s2">0</span><span class="s1">] != </span><span class="s4">&quot;_&quot;</span><span class="s1">:</span>
+                <span class="s1">hook = getattr(self.hook</span><span class="s0">, </span><span class="s1">name)</span>
+                <span class="s0">if not </span><span class="s1">hook.has_spec():</span>
+                    <span class="s0">for </span><span class="s1">hookimpl </span><span class="s0">in </span><span class="s1">hook.get_hookimpls():</span>
+                        <span class="s0">if not </span><span class="s1">hookimpl.optionalhook:</span>
+                            <span class="s0">raise </span><span class="s1">PluginValidationError(</span>
+                                <span class="s1">hookimpl.plugin</span><span class="s0">,</span>
+                                <span class="s4">&quot;unknown hook %r in plugin %r&quot;</span>
+                                <span class="s1">% (name</span><span class="s0">, </span><span class="s1">hookimpl.plugin)</span><span class="s0">,</span>
+                            <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">load_setuptools_entrypoints(self</span><span class="s0">, </span><span class="s1">group</span><span class="s0">, </span><span class="s1">name=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s3">&quot;&quot;&quot;Load modules from querying the specified setuptools ``group``. 
+ 
+        :param str group: entry point group to load plugins 
+        :param str name: if given, loads only plugins with the given ``name``. 
+        :rtype: int 
+        :return: return the number of loaded plugins by this call. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">count = </span><span class="s2">0</span>
+        <span class="s0">for </span><span class="s1">dist </span><span class="s0">in </span><span class="s1">list(importlib_metadata.distributions()):</span>
+            <span class="s0">for </span><span class="s1">ep </span><span class="s0">in </span><span class="s1">dist.entry_points:</span>
+                <span class="s0">if </span><span class="s1">(</span>
+                    <span class="s1">ep.group != group</span>
+                    <span class="s0">or </span><span class="s1">(name </span><span class="s0">is not None and </span><span class="s1">ep.name != name)</span>
+                    <span class="s5"># already registered</span>
+                    <span class="s0">or </span><span class="s1">self.get_plugin(ep.name)</span>
+                    <span class="s0">or </span><span class="s1">self.is_blocked(ep.name)</span>
+                <span class="s1">):</span>
+                    <span class="s0">continue</span>
+                <span class="s1">plugin = ep.load()</span>
+                <span class="s1">self.register(plugin</span><span class="s0">, </span><span class="s1">name=ep.name)</span>
+                <span class="s1">self._plugin_distinfo.append((plugin</span><span class="s0">, </span><span class="s1">DistFacade(dist)))</span>
+                <span class="s1">count += </span><span class="s2">1</span>
+        <span class="s0">return </span><span class="s1">count</span>
+
+    <span class="s0">def </span><span class="s1">list_plugin_distinfo(self):</span>
+        <span class="s3">&quot;&quot;&quot;return list of distinfo/plugin tuples for all setuptools registered 
+        plugins.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">list(self._plugin_distinfo)</span>
+
+    <span class="s0">def </span><span class="s1">list_name_plugin(self):</span>
+        <span class="s3">&quot;&quot;&quot;return list of name/plugin pairs.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">list(self._name2plugin.items())</span>
+
+    <span class="s0">def </span><span class="s1">get_hookcallers(self</span><span class="s0">, </span><span class="s1">plugin):</span>
+        <span class="s3">&quot;&quot;&quot;get all hook callers for the specified plugin.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self._plugin2hookcallers.get(plugin)</span>
+
+    <span class="s0">def </span><span class="s1">add_hookcall_monitoring(self</span><span class="s0">, </span><span class="s1">before</span><span class="s0">, </span><span class="s1">after):</span>
+        <span class="s3">&quot;&quot;&quot;add before/after tracing functions for all hooks 
+        and return an undo function which, when called, 
+        will remove the added tracers. 
+ 
+        ``before(hook_name, hook_impls, kwargs)`` will be called ahead 
+        of all hook calls and receive a hookcaller instance, a list 
+        of HookImpl instances and the keyword arguments for the hook call. 
+ 
+        ``after(outcome, hook_name, hook_impls, kwargs)`` receives the 
+        same arguments as ``before`` but also a :py:class:`pluggy._callers._Result` object 
+        which represents the result of the overall hook call. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">oldcall = self._inner_hookexec</span>
+
+        <span class="s0">def </span><span class="s1">traced_hookexec(hook_name</span><span class="s0">, </span><span class="s1">hook_impls</span><span class="s0">, </span><span class="s1">kwargs</span><span class="s0">, </span><span class="s1">firstresult):</span>
+            <span class="s1">before(hook_name</span><span class="s0">, </span><span class="s1">hook_impls</span><span class="s0">, </span><span class="s1">kwargs)</span>
+            <span class="s1">outcome = _Result.from_call(</span>
+                <span class="s0">lambda</span><span class="s1">: oldcall(hook_name</span><span class="s0">, </span><span class="s1">hook_impls</span><span class="s0">, </span><span class="s1">kwargs</span><span class="s0">, </span><span class="s1">firstresult)</span>
+            <span class="s1">)</span>
+            <span class="s1">after(outcome</span><span class="s0">, </span><span class="s1">hook_name</span><span class="s0">, </span><span class="s1">hook_impls</span><span class="s0">, </span><span class="s1">kwargs)</span>
+            <span class="s0">return </span><span class="s1">outcome.get_result()</span>
+
+        <span class="s1">self._inner_hookexec = traced_hookexec</span>
+
+        <span class="s0">def </span><span class="s1">undo():</span>
+            <span class="s1">self._inner_hookexec = oldcall</span>
+
+        <span class="s0">return </span><span class="s1">undo</span>
+
+    <span class="s0">def </span><span class="s1">enable_tracing(self):</span>
+        <span class="s3">&quot;&quot;&quot;enable tracing of hook calls and return an undo function.&quot;&quot;&quot;</span>
+        <span class="s1">hooktrace = self.trace.root.get(</span><span class="s4">&quot;hook&quot;</span><span class="s1">)</span>
+
+        <span class="s0">def </span><span class="s1">before(hook_name</span><span class="s0">, </span><span class="s1">methods</span><span class="s0">, </span><span class="s1">kwargs):</span>
+            <span class="s1">hooktrace.root.indent += </span><span class="s2">1</span>
+            <span class="s1">hooktrace(hook_name</span><span class="s0">, </span><span class="s1">kwargs)</span>
+
+        <span class="s0">def </span><span class="s1">after(outcome</span><span class="s0">, </span><span class="s1">hook_name</span><span class="s0">, </span><span class="s1">methods</span><span class="s0">, </span><span class="s1">kwargs):</span>
+            <span class="s0">if </span><span class="s1">outcome.excinfo </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s1">hooktrace(</span><span class="s4">&quot;finish&quot;</span><span class="s0">, </span><span class="s1">hook_name</span><span class="s0">, </span><span class="s4">&quot;--&gt;&quot;</span><span class="s0">, </span><span class="s1">outcome.get_result())</span>
+            <span class="s1">hooktrace.root.indent -= </span><span class="s2">1</span>
+
+        <span class="s0">return </span><span class="s1">self.add_hookcall_monitoring(before</span><span class="s0">, </span><span class="s1">after)</span>
+
+    <span class="s0">def </span><span class="s1">subset_hook_caller(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">remove_plugins):</span>
+        <span class="s3">&quot;&quot;&quot;Return a new :py:class:`._hooks._HookCaller` instance for the named method 
+        which manages calls to all registered plugins except the 
+        ones from remove_plugins.&quot;&quot;&quot;</span>
+        <span class="s1">orig = getattr(self.hook</span><span class="s0">, </span><span class="s1">name)</span>
+        <span class="s1">plugins_to_remove = [plug </span><span class="s0">for </span><span class="s1">plug </span><span class="s0">in </span><span class="s1">remove_plugins </span><span class="s0">if </span><span class="s1">hasattr(plug</span><span class="s0">, </span><span class="s1">name)]</span>
+        <span class="s0">if </span><span class="s1">plugins_to_remove:</span>
+            <span class="s1">hc = _HookCaller(</span>
+                <span class="s1">orig.name</span><span class="s0">, </span><span class="s1">orig._hookexec</span><span class="s0">, </span><span class="s1">orig.spec.namespace</span><span class="s0">, </span><span class="s1">orig.spec.opts</span>
+            <span class="s1">)</span>
+            <span class="s0">for </span><span class="s1">hookimpl </span><span class="s0">in </span><span class="s1">orig.get_hookimpls():</span>
+                <span class="s1">plugin = hookimpl.plugin</span>
+                <span class="s0">if </span><span class="s1">plugin </span><span class="s0">not in </span><span class="s1">plugins_to_remove:</span>
+                    <span class="s1">hc._add_hookimpl(hookimpl)</span>
+                    <span class="s5"># we also keep track of this hook caller so it</span>
+                    <span class="s5"># gets properly removed on plugin unregistration</span>
+                    <span class="s1">self._plugin2hookcallers.setdefault(plugin</span><span class="s0">, </span><span class="s1">[]).append(hc)</span>
+            <span class="s0">return </span><span class="s1">hc</span>
+        <span class="s0">return </span><span class="s1">orig</span>
+
+
+<span class="s0">def </span><span class="s1">_formatdef(func):</span>
+    <span class="s0">return </span><span class="s4">f&quot;</span><span class="s0">{</span><span class="s1">func.__name__</span><span class="s0">}{</span><span class="s1">inspect.signature(func)</span><span class="s0">}</span><span class="s4">&quot;</span>
+</pre>
+</body>
+</html>

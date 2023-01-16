@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>scope.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+scope.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Scope definition and related utilities. 
+ 
+Those are defined here, instead of in the 'fixtures' module because 
+their use is spread across many other pytest modules, and centralizing it in 'fixtures' 
+would cause circular references. 
+ 
+Also this makes the module light to import, as it should. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">enum </span><span class="s2">import </span><span class="s1">Enum</span>
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">total_ordering</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TYPE_CHECKING</span>
+
+<span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s2">from </span><span class="s1">typing_extensions </span><span class="s2">import </span><span class="s1">Literal</span>
+
+    <span class="s1">_ScopeName = Literal[</span><span class="s3">&quot;session&quot;</span><span class="s2">, </span><span class="s3">&quot;package&quot;</span><span class="s2">, </span><span class="s3">&quot;module&quot;</span><span class="s2">, </span><span class="s3">&quot;class&quot;</span><span class="s2">, </span><span class="s3">&quot;function&quot;</span><span class="s1">]</span>
+
+
+<span class="s1">@total_ordering</span>
+<span class="s2">class </span><span class="s1">Scope(Enum):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Represents one of the possible fixture scopes in pytest. 
+ 
+    Scopes are ordered from lower to higher, that is: 
+ 
+              -&gt;&gt;&gt; higher -&gt;&gt;&gt; 
+ 
+    Function &lt; Class &lt; Module &lt; Package &lt; Session 
+ 
+              &lt;&lt;&lt;- lower  &lt;&lt;&lt;- 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Scopes need to be listed from lower to higher.</span>
+    <span class="s1">Function: </span><span class="s3">&quot;_ScopeName&quot; </span><span class="s1">= </span><span class="s3">&quot;function&quot;</span>
+    <span class="s1">Class: </span><span class="s3">&quot;_ScopeName&quot; </span><span class="s1">= </span><span class="s3">&quot;class&quot;</span>
+    <span class="s1">Module: </span><span class="s3">&quot;_ScopeName&quot; </span><span class="s1">= </span><span class="s3">&quot;module&quot;</span>
+    <span class="s1">Package: </span><span class="s3">&quot;_ScopeName&quot; </span><span class="s1">= </span><span class="s3">&quot;package&quot;</span>
+    <span class="s1">Session: </span><span class="s3">&quot;_ScopeName&quot; </span><span class="s1">= </span><span class="s3">&quot;session&quot;</span>
+
+    <span class="s2">def </span><span class="s1">next_lower(self) -&gt; </span><span class="s3">&quot;Scope&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Return the next lower scope.&quot;&quot;&quot;</span>
+        <span class="s1">index = _SCOPE_INDICES[self]</span>
+        <span class="s2">if </span><span class="s1">index == </span><span class="s5">0</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">self</span><span class="s2">} </span><span class="s3">is the lower-most scope&quot;</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">_ALL_SCOPES[index - </span><span class="s5">1</span><span class="s1">]</span>
+
+    <span class="s2">def </span><span class="s1">next_higher(self) -&gt; </span><span class="s3">&quot;Scope&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Return the next higher scope.&quot;&quot;&quot;</span>
+        <span class="s1">index = _SCOPE_INDICES[self]</span>
+        <span class="s2">if </span><span class="s1">index == len(_SCOPE_INDICES) - </span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">self</span><span class="s2">} </span><span class="s3">is the upper-most scope&quot;</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">_ALL_SCOPES[index + </span><span class="s5">1</span><span class="s1">]</span>
+
+    <span class="s2">def </span><span class="s1">__lt__(self</span><span class="s2">, </span><span class="s1">other: </span><span class="s3">&quot;Scope&quot;</span><span class="s1">) -&gt; bool:</span>
+        <span class="s1">self_index = _SCOPE_INDICES[self]</span>
+        <span class="s1">other_index = _SCOPE_INDICES[other]</span>
+        <span class="s2">return </span><span class="s1">self_index &lt; other_index</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">from_user(</span>
+        <span class="s1">cls</span><span class="s2">, </span><span class="s1">scope_name: </span><span class="s3">&quot;_ScopeName&quot;</span><span class="s2">, </span><span class="s1">descr: str</span><span class="s2">, </span><span class="s1">where: Optional[str] = </span><span class="s2">None</span>
+    <span class="s1">) -&gt; </span><span class="s3">&quot;Scope&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Given a scope name from the user, return the equivalent Scope enum. Should be used 
+        whenever we want to convert a user provided scope name to its enum object. 
+ 
+        If the scope name is invalid, construct a user friendly message and call pytest.fail. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">from </span><span class="s1">_pytest.outcomes </span><span class="s2">import </span><span class="s1">fail</span>
+
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s4"># Holding this reference is necessary for mypy at the moment.</span>
+            <span class="s1">scope = Scope(scope_name)</span>
+        <span class="s2">except </span><span class="s1">ValueError:</span>
+            <span class="s1">fail(</span>
+                <span class="s3">&quot;{} {}got an unexpected scope value '{}'&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">descr</span><span class="s2">, </span><span class="s3">f&quot;from </span><span class="s2">{</span><span class="s1">where</span><span class="s2">} </span><span class="s3">&quot; </span><span class="s2">if </span><span class="s1">where </span><span class="s2">else </span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">scope_name</span>
+                <span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">pytrace=</span><span class="s2">False,</span>
+            <span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">scope</span>
+
+
+<span class="s1">_ALL_SCOPES = list(Scope)</span>
+<span class="s1">_SCOPE_INDICES = {scope: index </span><span class="s2">for </span><span class="s1">index</span><span class="s2">, </span><span class="s1">scope </span><span class="s2">in </span><span class="s1">enumerate(_ALL_SCOPES)}</span>
+
+
+<span class="s4"># Ordered list of scopes which can contain many tests (in practice all except Function).</span>
+<span class="s1">HIGH_SCOPES = [x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">Scope </span><span class="s2">if </span><span class="s1">x </span><span class="s2">is not </span><span class="s1">Scope.Function]</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,1052 @@
+<html>
+<head>
+<title>local.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+local.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+local path implementation. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">__future__ </span><span class="s2">import </span><span class="s1">with_statement</span>
+
+<span class="s2">from </span><span class="s1">contextlib </span><span class="s2">import </span><span class="s1">contextmanager</span>
+<span class="s2">import </span><span class="s1">sys</span><span class="s2">, </span><span class="s1">os</span><span class="s2">, </span><span class="s1">atexit</span><span class="s2">, </span><span class="s1">io</span><span class="s2">, </span><span class="s1">uuid</span>
+<span class="s2">import </span><span class="s1">py</span>
+<span class="s2">from </span><span class="s1">py._path </span><span class="s2">import </span><span class="s1">common</span>
+<span class="s2">from </span><span class="s1">py._path.common </span><span class="s2">import </span><span class="s1">iswin32</span><span class="s2">, </span><span class="s1">fspath</span>
+<span class="s2">from </span><span class="s1">stat </span><span class="s2">import </span><span class="s1">S_ISLNK</span><span class="s2">, </span><span class="s1">S_ISDIR</span><span class="s2">, </span><span class="s1">S_ISREG</span>
+
+<span class="s2">from </span><span class="s1">os.path </span><span class="s2">import </span><span class="s1">abspath</span><span class="s2">, </span><span class="s1">normpath</span><span class="s2">, </span><span class="s1">isabs</span><span class="s2">, </span><span class="s1">exists</span><span class="s2">, </span><span class="s1">isdir</span><span class="s2">, </span><span class="s1">isfile</span><span class="s2">, </span><span class="s1">islink</span><span class="s2">, </span><span class="s1">dirname</span>
+
+<span class="s2">if </span><span class="s1">sys.version_info &gt; (</span><span class="s3">3</span><span class="s2">,</span><span class="s3">0</span><span class="s1">):</span>
+    <span class="s2">def </span><span class="s1">map_as_list(func</span><span class="s2">, </span><span class="s1">iter):</span>
+        <span class="s2">return </span><span class="s1">list(map(func</span><span class="s2">, </span><span class="s1">iter))</span>
+<span class="s2">else</span><span class="s1">:</span>
+    <span class="s1">map_as_list = map</span>
+
+<span class="s1">ALLOW_IMPORTLIB_MODE = sys.version_info &gt; (</span><span class="s3">3</span><span class="s2">,</span><span class="s3">5</span><span class="s1">)</span>
+<span class="s2">if </span><span class="s1">ALLOW_IMPORTLIB_MODE:</span>
+    <span class="s2">import </span><span class="s1">importlib</span>
+
+
+<span class="s2">class </span><span class="s1">Stat(object):</span>
+    <span class="s2">def </span><span class="s1">__getattr__(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s2">return </span><span class="s1">getattr(self._osstatresult</span><span class="s2">, </span><span class="s4">&quot;st_&quot; </span><span class="s1">+ name)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">osstatresult):</span>
+        <span class="s1">self.path = path</span>
+        <span class="s1">self._osstatresult = osstatresult</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">owner(self):</span>
+        <span class="s2">if </span><span class="s1">iswin32:</span>
+            <span class="s2">raise </span><span class="s1">NotImplementedError(</span><span class="s4">&quot;XXX win32&quot;</span><span class="s1">)</span>
+        <span class="s2">import </span><span class="s1">pwd</span>
+        <span class="s1">entry = py.error.checked_call(pwd.getpwuid</span><span class="s2">, </span><span class="s1">self.uid)</span>
+        <span class="s2">return </span><span class="s1">entry[</span><span class="s3">0</span><span class="s1">]</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">group(self):</span>
+        <span class="s0">&quot;&quot;&quot; return group name of file. &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">iswin32:</span>
+            <span class="s2">raise </span><span class="s1">NotImplementedError(</span><span class="s4">&quot;XXX win32&quot;</span><span class="s1">)</span>
+        <span class="s2">import </span><span class="s1">grp</span>
+        <span class="s1">entry = py.error.checked_call(grp.getgrgid</span><span class="s2">, </span><span class="s1">self.gid)</span>
+        <span class="s2">return </span><span class="s1">entry[</span><span class="s3">0</span><span class="s1">]</span>
+
+    <span class="s2">def </span><span class="s1">isdir(self):</span>
+        <span class="s2">return </span><span class="s1">S_ISDIR(self._osstatresult.st_mode)</span>
+
+    <span class="s2">def </span><span class="s1">isfile(self):</span>
+        <span class="s2">return </span><span class="s1">S_ISREG(self._osstatresult.st_mode)</span>
+
+    <span class="s2">def </span><span class="s1">islink(self):</span>
+        <span class="s1">st = self.path.lstat()</span>
+        <span class="s2">return </span><span class="s1">S_ISLNK(self._osstatresult.st_mode)</span>
+
+<span class="s2">class </span><span class="s1">PosixPath(common.PathBase):</span>
+    <span class="s2">def </span><span class="s1">chown(self</span><span class="s2">, </span><span class="s1">user</span><span class="s2">, </span><span class="s1">group</span><span class="s2">, </span><span class="s1">rec=</span><span class="s3">0</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; change ownership to the given user and group. 
+            user and group may be specified by a number or 
+            by a name.  if rec is True change ownership 
+            recursively. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">uid = getuserid(user)</span>
+        <span class="s1">gid = getgroupid(group)</span>
+        <span class="s2">if </span><span class="s1">rec:</span>
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.visit(rec=</span><span class="s2">lambda </span><span class="s1">x: x.check(link=</span><span class="s3">0</span><span class="s1">)):</span>
+                <span class="s2">if </span><span class="s1">x.check(link=</span><span class="s3">0</span><span class="s1">):</span>
+                    <span class="s1">py.error.checked_call(os.chown</span><span class="s2">, </span><span class="s1">str(x)</span><span class="s2">, </span><span class="s1">uid</span><span class="s2">, </span><span class="s1">gid)</span>
+        <span class="s1">py.error.checked_call(os.chown</span><span class="s2">, </span><span class="s1">str(self)</span><span class="s2">, </span><span class="s1">uid</span><span class="s2">, </span><span class="s1">gid)</span>
+
+    <span class="s2">def </span><span class="s1">readlink(self):</span>
+        <span class="s0">&quot;&quot;&quot; return value of a symbolic link. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">py.error.checked_call(os.readlink</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+
+    <span class="s2">def </span><span class="s1">mklinkto(self</span><span class="s2">, </span><span class="s1">oldname):</span>
+        <span class="s0">&quot;&quot;&quot; posix style hard link to another name. &quot;&quot;&quot;</span>
+        <span class="s1">py.error.checked_call(os.link</span><span class="s2">, </span><span class="s1">str(oldname)</span><span class="s2">, </span><span class="s1">str(self))</span>
+
+    <span class="s2">def </span><span class="s1">mksymlinkto(self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">absolute=</span><span class="s3">1</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; create a symbolic link with the given value (pointing to another name). &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">absolute:</span>
+            <span class="s1">py.error.checked_call(os.symlink</span><span class="s2">, </span><span class="s1">str(value)</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">base = self.common(value)</span>
+            <span class="s5"># with posix local paths '/' is always a common base</span>
+            <span class="s1">relsource = self.__class__(value).relto(base)</span>
+            <span class="s1">reldest = self.relto(base)</span>
+            <span class="s1">n = reldest.count(self.sep)</span>
+            <span class="s1">target = self.sep.join((</span><span class="s4">'..'</span><span class="s2">, </span><span class="s1">)*n + (relsource</span><span class="s2">, </span><span class="s1">))</span>
+            <span class="s1">py.error.checked_call(os.symlink</span><span class="s2">, </span><span class="s1">target</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+
+<span class="s2">def </span><span class="s1">getuserid(user):</span>
+    <span class="s2">import </span><span class="s1">pwd</span>
+    <span class="s2">if not </span><span class="s1">isinstance(user</span><span class="s2">, </span><span class="s1">int):</span>
+        <span class="s1">user = pwd.getpwnam(user)[</span><span class="s3">2</span><span class="s1">]</span>
+    <span class="s2">return </span><span class="s1">user</span>
+
+<span class="s2">def </span><span class="s1">getgroupid(group):</span>
+    <span class="s2">import </span><span class="s1">grp</span>
+    <span class="s2">if not </span><span class="s1">isinstance(group</span><span class="s2">, </span><span class="s1">int):</span>
+        <span class="s1">group = grp.getgrnam(group)[</span><span class="s3">2</span><span class="s1">]</span>
+    <span class="s2">return </span><span class="s1">group</span>
+
+<span class="s1">FSBase = </span><span class="s2">not </span><span class="s1">iswin32 </span><span class="s2">and </span><span class="s1">PosixPath </span><span class="s2">or </span><span class="s1">common.PathBase</span>
+
+<span class="s2">class </span><span class="s1">LocalPath(FSBase):</span>
+    <span class="s0">&quot;&quot;&quot; object oriented interface to os.path and other local filesystem 
+        related information. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">class </span><span class="s1">ImportMismatchError(ImportError):</span>
+        <span class="s0">&quot;&quot;&quot; raised on pyimport() if there is a mismatch of __file__'s&quot;&quot;&quot;</span>
+
+    <span class="s1">sep = os.sep</span>
+    <span class="s2">class </span><span class="s1">Checkers(common.Checkers):</span>
+        <span class="s2">def </span><span class="s1">_stat(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">self._statcache</span>
+            <span class="s2">except </span><span class="s1">AttributeError:</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">self._statcache = self.path.stat()</span>
+                <span class="s2">except </span><span class="s1">py.error.ELOOP:</span>
+                    <span class="s1">self._statcache = self.path.lstat()</span>
+                <span class="s2">return </span><span class="s1">self._statcache</span>
+
+        <span class="s2">def </span><span class="s1">dir(self):</span>
+            <span class="s2">return </span><span class="s1">S_ISDIR(self._stat().mode)</span>
+
+        <span class="s2">def </span><span class="s1">file(self):</span>
+            <span class="s2">return </span><span class="s1">S_ISREG(self._stat().mode)</span>
+
+        <span class="s2">def </span><span class="s1">exists(self):</span>
+            <span class="s2">return </span><span class="s1">self._stat()</span>
+
+        <span class="s2">def </span><span class="s1">link(self):</span>
+            <span class="s1">st = self.path.lstat()</span>
+            <span class="s2">return </span><span class="s1">S_ISLNK(st.mode)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">path=</span><span class="s2">None, </span><span class="s1">expanduser=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; Initialize and return a local Path instance. 
+ 
+        Path can be relative to the current directory. 
+        If path is None it defaults to the current working directory. 
+        If expanduser is True, tilde-expansion is performed. 
+        Note that Path instances always carry an absolute path. 
+        Note also that passing in a local path object will simply return 
+        the exact same path object. Use new() to get a new copy. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">path </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">self.strpath = py.error.checked_call(os.getcwd)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">path = fspath(path)</span>
+            <span class="s2">except </span><span class="s1">TypeError:</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;can only pass None, Path instances &quot;</span>
+                                 <span class="s4">&quot;or non-empty strings to LocalPath&quot;</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">expanduser:</span>
+                <span class="s1">path = os.path.expanduser(path)</span>
+            <span class="s1">self.strpath = abspath(path)</span>
+
+    <span class="s2">def </span><span class="s1">__hash__(self):</span>
+        <span class="s1">s = self.strpath</span>
+        <span class="s2">if </span><span class="s1">iswin32:</span>
+            <span class="s1">s = s.lower()</span>
+        <span class="s2">return </span><span class="s1">hash(s)</span>
+
+    <span class="s2">def </span><span class="s1">__eq__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s1">s1 = fspath(self)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">s2 = fspath(other)</span>
+        <span class="s2">except </span><span class="s1">TypeError:</span>
+            <span class="s2">return False</span>
+        <span class="s2">if </span><span class="s1">iswin32:</span>
+            <span class="s1">s1 = s1.lower()</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">s2 = s2.lower()</span>
+            <span class="s2">except </span><span class="s1">AttributeError:</span>
+                <span class="s2">return False</span>
+        <span class="s2">return </span><span class="s1">s1 == s2</span>
+
+    <span class="s2">def </span><span class="s1">__ne__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return not </span><span class="s1">(self == other)</span>
+
+    <span class="s2">def </span><span class="s1">__lt__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return </span><span class="s1">fspath(self) &lt; fspath(other)</span>
+
+    <span class="s2">def </span><span class="s1">__gt__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return </span><span class="s1">fspath(self) &gt; fspath(other)</span>
+
+    <span class="s2">def </span><span class="s1">samefile(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s0">&quot;&quot;&quot; return True if 'other' references the same file as 'self'. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">other = fspath(other)</span>
+        <span class="s2">if not </span><span class="s1">isabs(other):</span>
+            <span class="s1">other = abspath(other)</span>
+        <span class="s2">if </span><span class="s1">self == other:</span>
+            <span class="s2">return True</span>
+        <span class="s2">if not </span><span class="s1">hasattr(os.path</span><span class="s2">, </span><span class="s4">&quot;samefile&quot;</span><span class="s1">):</span>
+            <span class="s2">return False</span>
+        <span class="s2">return </span><span class="s1">py.error.checked_call(</span>
+                <span class="s1">os.path.samefile</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">other)</span>
+
+    <span class="s2">def </span><span class="s1">remove(self</span><span class="s2">, </span><span class="s1">rec=</span><span class="s3">1</span><span class="s2">, </span><span class="s1">ignore_errors=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; remove a file or directory (or a directory tree if rec=1). 
+        if ignore_errors is True, errors while removing directories will 
+        be ignored. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.check(dir=</span><span class="s3">1</span><span class="s2">, </span><span class="s1">link=</span><span class="s3">0</span><span class="s1">):</span>
+            <span class="s2">if </span><span class="s1">rec:</span>
+                <span class="s5"># force remove of readonly files on windows</span>
+                <span class="s2">if </span><span class="s1">iswin32:</span>
+                    <span class="s1">self.chmod(</span><span class="s3">0o700</span><span class="s2">, </span><span class="s1">rec=</span><span class="s3">1</span><span class="s1">)</span>
+                <span class="s2">import </span><span class="s1">shutil</span>
+                <span class="s1">py.error.checked_call(</span>
+                    <span class="s1">shutil.rmtree</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">,</span>
+                    <span class="s1">ignore_errors=ignore_errors)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">py.error.checked_call(os.rmdir</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">iswin32:</span>
+                <span class="s1">self.chmod(</span><span class="s3">0o700</span><span class="s1">)</span>
+            <span class="s1">py.error.checked_call(os.remove</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+
+    <span class="s2">def </span><span class="s1">computehash(self</span><span class="s2">, </span><span class="s1">hashtype=</span><span class="s4">&quot;md5&quot;</span><span class="s2">, </span><span class="s1">chunksize=</span><span class="s3">524288</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return hexdigest of hashvalue for this file. &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">import </span><span class="s1">hashlib </span><span class="s2">as </span><span class="s1">mod</span>
+            <span class="s2">except </span><span class="s1">ImportError:</span>
+                <span class="s2">if </span><span class="s1">hashtype == </span><span class="s4">&quot;sha1&quot;</span><span class="s1">:</span>
+                    <span class="s1">hashtype = </span><span class="s4">&quot;sha&quot;</span>
+                <span class="s1">mod = __import__(hashtype)</span>
+            <span class="s1">hash = getattr(mod</span><span class="s2">, </span><span class="s1">hashtype)()</span>
+        <span class="s2">except </span><span class="s1">(AttributeError</span><span class="s2">, </span><span class="s1">ImportError):</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;Don't know how to compute %r hash&quot; </span><span class="s1">%(hashtype</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s1">f = self.open(</span><span class="s4">'rb'</span><span class="s1">)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">while </span><span class="s3">1</span><span class="s1">:</span>
+                <span class="s1">buf = f.read(chunksize)</span>
+                <span class="s2">if not </span><span class="s1">buf:</span>
+                    <span class="s2">return </span><span class="s1">hash.hexdigest()</span>
+                <span class="s1">hash.update(buf)</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">f.close()</span>
+
+    <span class="s2">def </span><span class="s1">new(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s0">&quot;&quot;&quot; create a modified version of this path. 
+            the following keyword arguments modify various path parts:: 
+ 
+              a:/some/path/to/a/file.ext 
+              xx                           drive 
+              xxxxxxxxxxxxxxxxx            dirname 
+                                xxxxxxxx   basename 
+                                xxxx       purebasename 
+                                     xxx   ext 
+        &quot;&quot;&quot;</span>
+        <span class="s1">obj = object.__new__(self.__class__)</span>
+        <span class="s2">if not </span><span class="s1">kw:</span>
+            <span class="s1">obj.strpath = self.strpath</span>
+            <span class="s2">return </span><span class="s1">obj</span>
+        <span class="s1">drive</span><span class="s2">, </span><span class="s1">dirname</span><span class="s2">, </span><span class="s1">basename</span><span class="s2">, </span><span class="s1">purebasename</span><span class="s2">,</span><span class="s1">ext = self._getbyspec(</span>
+             <span class="s4">&quot;drive,dirname,basename,purebasename,ext&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s4">'basename' </span><span class="s2">in </span><span class="s1">kw:</span>
+            <span class="s2">if </span><span class="s4">'purebasename' </span><span class="s2">in </span><span class="s1">kw </span><span class="s2">or </span><span class="s4">'ext' </span><span class="s2">in </span><span class="s1">kw:</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid specification %r&quot; </span><span class="s1">% kw)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">pb = kw.setdefault(</span><span class="s4">'purebasename'</span><span class="s2">, </span><span class="s1">purebasename)</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">ext = kw[</span><span class="s4">'ext'</span><span class="s1">]</span>
+            <span class="s2">except </span><span class="s1">KeyError:</span>
+                <span class="s2">pass</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">ext </span><span class="s2">and not </span><span class="s1">ext.startswith(</span><span class="s4">'.'</span><span class="s1">):</span>
+                    <span class="s1">ext = </span><span class="s4">'.' </span><span class="s1">+ ext</span>
+            <span class="s1">kw[</span><span class="s4">'basename'</span><span class="s1">] = pb + ext</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s4">'dirname' </span><span class="s2">in </span><span class="s1">kw </span><span class="s2">and not </span><span class="s1">kw[</span><span class="s4">'dirname'</span><span class="s1">]):</span>
+            <span class="s1">kw[</span><span class="s4">'dirname'</span><span class="s1">] = drive</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">kw.setdefault(</span><span class="s4">'dirname'</span><span class="s2">, </span><span class="s1">dirname)</span>
+        <span class="s1">kw.setdefault(</span><span class="s4">'sep'</span><span class="s2">, </span><span class="s1">self.sep)</span>
+        <span class="s1">obj.strpath = normpath(</span>
+            <span class="s4">&quot;%(dirname)s%(sep)s%(basename)s&quot; </span><span class="s1">% kw)</span>
+        <span class="s2">return </span><span class="s1">obj</span>
+
+    <span class="s2">def </span><span class="s1">_getbyspec(self</span><span class="s2">, </span><span class="s1">spec):</span>
+        <span class="s0">&quot;&quot;&quot; see new for what 'spec' can be. &quot;&quot;&quot;</span>
+        <span class="s1">res = []</span>
+        <span class="s1">parts = self.strpath.split(self.sep)</span>
+
+        <span class="s1">args = filter(</span><span class="s2">None, </span><span class="s1">spec.split(</span><span class="s4">','</span><span class="s1">) )</span>
+        <span class="s1">append = res.append</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">args:</span>
+            <span class="s2">if </span><span class="s1">name == </span><span class="s4">'drive'</span><span class="s1">:</span>
+                <span class="s1">append(parts[</span><span class="s3">0</span><span class="s1">])</span>
+            <span class="s2">elif </span><span class="s1">name == </span><span class="s4">'dirname'</span><span class="s1">:</span>
+                <span class="s1">append(self.sep.join(parts[:-</span><span class="s3">1</span><span class="s1">]))</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">basename = parts[-</span><span class="s3">1</span><span class="s1">]</span>
+                <span class="s2">if </span><span class="s1">name == </span><span class="s4">'basename'</span><span class="s1">:</span>
+                    <span class="s1">append(basename)</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">i = basename.rfind(</span><span class="s4">'.'</span><span class="s1">)</span>
+                    <span class="s2">if </span><span class="s1">i == -</span><span class="s3">1</span><span class="s1">:</span>
+                        <span class="s1">purebasename</span><span class="s2">, </span><span class="s1">ext = basename</span><span class="s2">, </span><span class="s4">''</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s1">purebasename</span><span class="s2">, </span><span class="s1">ext = basename[:i]</span><span class="s2">, </span><span class="s1">basename[i:]</span>
+                    <span class="s2">if </span><span class="s1">name == </span><span class="s4">'purebasename'</span><span class="s1">:</span>
+                        <span class="s1">append(purebasename)</span>
+                    <span class="s2">elif </span><span class="s1">name == </span><span class="s4">'ext'</span><span class="s1">:</span>
+                        <span class="s1">append(ext)</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid part specification %r&quot; </span><span class="s1">% name)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">dirpath(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; return the directory path joined with any given path arguments.  &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">kwargs:</span>
+            <span class="s1">path = object.__new__(self.__class__)</span>
+            <span class="s1">path.strpath = dirname(self.strpath)</span>
+            <span class="s2">if </span><span class="s1">args:</span>
+                <span class="s1">path = path.join(*args)</span>
+            <span class="s2">return </span><span class="s1">path</span>
+        <span class="s2">return </span><span class="s1">super(LocalPath</span><span class="s2">, </span><span class="s1">self).dirpath(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">join(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; return a new path by appending all 'args' as path 
+        components.  if abs=1 is used restart from root if any 
+        of the args is an absolute path. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">sep = self.sep</span>
+        <span class="s1">strargs = [fspath(arg) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">args]</span>
+        <span class="s1">strpath = self.strpath</span>
+        <span class="s2">if </span><span class="s1">kwargs.get(</span><span class="s4">'abs'</span><span class="s1">):</span>
+            <span class="s1">newargs = []</span>
+            <span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">reversed(strargs):</span>
+                <span class="s2">if </span><span class="s1">isabs(arg):</span>
+                    <span class="s1">strpath = arg</span>
+                    <span class="s1">strargs = newargs</span>
+                    <span class="s2">break</span>
+                <span class="s1">newargs.insert(</span><span class="s3">0</span><span class="s2">, </span><span class="s1">arg)</span>
+        <span class="s5"># special case for when we have e.g. strpath == &quot;/&quot;</span>
+        <span class="s1">actual_sep = </span><span class="s4">&quot;&quot; </span><span class="s2">if </span><span class="s1">strpath.endswith(sep) </span><span class="s2">else </span><span class="s1">sep</span>
+        <span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">strargs:</span>
+            <span class="s1">arg = arg.strip(sep)</span>
+            <span class="s2">if </span><span class="s1">iswin32:</span>
+                <span class="s5"># allow unix style paths even on windows.</span>
+                <span class="s1">arg = arg.strip(</span><span class="s4">'/'</span><span class="s1">)</span>
+                <span class="s1">arg = arg.replace(</span><span class="s4">'/'</span><span class="s2">, </span><span class="s1">sep)</span>
+            <span class="s1">strpath = strpath + actual_sep + arg</span>
+            <span class="s1">actual_sep = sep</span>
+        <span class="s1">obj = object.__new__(self.__class__)</span>
+        <span class="s1">obj.strpath = normpath(strpath)</span>
+        <span class="s2">return </span><span class="s1">obj</span>
+
+    <span class="s2">def </span><span class="s1">open(self</span><span class="s2">, </span><span class="s1">mode=</span><span class="s4">'r'</span><span class="s2">, </span><span class="s1">ensure=</span><span class="s2">False, </span><span class="s1">encoding=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return an opened file with the given mode. 
+ 
+        If ensure is True, create parent directories if needed. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">ensure:</span>
+            <span class="s1">self.dirpath().ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">encoding:</span>
+            <span class="s2">return </span><span class="s1">py.error.checked_call(io.open</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">mode</span><span class="s2">, </span><span class="s1">encoding=encoding)</span>
+        <span class="s2">return </span><span class="s1">py.error.checked_call(open</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">mode)</span>
+
+    <span class="s2">def </span><span class="s1">_fastjoin(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">child = object.__new__(self.__class__)</span>
+        <span class="s1">child.strpath = self.strpath + self.sep + name</span>
+        <span class="s2">return </span><span class="s1">child</span>
+
+    <span class="s2">def </span><span class="s1">islink(self):</span>
+        <span class="s2">return </span><span class="s1">islink(self.strpath)</span>
+
+    <span class="s2">def </span><span class="s1">check(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s2">if not </span><span class="s1">kw:</span>
+            <span class="s2">return </span><span class="s1">exists(self.strpath)</span>
+        <span class="s2">if </span><span class="s1">len(kw) == </span><span class="s3">1</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s4">&quot;dir&quot; </span><span class="s2">in </span><span class="s1">kw:</span>
+                <span class="s2">return not </span><span class="s1">kw[</span><span class="s4">&quot;dir&quot;</span><span class="s1">] ^ isdir(self.strpath)</span>
+            <span class="s2">if </span><span class="s4">&quot;file&quot; </span><span class="s2">in </span><span class="s1">kw:</span>
+                <span class="s2">return not </span><span class="s1">kw[</span><span class="s4">&quot;file&quot;</span><span class="s1">] ^ isfile(self.strpath)</span>
+        <span class="s2">return </span><span class="s1">super(LocalPath</span><span class="s2">, </span><span class="s1">self).check(**kw)</span>
+
+    <span class="s1">_patternchars = set(</span><span class="s4">&quot;*?[&quot; </span><span class="s1">+ os.path.sep)</span>
+    <span class="s2">def </span><span class="s1">listdir(self</span><span class="s2">, </span><span class="s1">fil=</span><span class="s2">None, </span><span class="s1">sort=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; list directory contents, possibly filter by the given fil func 
+            and possibly sorted. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">fil </span><span class="s2">is None and </span><span class="s1">sort </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">names = py.error.checked_call(os.listdir</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+            <span class="s2">return </span><span class="s1">map_as_list(self._fastjoin</span><span class="s2">, </span><span class="s1">names)</span>
+        <span class="s2">if </span><span class="s1">isinstance(fil</span><span class="s2">, </span><span class="s1">py.builtin._basestring):</span>
+            <span class="s2">if not </span><span class="s1">self._patternchars.intersection(fil):</span>
+                <span class="s1">child = self._fastjoin(fil)</span>
+                <span class="s2">if </span><span class="s1">exists(child.strpath):</span>
+                    <span class="s2">return </span><span class="s1">[child]</span>
+                <span class="s2">return </span><span class="s1">[]</span>
+            <span class="s1">fil = common.FNMatcher(fil)</span>
+        <span class="s1">names = py.error.checked_call(os.listdir</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+        <span class="s1">res = []</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">names:</span>
+            <span class="s1">child = self._fastjoin(name)</span>
+            <span class="s2">if </span><span class="s1">fil </span><span class="s2">is None or </span><span class="s1">fil(child):</span>
+                <span class="s1">res.append(child)</span>
+        <span class="s1">self._sortlist(res</span><span class="s2">, </span><span class="s1">sort)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">size(self):</span>
+        <span class="s0">&quot;&quot;&quot; return size of the underlying file object &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.stat().size</span>
+
+    <span class="s2">def </span><span class="s1">mtime(self):</span>
+        <span class="s0">&quot;&quot;&quot; return last modification time of the path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.stat().mtime</span>
+
+    <span class="s2">def </span><span class="s1">copy(self</span><span class="s2">, </span><span class="s1">target</span><span class="s2">, </span><span class="s1">mode=</span><span class="s2">False, </span><span class="s1">stat=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; copy path to target. 
+ 
+            If mode is True, will copy copy permission from path to target. 
+            If stat is True, copy permission, last modification 
+            time, last access time, and flags from path to target. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.check(file=</span><span class="s3">1</span><span class="s1">):</span>
+            <span class="s2">if </span><span class="s1">target.check(dir=</span><span class="s3">1</span><span class="s1">):</span>
+                <span class="s1">target = target.join(self.basename)</span>
+            <span class="s2">assert </span><span class="s1">self!=target</span>
+            <span class="s1">copychunked(self</span><span class="s2">, </span><span class="s1">target)</span>
+            <span class="s2">if </span><span class="s1">mode:</span>
+                <span class="s1">copymode(self.strpath</span><span class="s2">, </span><span class="s1">target.strpath)</span>
+            <span class="s2">if </span><span class="s1">stat:</span>
+                <span class="s1">copystat(self</span><span class="s2">, </span><span class="s1">target)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">def </span><span class="s1">rec(p):</span>
+                <span class="s2">return </span><span class="s1">p.check(link=</span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.visit(rec=rec):</span>
+                <span class="s1">relpath = x.relto(self)</span>
+                <span class="s1">newx = target.join(relpath)</span>
+                <span class="s1">newx.dirpath().ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">x.check(link=</span><span class="s3">1</span><span class="s1">):</span>
+                    <span class="s1">newx.mksymlinkto(x.readlink())</span>
+                    <span class="s2">continue</span>
+                <span class="s2">elif </span><span class="s1">x.check(file=</span><span class="s3">1</span><span class="s1">):</span>
+                    <span class="s1">copychunked(x</span><span class="s2">, </span><span class="s1">newx)</span>
+                <span class="s2">elif </span><span class="s1">x.check(dir=</span><span class="s3">1</span><span class="s1">):</span>
+                    <span class="s1">newx.ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">mode:</span>
+                    <span class="s1">copymode(x.strpath</span><span class="s2">, </span><span class="s1">newx.strpath)</span>
+                <span class="s2">if </span><span class="s1">stat:</span>
+                    <span class="s1">copystat(x</span><span class="s2">, </span><span class="s1">newx)</span>
+
+    <span class="s2">def </span><span class="s1">rename(self</span><span class="s2">, </span><span class="s1">target):</span>
+        <span class="s0">&quot;&quot;&quot; rename this path to target. &quot;&quot;&quot;</span>
+        <span class="s1">target = fspath(target)</span>
+        <span class="s2">return </span><span class="s1">py.error.checked_call(os.rename</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">target)</span>
+
+    <span class="s2">def </span><span class="s1">dump(self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">bin=</span><span class="s3">1</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; pickle object into path location&quot;&quot;&quot;</span>
+        <span class="s1">f = self.open(</span><span class="s4">'wb'</span><span class="s1">)</span>
+        <span class="s2">import </span><span class="s1">pickle</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">py.error.checked_call(pickle.dump</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">f</span><span class="s2">, </span><span class="s1">bin)</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">f.close()</span>
+
+    <span class="s2">def </span><span class="s1">mkdir(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot; create &amp; return the directory joined with args. &quot;&quot;&quot;</span>
+        <span class="s1">p = self.join(*args)</span>
+        <span class="s1">py.error.checked_call(os.mkdir</span><span class="s2">, </span><span class="s1">fspath(p))</span>
+        <span class="s2">return </span><span class="s1">p</span>
+
+    <span class="s2">def </span><span class="s1">write_binary(self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">, </span><span class="s1">ensure=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; write binary data into path.   If ensure is True create 
+        missing parent directories. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">ensure:</span>
+            <span class="s1">self.dirpath().ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">with </span><span class="s1">self.open(</span><span class="s4">'wb'</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f:</span>
+            <span class="s1">f.write(data)</span>
+
+    <span class="s2">def </span><span class="s1">write_text(self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">, </span><span class="s1">ensure=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; write text data into path using the specified encoding. 
+        If ensure is True create missing parent directories. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">ensure:</span>
+            <span class="s1">self.dirpath().ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">with </span><span class="s1">self.open(</span><span class="s4">'w'</span><span class="s2">, </span><span class="s1">encoding=encoding) </span><span class="s2">as </span><span class="s1">f:</span>
+            <span class="s1">f.write(data)</span>
+
+    <span class="s2">def </span><span class="s1">write(self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">, </span><span class="s1">mode=</span><span class="s4">'w'</span><span class="s2">, </span><span class="s1">ensure=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; write data into path.   If ensure is True create 
+        missing parent directories. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">ensure:</span>
+            <span class="s1">self.dirpath().ensure(dir=</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s4">'b' </span><span class="s2">in </span><span class="s1">mode:</span>
+            <span class="s2">if not </span><span class="s1">py.builtin._isbytes(data):</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;can only process bytes&quot;</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">if not </span><span class="s1">py.builtin._istext(data):</span>
+                <span class="s2">if not </span><span class="s1">py.builtin._isbytes(data):</span>
+                    <span class="s1">data = str(data)</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">data = py.builtin._totext(data</span><span class="s2">, </span><span class="s1">sys.getdefaultencoding())</span>
+        <span class="s1">f = self.open(mode)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">f.write(data)</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">f.close()</span>
+
+    <span class="s2">def </span><span class="s1">_ensuredirs(self):</span>
+        <span class="s1">parent = self.dirpath()</span>
+        <span class="s2">if </span><span class="s1">parent == self:</span>
+            <span class="s2">return </span><span class="s1">self</span>
+        <span class="s2">if </span><span class="s1">parent.check(dir=</span><span class="s3">0</span><span class="s1">):</span>
+            <span class="s1">parent._ensuredirs()</span>
+        <span class="s2">if </span><span class="s1">self.check(dir=</span><span class="s3">0</span><span class="s1">):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">self.mkdir()</span>
+            <span class="s2">except </span><span class="s1">py.error.EEXIST:</span>
+                <span class="s5"># race condition: file/dir created by another thread/process.</span>
+                <span class="s5"># complain if it is not a dir</span>
+                <span class="s2">if </span><span class="s1">self.check(dir=</span><span class="s3">0</span><span class="s1">):</span>
+                    <span class="s2">raise</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">ensure(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; ensure that an args-joined path exists (by default as 
+            a file). if you specify a keyword argument 'dir=True' 
+            then the path is forced to be a directory path. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">p = self.join(*args)</span>
+        <span class="s2">if </span><span class="s1">kwargs.get(</span><span class="s4">'dir'</span><span class="s2">, </span><span class="s3">0</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">p._ensuredirs()</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">p.dirpath()._ensuredirs()</span>
+            <span class="s2">if not </span><span class="s1">p.check(file=</span><span class="s3">1</span><span class="s1">):</span>
+                <span class="s1">p.open(</span><span class="s4">'w'</span><span class="s1">).close()</span>
+            <span class="s2">return </span><span class="s1">p</span>
+
+    <span class="s2">def </span><span class="s1">stat(self</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">True</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; Return an os.stat() tuple. &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">raising == </span><span class="s2">True</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">Stat(self</span><span class="s2">, </span><span class="s1">py.error.checked_call(os.stat</span><span class="s2">, </span><span class="s1">self.strpath))</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">Stat(self</span><span class="s2">, </span><span class="s1">os.stat(self.strpath))</span>
+        <span class="s2">except </span><span class="s1">KeyboardInterrupt:</span>
+            <span class="s2">raise</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">lstat(self):</span>
+        <span class="s0">&quot;&quot;&quot; Return an os.lstat() tuple. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">Stat(self</span><span class="s2">, </span><span class="s1">py.error.checked_call(os.lstat</span><span class="s2">, </span><span class="s1">self.strpath))</span>
+
+    <span class="s2">def </span><span class="s1">setmtime(self</span><span class="s2">, </span><span class="s1">mtime=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; set modification time for the given path.  if 'mtime' is None 
+        (the default) then the file's mtime is set to current time. 
+ 
+        Note that the resolution for 'mtime' is platform dependent. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">mtime </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">py.error.checked_call(os.utime</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">mtime)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">py.error.checked_call(os.utime</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">(-</span><span class="s3">1</span><span class="s2">, </span><span class="s1">mtime))</span>
+        <span class="s2">except </span><span class="s1">py.error.EINVAL:</span>
+            <span class="s2">return </span><span class="s1">py.error.checked_call(os.utime</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">(self.atime()</span><span class="s2">, </span><span class="s1">mtime))</span>
+
+    <span class="s2">def </span><span class="s1">chdir(self):</span>
+        <span class="s0">&quot;&quot;&quot; change directory to self and return old current directory &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">old = self.__class__()</span>
+        <span class="s2">except </span><span class="s1">py.error.ENOENT:</span>
+            <span class="s1">old = </span><span class="s2">None</span>
+        <span class="s1">py.error.checked_call(os.chdir</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+        <span class="s2">return </span><span class="s1">old</span>
+
+
+    <span class="s1">@contextmanager</span>
+    <span class="s2">def </span><span class="s1">as_cwd(self):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a context manager, which changes to the path's dir during the 
+        managed &quot;with&quot; context. 
+        On __enter__ it returns the old dir, which might be ``None``. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">old = self.chdir()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">yield </span><span class="s1">old</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">old </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">old.chdir()</span>
+
+    <span class="s2">def </span><span class="s1">realpath(self):</span>
+        <span class="s0">&quot;&quot;&quot; return a new path which contains no symbolic links.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.__class__(os.path.realpath(self.strpath))</span>
+
+    <span class="s2">def </span><span class="s1">atime(self):</span>
+        <span class="s0">&quot;&quot;&quot; return last access time of the path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.stat().atime</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s4">'local(%r)' </span><span class="s1">% self.strpath</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s0">&quot;&quot;&quot; return string representation of the Path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.strpath</span>
+
+    <span class="s2">def </span><span class="s1">chmod(self</span><span class="s2">, </span><span class="s1">mode</span><span class="s2">, </span><span class="s1">rec=</span><span class="s3">0</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; change permissions to the given mode. If mode is an 
+            integer it directly encodes the os-specific modes. 
+            if rec is True perform recursively. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">isinstance(mode</span><span class="s2">, </span><span class="s1">int):</span>
+            <span class="s2">raise </span><span class="s1">TypeError(</span><span class="s4">&quot;mode %r must be an integer&quot; </span><span class="s1">% (mode</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">if </span><span class="s1">rec:</span>
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.visit(rec=rec):</span>
+                <span class="s1">py.error.checked_call(os.chmod</span><span class="s2">, </span><span class="s1">str(x)</span><span class="s2">, </span><span class="s1">mode)</span>
+        <span class="s1">py.error.checked_call(os.chmod</span><span class="s2">, </span><span class="s1">self.strpath</span><span class="s2">, </span><span class="s1">mode)</span>
+
+    <span class="s2">def </span><span class="s1">pypkgpath(self):</span>
+        <span class="s0">&quot;&quot;&quot; return the Python package path by looking for the last 
+        directory upwards which still contains an __init__.py. 
+        Return None if a pkgpath can not be determined. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">pkgpath = </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">parent </span><span class="s2">in </span><span class="s1">self.parts(reverse=</span><span class="s2">True</span><span class="s1">):</span>
+            <span class="s2">if </span><span class="s1">parent.isdir():</span>
+                <span class="s2">if not </span><span class="s1">parent.join(</span><span class="s4">'__init__.py'</span><span class="s1">).exists():</span>
+                    <span class="s2">break</span>
+                <span class="s2">if not </span><span class="s1">isimportable(parent.basename):</span>
+                    <span class="s2">break</span>
+                <span class="s1">pkgpath = parent</span>
+        <span class="s2">return </span><span class="s1">pkgpath</span>
+
+    <span class="s2">def </span><span class="s1">_ensuresyspath(self</span><span class="s2">, </span><span class="s1">ensuremode</span><span class="s2">, </span><span class="s1">path):</span>
+        <span class="s2">if </span><span class="s1">ensuremode:</span>
+            <span class="s1">s = str(path)</span>
+            <span class="s2">if </span><span class="s1">ensuremode == </span><span class="s4">&quot;append&quot;</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">s </span><span class="s2">not in </span><span class="s1">sys.path:</span>
+                    <span class="s1">sys.path.append(s)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">s != sys.path[</span><span class="s3">0</span><span class="s1">]:</span>
+                    <span class="s1">sys.path.insert(</span><span class="s3">0</span><span class="s2">, </span><span class="s1">s)</span>
+
+    <span class="s2">def </span><span class="s1">pyimport(self</span><span class="s2">, </span><span class="s1">modname=</span><span class="s2">None, </span><span class="s1">ensuresyspath=</span><span class="s2">True</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return path as an imported python module. 
+ 
+        If modname is None, look for the containing package 
+        and construct an according module name. 
+        The module will be put/looked up in sys.modules. 
+        if ensuresyspath is True then the root dir for importing 
+        the file (taking __init__.py files into account) will 
+        be prepended to sys.path if it isn't there already. 
+        If ensuresyspath==&quot;append&quot; the root dir will be appended 
+        if it isn't already contained in sys.path. 
+        if ensuresyspath is False no modification of syspath happens. 
+ 
+        Special value of ensuresyspath==&quot;importlib&quot; is intended 
+        purely for using in pytest, it is capable only of importing 
+        separate .py files outside packages, e.g. for test suite 
+        without any __init__.py file. It effectively allows having 
+        same-named test modules in different places and offers 
+        mild opt-in via this option. Note that it works only in 
+        recent versions of python. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">self.check():</span>
+            <span class="s2">raise </span><span class="s1">py.error.ENOENT(self)</span>
+
+        <span class="s2">if </span><span class="s1">ensuresyspath == </span><span class="s4">'importlib'</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">modname </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s1">modname = self.purebasename</span>
+            <span class="s2">if not </span><span class="s1">ALLOW_IMPORTLIB_MODE:</span>
+                <span class="s2">raise </span><span class="s1">ImportError(</span>
+                    <span class="s4">&quot;Can't use importlib due to old version of Python&quot;</span><span class="s1">)</span>
+            <span class="s1">spec = importlib.util.spec_from_file_location(</span>
+                <span class="s1">modname</span><span class="s2">, </span><span class="s1">str(self))</span>
+            <span class="s2">if </span><span class="s1">spec </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">ImportError(</span>
+                    <span class="s4">&quot;Can't find module %s at location %s&quot; </span><span class="s1">%</span>
+                    <span class="s1">(modname</span><span class="s2">, </span><span class="s1">str(self))</span>
+                <span class="s1">)</span>
+            <span class="s1">mod = importlib.util.module_from_spec(spec)</span>
+            <span class="s1">spec.loader.exec_module(mod)</span>
+            <span class="s2">return </span><span class="s1">mod</span>
+
+        <span class="s1">pkgpath = </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">modname </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">pkgpath = self.pypkgpath()</span>
+            <span class="s2">if </span><span class="s1">pkgpath </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">pkgroot = pkgpath.dirpath()</span>
+                <span class="s1">names = self.new(ext=</span><span class="s4">&quot;&quot;</span><span class="s1">).relto(pkgroot).split(self.sep)</span>
+                <span class="s2">if </span><span class="s1">names[-</span><span class="s3">1</span><span class="s1">] == </span><span class="s4">&quot;__init__&quot;</span><span class="s1">:</span>
+                    <span class="s1">names.pop()</span>
+                <span class="s1">modname = </span><span class="s4">&quot;.&quot;</span><span class="s1">.join(names)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">pkgroot = self.dirpath()</span>
+                <span class="s1">modname = self.purebasename</span>
+
+            <span class="s1">self._ensuresyspath(ensuresyspath</span><span class="s2">, </span><span class="s1">pkgroot)</span>
+            <span class="s1">__import__(modname)</span>
+            <span class="s1">mod = sys.modules[modname]</span>
+            <span class="s2">if </span><span class="s1">self.basename == </span><span class="s4">&quot;__init__.py&quot;</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">mod </span><span class="s5"># we don't check anything as we might</span>
+                       <span class="s5"># be in a namespace package ... too icky to check</span>
+            <span class="s1">modfile = mod.__file__</span>
+            <span class="s2">if </span><span class="s1">modfile[-</span><span class="s3">4</span><span class="s1">:] </span><span class="s2">in </span><span class="s1">(</span><span class="s4">'.pyc'</span><span class="s2">, </span><span class="s4">'.pyo'</span><span class="s1">):</span>
+                <span class="s1">modfile = modfile[:-</span><span class="s3">1</span><span class="s1">]</span>
+            <span class="s2">elif </span><span class="s1">modfile.endswith(</span><span class="s4">'$py.class'</span><span class="s1">):</span>
+                <span class="s1">modfile = modfile[:-</span><span class="s3">9</span><span class="s1">] + </span><span class="s4">'.py'</span>
+            <span class="s2">if </span><span class="s1">modfile.endswith(os.path.sep + </span><span class="s4">&quot;__init__.py&quot;</span><span class="s1">):</span>
+                <span class="s2">if </span><span class="s1">self.basename != </span><span class="s4">&quot;__init__.py&quot;</span><span class="s1">:</span>
+                    <span class="s1">modfile = modfile[:-</span><span class="s3">12</span><span class="s1">]</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">issame = self.samefile(modfile)</span>
+            <span class="s2">except </span><span class="s1">py.error.ENOENT:</span>
+                <span class="s1">issame = </span><span class="s2">False</span>
+            <span class="s2">if not </span><span class="s1">issame:</span>
+                <span class="s1">ignore = os.getenv(</span><span class="s4">'PY_IGNORE_IMPORTMISMATCH'</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">ignore != </span><span class="s4">'1'</span><span class="s1">:</span>
+                    <span class="s2">raise </span><span class="s1">self.ImportMismatchError(modname</span><span class="s2">, </span><span class="s1">modfile</span><span class="s2">, </span><span class="s1">self)</span>
+            <span class="s2">return </span><span class="s1">mod</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">sys.modules[modname]</span>
+            <span class="s2">except </span><span class="s1">KeyError:</span>
+                <span class="s5"># we have a custom modname, do a pseudo-import</span>
+                <span class="s2">import </span><span class="s1">types</span>
+                <span class="s1">mod = types.ModuleType(modname)</span>
+                <span class="s1">mod.__file__ = str(self)</span>
+                <span class="s1">sys.modules[modname] = mod</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">py.builtin.execfile(str(self)</span><span class="s2">, </span><span class="s1">mod.__dict__)</span>
+                <span class="s2">except</span><span class="s1">:</span>
+                    <span class="s2">del </span><span class="s1">sys.modules[modname]</span>
+                    <span class="s2">raise</span>
+                <span class="s2">return </span><span class="s1">mod</span>
+
+    <span class="s2">def </span><span class="s1">sysexec(self</span><span class="s2">, </span><span class="s1">*argv</span><span class="s2">, </span><span class="s1">**popen_opts):</span>
+        <span class="s0">&quot;&quot;&quot; return stdout text from executing a system child process, 
+            where the 'self' path points to executable. 
+            The process is directly invoked and not through a system shell. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">from </span><span class="s1">subprocess </span><span class="s2">import </span><span class="s1">Popen</span><span class="s2">, </span><span class="s1">PIPE</span>
+        <span class="s1">argv = map_as_list(str</span><span class="s2">, </span><span class="s1">argv)</span>
+        <span class="s1">popen_opts[</span><span class="s4">'stdout'</span><span class="s1">] = popen_opts[</span><span class="s4">'stderr'</span><span class="s1">] = PIPE</span>
+        <span class="s1">proc = Popen([str(self)] + argv</span><span class="s2">, </span><span class="s1">**popen_opts)</span>
+        <span class="s1">stdout</span><span class="s2">, </span><span class="s1">stderr = proc.communicate()</span>
+        <span class="s1">ret = proc.wait()</span>
+        <span class="s2">if </span><span class="s1">py.builtin._isbytes(stdout):</span>
+            <span class="s1">stdout = py.builtin._totext(stdout</span><span class="s2">, </span><span class="s1">sys.getdefaultencoding())</span>
+        <span class="s2">if </span><span class="s1">ret != </span><span class="s3">0</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">py.builtin._isbytes(stderr):</span>
+                <span class="s1">stderr = py.builtin._totext(stderr</span><span class="s2">, </span><span class="s1">sys.getdefaultencoding())</span>
+            <span class="s2">raise </span><span class="s1">py.process.cmdexec.Error(ret</span><span class="s2">, </span><span class="s1">ret</span><span class="s2">, </span><span class="s1">str(self)</span><span class="s2">,</span>
+                                           <span class="s1">stdout</span><span class="s2">, </span><span class="s1">stderr</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">stdout</span>
+
+    <span class="s2">def </span><span class="s1">sysfind(cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">checker=</span><span class="s2">None, </span><span class="s1">paths=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a path object found by looking at the systems 
+            underlying PATH specification. If the checker is not None 
+            it will be invoked to filter matching paths.  If a binary 
+            cannot be found, None is returned 
+            Note: This is probably not working on plain win32 systems 
+            but may work on cygwin. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isabs(name):</span>
+            <span class="s1">p = py.path.local(name)</span>
+            <span class="s2">if </span><span class="s1">p.check(file=</span><span class="s3">1</span><span class="s1">):</span>
+                <span class="s2">return </span><span class="s1">p</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">paths </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">iswin32:</span>
+                    <span class="s1">paths = os.environ[</span><span class="s4">'Path'</span><span class="s1">].split(</span><span class="s4">';'</span><span class="s1">)</span>
+                    <span class="s2">if </span><span class="s4">'' </span><span class="s2">not in </span><span class="s1">paths </span><span class="s2">and </span><span class="s4">'.' </span><span class="s2">not in </span><span class="s1">paths:</span>
+                        <span class="s1">paths.append(</span><span class="s4">'.'</span><span class="s1">)</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s1">systemroot = os.environ[</span><span class="s4">'SYSTEMROOT'</span><span class="s1">]</span>
+                    <span class="s2">except </span><span class="s1">KeyError:</span>
+                        <span class="s2">pass</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s1">paths = [path.replace(</span><span class="s4">'%SystemRoot%'</span><span class="s2">, </span><span class="s1">systemroot)</span>
+                                 <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">paths]</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">paths = os.environ[</span><span class="s4">'PATH'</span><span class="s1">].split(</span><span class="s4">':'</span><span class="s1">)</span>
+            <span class="s1">tryadd = []</span>
+            <span class="s2">if </span><span class="s1">iswin32:</span>
+                <span class="s1">tryadd += os.environ[</span><span class="s4">'PATHEXT'</span><span class="s1">].split(os.pathsep)</span>
+            <span class="s1">tryadd.append(</span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">paths:</span>
+                <span class="s2">for </span><span class="s1">addext </span><span class="s2">in </span><span class="s1">tryadd:</span>
+                    <span class="s1">p = py.path.local(x).join(name</span><span class="s2">, </span><span class="s1">abs=</span><span class="s2">True</span><span class="s1">) + addext</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s2">if </span><span class="s1">p.check(file=</span><span class="s3">1</span><span class="s1">):</span>
+                            <span class="s2">if </span><span class="s1">checker:</span>
+                                <span class="s2">if not </span><span class="s1">checker(p):</span>
+                                    <span class="s2">continue</span>
+                            <span class="s2">return </span><span class="s1">p</span>
+                    <span class="s2">except </span><span class="s1">py.error.EACCES:</span>
+                        <span class="s2">pass</span>
+        <span class="s2">return None</span>
+    <span class="s1">sysfind = classmethod(sysfind)</span>
+
+    <span class="s2">def </span><span class="s1">_gethomedir(cls):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">x = os.environ[</span><span class="s4">'HOME'</span><span class="s1">]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">x = os.environ[</span><span class="s4">&quot;HOMEDRIVE&quot;</span><span class="s1">] + os.environ[</span><span class="s4">'HOMEPATH'</span><span class="s1">]</span>
+            <span class="s2">except </span><span class="s1">KeyError:</span>
+                <span class="s2">return None</span>
+        <span class="s2">return </span><span class="s1">cls(x)</span>
+    <span class="s1">_gethomedir = classmethod(_gethomedir)</span>
+
+    <span class="s5"># &quot;&quot;&quot;</span>
+    <span class="s5"># special class constructors for local filesystem paths</span>
+    <span class="s5"># &quot;&quot;&quot;</span>
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">get_temproot(cls):</span>
+        <span class="s0">&quot;&quot;&quot; return the system's temporary directory 
+            (where tempfiles are usually created in) 
+        &quot;&quot;&quot;</span>
+        <span class="s2">import </span><span class="s1">tempfile</span>
+        <span class="s2">return </span><span class="s1">py.path.local(tempfile.gettempdir())</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">mkdtemp(cls</span><span class="s2">, </span><span class="s1">rootdir=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a Path object pointing to a fresh new temporary directory 
+            (which we created ourself). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">import </span><span class="s1">tempfile</span>
+        <span class="s2">if </span><span class="s1">rootdir </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">rootdir = cls.get_temproot()</span>
+        <span class="s2">return </span><span class="s1">cls(py.error.checked_call(tempfile.mkdtemp</span><span class="s2">, </span><span class="s1">dir=str(rootdir)))</span>
+
+    <span class="s2">def </span><span class="s1">make_numbered_dir(cls</span><span class="s2">, </span><span class="s1">prefix=</span><span class="s4">'session-'</span><span class="s2">, </span><span class="s1">rootdir=</span><span class="s2">None, </span><span class="s1">keep=</span><span class="s3">3</span><span class="s2">,</span>
+                          <span class="s1">lock_timeout=</span><span class="s3">172800</span><span class="s1">):   </span><span class="s5"># two days</span>
+        <span class="s0">&quot;&quot;&quot; return unique directory with a number greater than the current 
+            maximum one.  The number is assumed to start directly after prefix. 
+            if keep is true directories with a number less than (maxnum-keep) 
+            will be removed. If .lock files are used (lock_timeout non-zero), 
+            algorithm is multi-process safe. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">rootdir </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">rootdir = cls.get_temproot()</span>
+
+        <span class="s1">nprefix = prefix.lower()</span>
+        <span class="s2">def </span><span class="s1">parse_num(path):</span>
+            <span class="s0">&quot;&quot;&quot; parse the number out of a path (if it matches the prefix) &quot;&quot;&quot;</span>
+            <span class="s1">nbasename = path.basename.lower()</span>
+            <span class="s2">if </span><span class="s1">nbasename.startswith(nprefix):</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">int(nbasename[len(nprefix):])</span>
+                <span class="s2">except </span><span class="s1">ValueError:</span>
+                    <span class="s2">pass</span>
+
+        <span class="s2">def </span><span class="s1">create_lockfile(path):</span>
+            <span class="s0">&quot;&quot;&quot; exclusively create lockfile. Throws when failed &quot;&quot;&quot;</span>
+            <span class="s1">mypid = os.getpid()</span>
+            <span class="s1">lockfile = path.join(</span><span class="s4">'.lock'</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">hasattr(lockfile</span><span class="s2">, </span><span class="s4">'mksymlinkto'</span><span class="s1">):</span>
+                <span class="s1">lockfile.mksymlinkto(str(mypid))</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">fd = py.error.checked_call(os.open</span><span class="s2">, </span><span class="s1">str(lockfile)</span><span class="s2">, </span><span class="s1">os.O_WRONLY | os.O_CREAT | os.O_EXCL</span><span class="s2">, </span><span class="s3">0o644</span><span class="s1">)</span>
+                <span class="s2">with </span><span class="s1">os.fdopen(fd</span><span class="s2">, </span><span class="s4">'w'</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f:</span>
+                    <span class="s1">f.write(str(mypid))</span>
+            <span class="s2">return </span><span class="s1">lockfile</span>
+
+        <span class="s2">def </span><span class="s1">atexit_remove_lockfile(lockfile):</span>
+            <span class="s0">&quot;&quot;&quot; ensure lockfile is removed at process exit &quot;&quot;&quot;</span>
+            <span class="s1">mypid = os.getpid()</span>
+            <span class="s2">def </span><span class="s1">try_remove_lockfile():</span>
+                <span class="s5"># in a fork() situation, only the last process should</span>
+                <span class="s5"># remove the .lock, otherwise the other processes run the</span>
+                <span class="s5"># risk of seeing their temporary dir disappear.  For now</span>
+                <span class="s5"># we remove the .lock in the parent only (i.e. we assume</span>
+                <span class="s5"># that the children finish before the parent).</span>
+                <span class="s2">if </span><span class="s1">os.getpid() != mypid:</span>
+                    <span class="s2">return</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">lockfile.remove()</span>
+                <span class="s2">except </span><span class="s1">py.error.Error:</span>
+                    <span class="s2">pass</span>
+            <span class="s1">atexit.register(try_remove_lockfile)</span>
+
+        <span class="s5"># compute the maximum number currently in use with the prefix</span>
+        <span class="s1">lastmax = </span><span class="s2">None</span>
+        <span class="s2">while True</span><span class="s1">:</span>
+            <span class="s1">maxnum = -</span><span class="s3">1</span>
+            <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">rootdir.listdir():</span>
+                <span class="s1">num = parse_num(path)</span>
+                <span class="s2">if </span><span class="s1">num </span><span class="s2">is not None</span><span class="s1">:</span>
+                    <span class="s1">maxnum = max(maxnum</span><span class="s2">, </span><span class="s1">num)</span>
+
+            <span class="s5"># make the new directory</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">udir = rootdir.mkdir(prefix + str(maxnum+</span><span class="s3">1</span><span class="s1">))</span>
+                <span class="s2">if </span><span class="s1">lock_timeout:</span>
+                    <span class="s1">lockfile = create_lockfile(udir)</span>
+                    <span class="s1">atexit_remove_lockfile(lockfile)</span>
+            <span class="s2">except </span><span class="s1">(py.error.EEXIST</span><span class="s2">, </span><span class="s1">py.error.ENOENT</span><span class="s2">, </span><span class="s1">py.error.EBUSY):</span>
+                <span class="s5"># race condition (1): another thread/process created the dir</span>
+                <span class="s5">#                     in the meantime - try again</span>
+                <span class="s5"># race condition (2): another thread/process spuriously acquired</span>
+                <span class="s5">#                     lock treating empty directory as candidate</span>
+                <span class="s5">#                     for removal - try again</span>
+                <span class="s5"># race condition (3): another thread/process tried to create the lock at</span>
+                <span class="s5">#                     the same time (happened in Python 3.3 on Windows)</span>
+                <span class="s5"># https://ci.appveyor.com/project/pytestbot/py/build/1.0.21/job/ffi85j4c0lqwsfwa</span>
+                <span class="s2">if </span><span class="s1">lastmax == maxnum:</span>
+                    <span class="s2">raise</span>
+                <span class="s1">lastmax = maxnum</span>
+                <span class="s2">continue</span>
+            <span class="s2">break</span>
+
+        <span class="s2">def </span><span class="s1">get_mtime(path):</span>
+            <span class="s0">&quot;&quot;&quot; read file modification time &quot;&quot;&quot;</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">path.lstat().mtime</span>
+            <span class="s2">except </span><span class="s1">py.error.Error:</span>
+                <span class="s2">pass</span>
+
+        <span class="s1">garbage_prefix = prefix + </span><span class="s4">'garbage-'</span>
+
+        <span class="s2">def </span><span class="s1">is_garbage(path):</span>
+            <span class="s0">&quot;&quot;&quot; check if path denotes directory scheduled for removal &quot;&quot;&quot;</span>
+            <span class="s1">bn = path.basename</span>
+            <span class="s2">return </span><span class="s1">bn.startswith(garbage_prefix)</span>
+
+        <span class="s5"># prune old directories</span>
+        <span class="s1">udir_time = get_mtime(udir)</span>
+        <span class="s2">if </span><span class="s1">keep </span><span class="s2">and </span><span class="s1">udir_time:</span>
+            <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">rootdir.listdir():</span>
+                <span class="s1">num = parse_num(path)</span>
+                <span class="s2">if </span><span class="s1">num </span><span class="s2">is not None and </span><span class="s1">num &lt;= (maxnum - keep):</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s5"># try acquiring lock to remove directory as exclusive user</span>
+                        <span class="s2">if </span><span class="s1">lock_timeout:</span>
+                            <span class="s1">create_lockfile(path)</span>
+                    <span class="s2">except </span><span class="s1">(py.error.EEXIST</span><span class="s2">, </span><span class="s1">py.error.ENOENT</span><span class="s2">, </span><span class="s1">py.error.EBUSY):</span>
+                        <span class="s1">path_time = get_mtime(path)</span>
+                        <span class="s2">if not </span><span class="s1">path_time:</span>
+                            <span class="s5"># assume directory doesn't exist now</span>
+                            <span class="s2">continue</span>
+                        <span class="s2">if </span><span class="s1">abs(udir_time - path_time) &lt; lock_timeout:</span>
+                            <span class="s5"># assume directory with lockfile exists</span>
+                            <span class="s5"># and lock timeout hasn't expired yet</span>
+                            <span class="s2">continue</span>
+
+                    <span class="s5"># path dir locked for exclusive use</span>
+                    <span class="s5"># and scheduled for removal to avoid another thread/process</span>
+                    <span class="s5"># treating it as a new directory or removal candidate</span>
+                    <span class="s1">garbage_path = rootdir.join(garbage_prefix + str(uuid.uuid4()))</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s1">path.rename(garbage_path)</span>
+                        <span class="s1">garbage_path.remove(rec=</span><span class="s3">1</span><span class="s1">)</span>
+                    <span class="s2">except </span><span class="s1">KeyboardInterrupt:</span>
+                        <span class="s2">raise</span>
+                    <span class="s2">except</span><span class="s1">: </span><span class="s5"># this might be py.error.Error, WindowsError ...</span>
+                        <span class="s2">pass</span>
+                <span class="s2">if </span><span class="s1">is_garbage(path):</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s1">path.remove(rec=</span><span class="s3">1</span><span class="s1">)</span>
+                    <span class="s2">except </span><span class="s1">KeyboardInterrupt:</span>
+                        <span class="s2">raise</span>
+                    <span class="s2">except</span><span class="s1">: </span><span class="s5"># this might be py.error.Error, WindowsError ...</span>
+                        <span class="s2">pass</span>
+
+        <span class="s5"># make link...</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">username = os.environ[</span><span class="s4">'USER'</span><span class="s1">]           </span><span class="s5">#linux, et al</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">username = os.environ[</span><span class="s4">'USERNAME'</span><span class="s1">]   </span><span class="s5">#windows</span>
+            <span class="s2">except </span><span class="s1">KeyError:</span>
+                <span class="s1">username = </span><span class="s4">'current'</span>
+
+        <span class="s1">src  = str(udir)</span>
+        <span class="s1">dest = src[:src.rfind(</span><span class="s4">'-'</span><span class="s1">)] + </span><span class="s4">'-' </span><span class="s1">+ username</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">os.unlink(dest)</span>
+        <span class="s2">except </span><span class="s1">OSError:</span>
+            <span class="s2">pass</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">os.symlink(src</span><span class="s2">, </span><span class="s1">dest)</span>
+        <span class="s2">except </span><span class="s1">(OSError</span><span class="s2">, </span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">NotImplementedError):</span>
+            <span class="s2">pass</span>
+
+        <span class="s2">return </span><span class="s1">udir</span>
+    <span class="s1">make_numbered_dir = classmethod(make_numbered_dir)</span>
+
+
+<span class="s2">def </span><span class="s1">copymode(src</span><span class="s2">, </span><span class="s1">dest):</span>
+    <span class="s0">&quot;&quot;&quot; copy permission from src to dst. &quot;&quot;&quot;</span>
+    <span class="s2">import </span><span class="s1">shutil</span>
+    <span class="s1">shutil.copymode(src</span><span class="s2">, </span><span class="s1">dest)</span>
+
+
+<span class="s2">def </span><span class="s1">copystat(src</span><span class="s2">, </span><span class="s1">dest):</span>
+    <span class="s0">&quot;&quot;&quot; copy permission,  last modification time, 
+    last access time, and flags from src to dst.&quot;&quot;&quot;</span>
+    <span class="s2">import </span><span class="s1">shutil</span>
+    <span class="s1">shutil.copystat(str(src)</span><span class="s2">, </span><span class="s1">str(dest))</span>
+
+
+<span class="s2">def </span><span class="s1">copychunked(src</span><span class="s2">, </span><span class="s1">dest):</span>
+    <span class="s1">chunksize = </span><span class="s3">524288  </span><span class="s5"># half a meg of bytes</span>
+    <span class="s1">fsrc = src.open(</span><span class="s4">'rb'</span><span class="s1">)</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">fdest = dest.open(</span><span class="s4">'wb'</span><span class="s1">)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">while </span><span class="s3">1</span><span class="s1">:</span>
+                <span class="s1">buf = fsrc.read(chunksize)</span>
+                <span class="s2">if not </span><span class="s1">buf:</span>
+                    <span class="s2">break</span>
+                <span class="s1">fdest.write(buf)</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">fdest.close()</span>
+    <span class="s2">finally</span><span class="s1">:</span>
+        <span class="s1">fsrc.close()</span>
+
+
+<span class="s2">def </span><span class="s1">isimportable(name):</span>
+    <span class="s2">if </span><span class="s1">name </span><span class="s2">and </span><span class="s1">(name[</span><span class="s3">0</span><span class="s1">].isalpha() </span><span class="s2">or </span><span class="s1">name[</span><span class="s3">0</span><span class="s1">] == </span><span class="s4">'_'</span><span class="s1">):</span>
+        <span class="s1">name = name.replace(</span><span class="s4">&quot;_&quot;</span><span class="s2">, </span><span class="s4">''</span><span class="s1">)</span>
+        <span class="s2">return not </span><span class="s1">name </span><span class="s2">or </span><span class="s1">name.isalnum()</span>
+</pre>
+</body>
+</html>

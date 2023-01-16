@@ -1,0 +1,150 @@
+<html>
+<head>
+<title>io.pyi</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+io.pyi</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">io </span><span class="s0">import </span><span class="s1">StringIO </span><span class="s0">as </span><span class="s1">TextIO</span>
+<span class="s0">from </span><span class="s1">io </span><span class="s0">import </span><span class="s1">BytesIO </span><span class="s0">as </span><span class="s1">BytesIO</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">AnyStr</span><span class="s0">, </span><span class="s1">Callable</span><span class="s0">, </span><span class="s1">Generic</span><span class="s0">, </span><span class="s1">IO</span><span class="s0">, </span><span class="s1">List</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Text</span><span class="s0">, </span><span class="s1">Tuple</span><span class="s0">, </span><span class="s1">TypeVar</span><span class="s0">, </span><span class="s1">Union</span><span class="s0">, </span><span class="s1">overload</span>
+<span class="s0">from </span><span class="s1">typing_extensions </span><span class="s0">import </span><span class="s1">Final</span>
+<span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s1">_T = TypeVar(</span><span class="s2">&quot;_T&quot;</span><span class="s1">)</span>
+
+<span class="s0">class </span><span class="s1">FDCapture(Generic[AnyStr]):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">targetfd: int</span><span class="s0">, </span><span class="s1">tmpfile: Optional[IO[AnyStr]] = ...</span><span class="s0">, </span><span class="s1">now: bool = ...</span><span class="s0">, </span><span class="s1">patchsys: bool = ...) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">start(self) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">done(self) -&gt; IO[AnyStr]: ...</span>
+    <span class="s0">def </span><span class="s1">writeorg(self</span><span class="s0">, </span><span class="s1">data: AnyStr) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+
+<span class="s0">class </span><span class="s1">StdCaptureFD:</span>
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">out: Union[bool</span><span class="s0">, </span><span class="s1">IO[str]] = ...</span><span class="s0">,</span>
+        <span class="s1">err: Union[bool</span><span class="s0">, </span><span class="s1">IO[str]] = ...</span><span class="s0">,</span>
+        <span class="s1">mixed: bool = ...</span><span class="s0">,</span>
+        <span class="s1">in_: bool = ...</span><span class="s0">,</span>
+        <span class="s1">patchsys: bool = ...</span><span class="s0">,</span>
+        <span class="s1">now: bool = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s1">@classmethod</span>
+    <span class="s0">def </span><span class="s1">call(cls</span><span class="s0">, </span><span class="s1">func: Callable[...</span><span class="s0">, </span><span class="s1">_T]</span><span class="s0">, </span><span class="s1">*args: Any</span><span class="s0">, </span><span class="s1">**kwargs: Any) -&gt; Tuple[_T</span><span class="s0">, </span><span class="s1">str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">reset(self) -&gt; Tuple[str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">suspend(self) -&gt; Tuple[str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">startall(self) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">resume(self) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">done(self</span><span class="s0">, </span><span class="s1">save: bool = ...) -&gt; Tuple[IO[str]</span><span class="s0">, </span><span class="s1">IO[str]]: ...</span>
+    <span class="s0">def </span><span class="s1">readouterr(self) -&gt; Tuple[str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+
+<span class="s0">class </span><span class="s1">StdCapture:</span>
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">out: Union[bool</span><span class="s0">, </span><span class="s1">IO[str]] = ...</span><span class="s0">,</span>
+        <span class="s1">err: Union[bool</span><span class="s0">, </span><span class="s1">IO[str]] = ...</span><span class="s0">,</span>
+        <span class="s1">in_: bool = ...</span><span class="s0">,</span>
+        <span class="s1">mixed: bool = ...</span><span class="s0">,</span>
+        <span class="s1">now: bool = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s1">@classmethod</span>
+    <span class="s0">def </span><span class="s1">call(cls</span><span class="s0">, </span><span class="s1">func: Callable[...</span><span class="s0">, </span><span class="s1">_T]</span><span class="s0">, </span><span class="s1">*args: Any</span><span class="s0">, </span><span class="s1">**kwargs: Any) -&gt; Tuple[_T</span><span class="s0">, </span><span class="s1">str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">reset(self) -&gt; Tuple[str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">suspend(self) -&gt; Tuple[str</span><span class="s0">, </span><span class="s1">str]: ...</span>
+    <span class="s0">def </span><span class="s1">startall(self) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">resume(self) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">done(self</span><span class="s0">, </span><span class="s1">save: bool = ...) -&gt; Tuple[IO[str]</span><span class="s0">, </span><span class="s1">IO[str]]: ...</span>
+    <span class="s0">def </span><span class="s1">readouterr(self) -&gt; Tuple[IO[str]</span><span class="s0">, </span><span class="s1">IO[str]]: ...</span>
+
+<span class="s3"># XXX: The type here is not exactly right. If f is IO[bytes] and</span>
+<span class="s3"># encoding is not None, returns some weird hybrid, not exactly IO[bytes].</span>
+<span class="s0">def </span><span class="s1">dupfile(</span>
+    <span class="s1">f: IO[AnyStr]</span><span class="s0">,</span>
+    <span class="s1">mode: Optional[str] = ...</span><span class="s0">,</span>
+    <span class="s1">buffering: int = ...</span><span class="s0">,</span>
+    <span class="s1">raising: bool = ...</span><span class="s0">,</span>
+    <span class="s1">encoding: Optional[str] = ...</span><span class="s0">,</span>
+<span class="s1">) -&gt; IO[AnyStr]: ...</span>
+<span class="s0">def </span><span class="s1">get_terminal_width() -&gt; int: ...</span>
+<span class="s0">def </span><span class="s1">ansi_print(</span>
+    <span class="s1">text: Union[str</span><span class="s0">, </span><span class="s1">Text]</span><span class="s0">,</span>
+    <span class="s1">esc: Union[Union[str</span><span class="s0">, </span><span class="s1">Text]</span><span class="s0">, </span><span class="s1">Tuple[Union[str</span><span class="s0">, </span><span class="s1">Text]</span><span class="s0">, </span><span class="s1">...]]</span><span class="s0">,</span>
+    <span class="s1">file: Optional[IO[Any]] = ...</span><span class="s0">,</span>
+    <span class="s1">newline: bool = ...</span><span class="s0">,</span>
+    <span class="s1">flush: bool = ...</span><span class="s0">,</span>
+<span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+<span class="s0">def </span><span class="s1">saferepr(obj</span><span class="s0">, </span><span class="s1">maxsize: int = ...) -&gt; str: ...</span>
+
+<span class="s0">class </span><span class="s1">TerminalWriter:</span>
+    <span class="s1">stringio: TextIO</span>
+    <span class="s1">encoding: Final[str]</span>
+    <span class="s1">hasmarkup: bool</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">file: Optional[IO[str]] = ...</span><span class="s0">, </span><span class="s1">stringio: bool = ...</span><span class="s0">, </span><span class="s1">encoding: Optional[str] = ...) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">fullwidth(self) -&gt; int: ...</span>
+    <span class="s1">@fullwidth.setter</span>
+    <span class="s0">def </span><span class="s1">fullwidth(self</span><span class="s0">, </span><span class="s1">value: int) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">chars_on_current_line(self) -&gt; int: ...</span>
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">width_of_current_line(self) -&gt; int: ...</span>
+    <span class="s0">def </span><span class="s1">markup(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">text: str</span><span class="s0">,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">black: int = ...</span><span class="s0">, </span><span class="s1">red: int = ...</span><span class="s0">, </span><span class="s1">green: int = ...</span><span class="s0">, </span><span class="s1">yellow: int = ...</span><span class="s0">, </span><span class="s1">blue: int = ...</span><span class="s0">, </span><span class="s1">purple: int = ...</span><span class="s0">,</span>
+        <span class="s1">cyan: int = ...</span><span class="s0">, </span><span class="s1">white: int = ...</span><span class="s0">, </span><span class="s1">Black: int = ...</span><span class="s0">, </span><span class="s1">Red: int = ...</span><span class="s0">, </span><span class="s1">Green: int = ...</span><span class="s0">, </span><span class="s1">Yellow: int = ...</span><span class="s0">,</span>
+        <span class="s1">Blue: int = ...</span><span class="s0">, </span><span class="s1">Purple: int = ...</span><span class="s0">, </span><span class="s1">Cyan: int = ...</span><span class="s0">, </span><span class="s1">White: int = ...</span><span class="s0">, </span><span class="s1">bold: int = ...</span><span class="s0">, </span><span class="s1">light: int = ...</span><span class="s0">,</span>
+        <span class="s1">blink: int = ...</span><span class="s0">, </span><span class="s1">invert: int = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; str: ...</span>
+    <span class="s0">def </span><span class="s1">sep(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">sepchar: str</span><span class="s0">,</span>
+        <span class="s1">title: Optional[str] = ...</span><span class="s0">,</span>
+        <span class="s1">fullwidth: Optional[int] = ...</span><span class="s0">,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">black: int = ...</span><span class="s0">, </span><span class="s1">red: int = ...</span><span class="s0">, </span><span class="s1">green: int = ...</span><span class="s0">, </span><span class="s1">yellow: int = ...</span><span class="s0">, </span><span class="s1">blue: int = ...</span><span class="s0">, </span><span class="s1">purple: int = ...</span><span class="s0">,</span>
+        <span class="s1">cyan: int = ...</span><span class="s0">, </span><span class="s1">white: int = ...</span><span class="s0">, </span><span class="s1">Black: int = ...</span><span class="s0">, </span><span class="s1">Red: int = ...</span><span class="s0">, </span><span class="s1">Green: int = ...</span><span class="s0">, </span><span class="s1">Yellow: int = ...</span><span class="s0">,</span>
+        <span class="s1">Blue: int = ...</span><span class="s0">, </span><span class="s1">Purple: int = ...</span><span class="s0">, </span><span class="s1">Cyan: int = ...</span><span class="s0">, </span><span class="s1">White: int = ...</span><span class="s0">, </span><span class="s1">bold: int = ...</span><span class="s0">, </span><span class="s1">light: int = ...</span><span class="s0">,</span>
+        <span class="s1">blink: int = ...</span><span class="s0">, </span><span class="s1">invert: int = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">write(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">msg: str</span><span class="s0">,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">black: int = ...</span><span class="s0">, </span><span class="s1">red: int = ...</span><span class="s0">, </span><span class="s1">green: int = ...</span><span class="s0">, </span><span class="s1">yellow: int = ...</span><span class="s0">, </span><span class="s1">blue: int = ...</span><span class="s0">, </span><span class="s1">purple: int = ...</span><span class="s0">,</span>
+        <span class="s1">cyan: int = ...</span><span class="s0">, </span><span class="s1">white: int = ...</span><span class="s0">, </span><span class="s1">Black: int = ...</span><span class="s0">, </span><span class="s1">Red: int = ...</span><span class="s0">, </span><span class="s1">Green: int = ...</span><span class="s0">, </span><span class="s1">Yellow: int = ...</span><span class="s0">,</span>
+        <span class="s1">Blue: int = ...</span><span class="s0">, </span><span class="s1">Purple: int = ...</span><span class="s0">, </span><span class="s1">Cyan: int = ...</span><span class="s0">, </span><span class="s1">White: int = ...</span><span class="s0">, </span><span class="s1">bold: int = ...</span><span class="s0">, </span><span class="s1">light: int = ...</span><span class="s0">,</span>
+        <span class="s1">blink: int = ...</span><span class="s0">, </span><span class="s1">invert: int = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">line(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">s: str = ...</span><span class="s0">,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">black: int = ...</span><span class="s0">, </span><span class="s1">red: int = ...</span><span class="s0">, </span><span class="s1">green: int = ...</span><span class="s0">, </span><span class="s1">yellow: int = ...</span><span class="s0">, </span><span class="s1">blue: int = ...</span><span class="s0">, </span><span class="s1">purple: int = ...</span><span class="s0">,</span>
+        <span class="s1">cyan: int = ...</span><span class="s0">, </span><span class="s1">white: int = ...</span><span class="s0">, </span><span class="s1">Black: int = ...</span><span class="s0">, </span><span class="s1">Red: int = ...</span><span class="s0">, </span><span class="s1">Green: int = ...</span><span class="s0">, </span><span class="s1">Yellow: int = ...</span><span class="s0">,</span>
+        <span class="s1">Blue: int = ...</span><span class="s0">, </span><span class="s1">Purple: int = ...</span><span class="s0">, </span><span class="s1">Cyan: int = ...</span><span class="s0">, </span><span class="s1">White: int = ...</span><span class="s0">, </span><span class="s1">bold: int = ...</span><span class="s0">, </span><span class="s1">light: int = ...</span><span class="s0">,</span>
+        <span class="s1">blink: int = ...</span><span class="s0">, </span><span class="s1">invert: int = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">reline(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">line: str</span><span class="s0">,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">black: int = ...</span><span class="s0">, </span><span class="s1">red: int = ...</span><span class="s0">, </span><span class="s1">green: int = ...</span><span class="s0">, </span><span class="s1">yellow: int = ...</span><span class="s0">, </span><span class="s1">blue: int = ...</span><span class="s0">, </span><span class="s1">purple: int = ...</span><span class="s0">,</span>
+        <span class="s1">cyan: int = ...</span><span class="s0">, </span><span class="s1">white: int = ...</span><span class="s0">, </span><span class="s1">Black: int = ...</span><span class="s0">, </span><span class="s1">Red: int = ...</span><span class="s0">, </span><span class="s1">Green: int = ...</span><span class="s0">, </span><span class="s1">Yellow: int = ...</span><span class="s0">,</span>
+        <span class="s1">Blue: int = ...</span><span class="s0">, </span><span class="s1">Purple: int = ...</span><span class="s0">, </span><span class="s1">Cyan: int = ...</span><span class="s0">, </span><span class="s1">White: int = ...</span><span class="s0">, </span><span class="s1">bold: int = ...</span><span class="s0">, </span><span class="s1">light: int = ...</span><span class="s0">,</span>
+        <span class="s1">blink: int = ...</span><span class="s0">, </span><span class="s1">invert: int = ...</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+</pre>
+</body>
+</html>

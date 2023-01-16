@@ -1,0 +1,154 @@
+<html>
+<head>
+<title>question.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+question.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit </span><span class="s0">import </span><span class="s1">Application</span>
+<span class="s0">import </span><span class="s1">prompt_toolkit.patch_stdout</span>
+
+<span class="s0">from </span><span class="s1">questionary </span><span class="s0">import </span><span class="s1">utils</span>
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">DEFAULT_KBI_MESSAGE</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span>
+
+
+<span class="s0">class </span><span class="s1">Question:</span>
+    <span class="s2">&quot;&quot;&quot;A question to be prompted. 
+ 
+    This is an internal class. Questions should be created using the 
+    predefined questions (e.g. text or password).&quot;&quot;&quot;</span>
+
+    <span class="s1">application: </span><span class="s3">&quot;Application[Any]&quot;</span>
+    <span class="s1">should_skip_question: bool</span>
+    <span class="s1">default: Any</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">application: </span><span class="s3">&quot;Application[Any]&quot;</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.application = application</span>
+        <span class="s1">self.should_skip_question = </span><span class="s0">False</span>
+        <span class="s1">self.default = </span><span class="s0">None</span>
+
+    <span class="s0">async def </span><span class="s1">ask_async(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False, </span><span class="s1">kbi_msg: str = DEFAULT_KBI_MESSAGE</span>
+    <span class="s1">) -&gt; Any:</span>
+        <span class="s2">&quot;&quot;&quot;Ask the question using asyncio and return user response. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+            kbi_msg: The message to be printed on a keyboard interrupt. 
+ 
+        Returns: 
+            `Any`: The answer from the question. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">if </span><span class="s1">self.should_skip_question:</span>
+            <span class="s0">return </span><span class="s1">self.default</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">sys.stdout.flush()</span>
+            <span class="s0">return await </span><span class="s1">self.unsafe_ask_async(patch_stdout)</span>
+        <span class="s0">except </span><span class="s1">KeyboardInterrupt:</span>
+            <span class="s1">print(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">{}</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.format(kbi_msg))</span>
+            <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">ask(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False, </span><span class="s1">kbi_msg: str = DEFAULT_KBI_MESSAGE</span>
+    <span class="s1">) -&gt; Any:</span>
+        <span class="s2">&quot;&quot;&quot;Ask the question synchronously and return user response. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+            kbi_msg: The message to be printed on a keyboard interrupt. 
+ 
+        Returns: 
+            `Any`: The answer from the question. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">if </span><span class="s1">self.should_skip_question:</span>
+            <span class="s0">return </span><span class="s1">self.default</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.unsafe_ask(patch_stdout)</span>
+        <span class="s0">except </span><span class="s1">KeyboardInterrupt:</span>
+            <span class="s1">print(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">{}</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.format(kbi_msg))</span>
+            <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">unsafe_ask(self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False</span><span class="s1">) -&gt; Any:</span>
+        <span class="s2">&quot;&quot;&quot;Ask the question synchronously and return user response. 
+ 
+        Does not catch keyboard interrupts. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+        Returns: 
+            `Any`: The answer from the question. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">if </span><span class="s1">patch_stdout:</span>
+            <span class="s0">with </span><span class="s1">prompt_toolkit.patch_stdout.patch_stdout():</span>
+                <span class="s0">return </span><span class="s1">self.application.run()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.application.run()</span>
+
+    <span class="s0">def </span><span class="s1">skip_if(self</span><span class="s0">, </span><span class="s1">condition: bool</span><span class="s0">, </span><span class="s1">default: Any = </span><span class="s0">None</span><span class="s1">) -&gt; </span><span class="s3">&quot;Question&quot;</span><span class="s1">:</span>
+        <span class="s2">&quot;&quot;&quot;Skip the question if flag is set and return the default instead. 
+ 
+        Args: 
+            condition: A conditional boolean value. 
+            default: The default value to return. 
+ 
+        Returns: 
+            :class:`Question`: `self`. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s1">self.should_skip_question = condition</span>
+        <span class="s1">self.default = default</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+    <span class="s0">async def </span><span class="s1">unsafe_ask_async(self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False</span><span class="s1">) -&gt; Any:</span>
+        <span class="s2">&quot;&quot;&quot;Ask the question using asyncio and return user response. 
+ 
+        Does not catch keyboard interrupts. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+        Returns: 
+            `Any`: The answer from the question. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">if not </span><span class="s1">utils.ACTIVATED_ASYNC_MODE:</span>
+            <span class="s0">await </span><span class="s1">utils.activate_prompt_toolkit_async_mode()</span>
+
+        <span class="s0">if </span><span class="s1">patch_stdout:</span>
+            <span class="s0">with </span><span class="s1">prompt_toolkit.patch_stdout.patch_stdout():</span>
+                <span class="s1">r = self.application.run_async()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">r = self.application.run_async()</span>
+
+        <span class="s0">if </span><span class="s1">utils.is_prompt_toolkit_3():</span>
+            <span class="s0">return await </span><span class="s1">r</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return await </span><span class="s1">r.to_asyncio_future()</span>
+</pre>
+</body>
+</html>

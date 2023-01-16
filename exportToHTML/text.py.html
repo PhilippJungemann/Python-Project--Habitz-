@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>text.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+text.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">List</span><span class="s0">, </span><span class="s1">Tuple</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit.document </span><span class="s0">import </span><span class="s1">Document</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.shortcuts.prompt </span><span class="s0">import </span><span class="s1">PromptSession</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">Style</span><span class="s0">, </span><span class="s1">merge_styles</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.lexers </span><span class="s0">import </span><span class="s1">Lexer</span><span class="s0">, </span><span class="s1">SimpleLexer</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">DEFAULT_STYLE</span><span class="s0">,</span>
+    <span class="s1">INSTRUCTION_MULTILINE</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">questionary.prompts.common </span><span class="s0">import </span><span class="s1">build_validator</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">def </span><span class="s1">text(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">default: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+    <span class="s1">validate: Any = </span><span class="s0">None,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">multiline: bool = </span><span class="s0">False,</span>
+    <span class="s1">instruction: Optional[str] = </span><span class="s0">None,</span>
+    <span class="s1">lexer: Optional[Lexer] = </span><span class="s0">None,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s3">&quot;&quot;&quot;Prompt the user to enter a free text message. 
+ 
+    This question type can be used to prompt the user for some text input. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.text(&quot;What's your first name?&quot;).ask() 
+        ? What's your first name? Tom 
+        'Tom' 
+ 
+    .. image:: ../images/text.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+    Args: 
+        message: Question text. 
+ 
+        default: Default value will be returned if the user just hits 
+                 enter. 
+ 
+        validate: Require the entered value to pass a validation. The 
+                  value can not be submitted until the validator accepts 
+                  it (e.g. to check minimum password length). 
+ 
+                  This can either be a function accepting the input and 
+                  returning a boolean, or an class reference to a 
+                  subclass of the prompt toolkit Validator class. 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?``. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+        multiline: If ``True``, multiline input will be enabled. 
+ 
+        instruction: Write instructions for the user if needed. If ``None`` 
+                     and ``multiline=True``, some instructions will appear. 
+ 
+        lexer: Supply a valid lexer to style the answer. Leave empty to 
+               use a simple one by default. 
+ 
+        kwargs: Additional arguments, they will be passed to prompt toolkit. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using ``.ask()``). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">merged_style = merge_styles([DEFAULT_STYLE</span><span class="s0">, </span><span class="s1">style])</span>
+    <span class="s1">lexer = lexer </span><span class="s0">or </span><span class="s1">SimpleLexer(</span><span class="s2">&quot;class:answer&quot;</span><span class="s1">)</span>
+    <span class="s1">validator = build_validator(validate)</span>
+
+    <span class="s0">if </span><span class="s1">instruction </span><span class="s0">is None and </span><span class="s1">multiline:</span>
+        <span class="s1">instruction = INSTRUCTION_MULTILINE</span>
+
+    <span class="s0">def </span><span class="s1">get_prompt_tokens() -&gt; List[Tuple[str</span><span class="s0">, </span><span class="s1">str]]:</span>
+        <span class="s1">result = [(</span><span class="s2">&quot;class:qmark&quot;</span><span class="s0">, </span><span class="s1">qmark)</span><span class="s0">, </span><span class="s1">(</span><span class="s2">&quot;class:question&quot;</span><span class="s0">, </span><span class="s2">&quot; {} &quot;</span><span class="s1">.format(message))]</span>
+        <span class="s0">if </span><span class="s1">instruction:</span>
+            <span class="s1">result.append((</span><span class="s2">&quot;class:instruction&quot;</span><span class="s0">, </span><span class="s2">&quot; {} &quot;</span><span class="s1">.format(instruction)))</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s1">p = PromptSession(</span>
+        <span class="s1">get_prompt_tokens</span><span class="s0">,</span>
+        <span class="s1">style=merged_style</span><span class="s0">,</span>
+        <span class="s1">validator=validator</span><span class="s0">,</span>
+        <span class="s1">lexer=lexer</span><span class="s0">,</span>
+        <span class="s1">multiline=multiline</span><span class="s0">,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s1">p.default_buffer.reset(Document(default))</span>
+
+    <span class="s0">return </span><span class="s1">Question(p.app)</span>
+</pre>
+</body>
+</html>

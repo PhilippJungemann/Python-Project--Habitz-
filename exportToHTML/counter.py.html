@@ -1,0 +1,58 @@
+<html>
+<head>
+<title>counter.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+counter.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">db </span><span class="s0">import </span><span class="s1">add_counter</span><span class="s0">, </span><span class="s1">increment_counter</span>
+
+
+<span class="s0">class </span><span class="s1">Counter:</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">name: str</span><span class="s0">, </span><span class="s1">description: str):</span>
+        <span class="s2">&quot;&quot;&quot;Counter class, to count events 
+ 
+        :param name: the name of the counter 
+        :param description: the description of the counter 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.description = description</span>
+        <span class="s1">self.count = </span><span class="s3">0</span>
+
+    <span class="s0">def </span><span class="s1">increment(self):</span>
+        <span class="s1">self.count += </span><span class="s3">1</span>
+
+    <span class="s0">def </span><span class="s1">reset(self):</span>
+        <span class="s1">self.count = </span><span class="s3">0</span>
+
+    <span class="s0">def </span><span class="s1">__str__(self):</span>
+        <span class="s0">return </span><span class="s4">f&quot;</span><span class="s0">{</span><span class="s1">self.name</span><span class="s0">}</span><span class="s4">: </span><span class="s0">{</span><span class="s1">self.count</span><span class="s0">}</span><span class="s4">&quot;</span>
+
+    <span class="s0">def </span><span class="s1">store(self</span><span class="s0">, </span><span class="s1">db):</span>
+        <span class="s1">add_counter(db</span><span class="s0">, </span><span class="s1">self.name</span><span class="s0">, </span><span class="s1">self.description)</span>
+
+    <span class="s0">def </span><span class="s1">add_event(self</span><span class="s0">, </span><span class="s1">db</span><span class="s0">, </span><span class="s1">date: str = </span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s1">increment_counter(db</span><span class="s0">, </span><span class="s1">self.name</span><span class="s0">, </span><span class="s1">date)</span>
+
+<span class="s5"># hier vielleicht als Mutterklasse Counter und als Tochterklasse db-Counter???</span>
+
+
+<span class="s1">counter = Counter(</span><span class="s4">&quot;test name&quot;</span><span class="s0">, </span><span class="s4">&quot;test description&quot;</span><span class="s1">)</span>
+<span class="s1">counter.increment()</span>
+<span class="s1">print(counter)</span>
+</pre>
+</body>
+</html>

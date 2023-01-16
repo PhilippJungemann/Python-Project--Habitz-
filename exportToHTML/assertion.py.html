@@ -1,0 +1,112 @@
+<html>
+<head>
+<title>assertion.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+assertion.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">py</span>
+
+<span class="s1">BuiltinAssertionError = py.builtin.builtins.AssertionError</span>
+
+<span class="s1">_reprcompare = </span><span class="s0">None </span><span class="s2"># if set, will be called by assert reinterp for comparison ops</span>
+
+<span class="s0">def </span><span class="s1">_format_explanation(explanation):</span>
+    <span class="s3">&quot;&quot;&quot;This formats an explanation 
+ 
+    Normally all embedded newlines are escaped, however there are 
+    three exceptions: \n{, \n} and \n~.  The first two are intended 
+    cover nested explanations, see function and attribute explanations 
+    for examples (.visit_Call(), visit_Attribute()).  The last one is 
+    for when one explanation needs to span multiple lines, e.g. when 
+    displaying diffs. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">raw_lines = (explanation </span><span class="s0">or </span><span class="s4">''</span><span class="s1">).split(</span><span class="s4">'</span><span class="s0">\n</span><span class="s4">'</span><span class="s1">)</span>
+    <span class="s2"># escape newlines not followed by {, } and ~</span>
+    <span class="s1">lines = [raw_lines[</span><span class="s5">0</span><span class="s1">]]</span>
+    <span class="s0">for </span><span class="s1">l </span><span class="s0">in </span><span class="s1">raw_lines[</span><span class="s5">1</span><span class="s1">:]:</span>
+        <span class="s0">if </span><span class="s1">l.startswith(</span><span class="s4">'{'</span><span class="s1">) </span><span class="s0">or </span><span class="s1">l.startswith(</span><span class="s4">'}'</span><span class="s1">) </span><span class="s0">or </span><span class="s1">l.startswith(</span><span class="s4">'~'</span><span class="s1">):</span>
+            <span class="s1">lines.append(l)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">lines[-</span><span class="s5">1</span><span class="s1">] += </span><span class="s4">'</span><span class="s0">\\</span><span class="s4">n' </span><span class="s1">+ l</span>
+
+    <span class="s1">result = lines[:</span><span class="s5">1</span><span class="s1">]</span>
+    <span class="s1">stack = [</span><span class="s5">0</span><span class="s1">]</span>
+    <span class="s1">stackcnt = [</span><span class="s5">0</span><span class="s1">]</span>
+    <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">lines[</span><span class="s5">1</span><span class="s1">:]:</span>
+        <span class="s0">if </span><span class="s1">line.startswith(</span><span class="s4">'{'</span><span class="s1">):</span>
+            <span class="s0">if </span><span class="s1">stackcnt[-</span><span class="s5">1</span><span class="s1">]:</span>
+                <span class="s1">s = </span><span class="s4">'and   '</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">s = </span><span class="s4">'where '</span>
+            <span class="s1">stack.append(len(result))</span>
+            <span class="s1">stackcnt[-</span><span class="s5">1</span><span class="s1">] += </span><span class="s5">1</span>
+            <span class="s1">stackcnt.append(</span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s1">result.append(</span><span class="s4">' +' </span><span class="s1">+ </span><span class="s4">'  '</span><span class="s1">*(len(stack)-</span><span class="s5">1</span><span class="s1">) + s + line[</span><span class="s5">1</span><span class="s1">:])</span>
+        <span class="s0">elif </span><span class="s1">line.startswith(</span><span class="s4">'}'</span><span class="s1">):</span>
+            <span class="s0">assert </span><span class="s1">line.startswith(</span><span class="s4">'}'</span><span class="s1">)</span>
+            <span class="s1">stack.pop()</span>
+            <span class="s1">stackcnt.pop()</span>
+            <span class="s1">result[stack[-</span><span class="s5">1</span><span class="s1">]] += line[</span><span class="s5">1</span><span class="s1">:]</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">assert </span><span class="s1">line.startswith(</span><span class="s4">'~'</span><span class="s1">)</span>
+            <span class="s1">result.append(</span><span class="s4">'  '</span><span class="s1">*len(stack) + line[</span><span class="s5">1</span><span class="s1">:])</span>
+    <span class="s0">assert </span><span class="s1">len(stack) == </span><span class="s5">1</span>
+    <span class="s0">return </span><span class="s4">'</span><span class="s0">\n</span><span class="s4">'</span><span class="s1">.join(result)</span>
+
+
+<span class="s0">class </span><span class="s1">AssertionError(BuiltinAssertionError):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s1">BuiltinAssertionError.__init__(self</span><span class="s0">, </span><span class="s1">*args)</span>
+        <span class="s0">if </span><span class="s1">args:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self.msg = str(args[</span><span class="s5">0</span><span class="s1">])</span>
+            <span class="s0">except </span><span class="s1">py.builtin._sysex:</span>
+                <span class="s0">raise</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s1">self.msg = </span><span class="s4">&quot;&lt;[broken __repr__] %s at %0xd&gt;&quot; </span><span class="s1">%(</span>
+                    <span class="s1">args[</span><span class="s5">0</span><span class="s1">].__class__</span><span class="s0">, </span><span class="s1">id(args[</span><span class="s5">0</span><span class="s1">]))</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">f = py.code.Frame(sys._getframe(</span><span class="s5">1</span><span class="s1">))</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">source = f.code.fullsource</span>
+                <span class="s0">if </span><span class="s1">source </span><span class="s0">is not None</span><span class="s1">:</span>
+                    <span class="s0">try</span><span class="s1">:</span>
+                        <span class="s1">source = source.getstatement(f.lineno</span><span class="s0">, </span><span class="s1">assertion=</span><span class="s0">True</span><span class="s1">)</span>
+                    <span class="s0">except </span><span class="s1">IndexError:</span>
+                        <span class="s1">source = </span><span class="s0">None</span>
+                    <span class="s0">else</span><span class="s1">:</span>
+                        <span class="s1">source = str(source.deindent()).strip()</span>
+            <span class="s0">except </span><span class="s1">py.error.ENOENT:</span>
+                <span class="s1">source = </span><span class="s0">None</span>
+                <span class="s2"># this can also occur during reinterpretation, when the</span>
+                <span class="s2"># co_filename is set to &quot;&lt;run&gt;&quot;.</span>
+            <span class="s0">if </span><span class="s1">source:</span>
+                <span class="s1">self.msg = reinterpret(source</span><span class="s0">, </span><span class="s1">f</span><span class="s0">, </span><span class="s1">should_fail=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">self.msg = </span><span class="s4">&quot;&lt;could not determine information&gt;&quot;</span>
+            <span class="s0">if not </span><span class="s1">self.args:</span>
+                <span class="s1">self.args = (self.msg</span><span class="s0">,</span><span class="s1">)</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt; (</span><span class="s5">3</span><span class="s0">, </span><span class="s5">0</span><span class="s1">):</span>
+    <span class="s1">AssertionError.__module__ = </span><span class="s4">&quot;builtins&quot;</span>
+    <span class="s1">reinterpret_old = </span><span class="s4">&quot;old reinterpretation not available for py3&quot;</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">from </span><span class="s1">py._code._assertionold </span><span class="s0">import </span><span class="s1">interpret </span><span class="s0">as </span><span class="s1">reinterpret_old</span>
+<span class="s0">from </span><span class="s1">py._code._assertionnew </span><span class="s0">import </span><span class="s1">interpret </span><span class="s0">as </span><span class="s1">reinterpret</span>
+</pre>
+</body>
+</html>

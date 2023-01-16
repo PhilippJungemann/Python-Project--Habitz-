@@ -1,0 +1,239 @@
+<html>
+<head>
+<title>source.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+source.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">ast</span>
+<span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">import </span><span class="s1">textwrap</span>
+<span class="s0">import </span><span class="s1">tokenize</span>
+<span class="s0">import </span><span class="s1">types</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">bisect </span><span class="s0">import </span><span class="s1">bisect_right</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Iterable</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Iterator</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">List</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">overload</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Tuple</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+
+<span class="s0">class </span><span class="s1">Source:</span>
+    <span class="s2">&quot;&quot;&quot;An immutable object holding a source code fragment. 
+ 
+    When using Source(...), the source lines are deindented. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">obj: object = </span><span class="s0">None</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">obj:</span>
+            <span class="s1">self.lines: List[str] = []</span>
+        <span class="s0">elif </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">Source):</span>
+            <span class="s1">self.lines = obj.lines</span>
+        <span class="s0">elif </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">(tuple</span><span class="s0">, </span><span class="s1">list)):</span>
+            <span class="s1">self.lines = deindent(x.rstrip(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">obj)</span>
+        <span class="s0">elif </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s1">self.lines = deindent(obj.split(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">))</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">rawcode = getrawcode(obj)</span>
+                <span class="s1">src = inspect.getsource(rawcode)</span>
+            <span class="s0">except </span><span class="s1">TypeError:</span>
+                <span class="s1">src = inspect.getsource(obj)  </span><span class="s4"># type: ignore[arg-type]</span>
+            <span class="s1">self.lines = deindent(src.split(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">))</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">other: object) -&gt; bool:</span>
+        <span class="s0">if not </span><span class="s1">isinstance(other</span><span class="s0">, </span><span class="s1">Source):</span>
+            <span class="s0">return </span><span class="s1">NotImplemented</span>
+        <span class="s0">return </span><span class="s1">self.lines == other.lines</span>
+
+    <span class="s4"># Ignore type because of https://github.com/python/mypy/issues/4266.</span>
+    <span class="s1">__hash__ = </span><span class="s0">None  </span><span class="s4"># type: ignore</span>
+
+    <span class="s1">@overload</span>
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">key: int) -&gt; str:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">key: slice) -&gt; </span><span class="s3">&quot;Source&quot;</span><span class="s1">:</span>
+        <span class="s1">...</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">key: Union[int</span><span class="s0">, </span><span class="s1">slice]) -&gt; Union[str</span><span class="s0">, </span><span class="s3">&quot;Source&quot;</span><span class="s1">]:</span>
+        <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">int):</span>
+            <span class="s0">return </span><span class="s1">self.lines[key]</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">key.step </span><span class="s0">not in </span><span class="s1">(</span><span class="s0">None, </span><span class="s5">1</span><span class="s1">):</span>
+                <span class="s0">raise </span><span class="s1">IndexError(</span><span class="s3">&quot;cannot slice a Source with a step&quot;</span><span class="s1">)</span>
+            <span class="s1">newsource = Source()</span>
+            <span class="s1">newsource.lines = self.lines[key.start : key.stop]</span>
+            <span class="s0">return </span><span class="s1">newsource</span>
+
+    <span class="s0">def </span><span class="s1">__iter__(self) -&gt; Iterator[str]:</span>
+        <span class="s0">return </span><span class="s1">iter(self.lines)</span>
+
+    <span class="s0">def </span><span class="s1">__len__(self) -&gt; int:</span>
+        <span class="s0">return </span><span class="s1">len(self.lines)</span>
+
+    <span class="s0">def </span><span class="s1">strip(self) -&gt; </span><span class="s3">&quot;Source&quot;</span><span class="s1">:</span>
+        <span class="s2">&quot;&quot;&quot;Return new Source object with trailing and leading blank lines removed.&quot;&quot;&quot;</span>
+        <span class="s1">start</span><span class="s0">, </span><span class="s1">end = </span><span class="s5">0</span><span class="s0">, </span><span class="s1">len(self)</span>
+        <span class="s0">while </span><span class="s1">start &lt; end </span><span class="s0">and not </span><span class="s1">self.lines[start].strip():</span>
+            <span class="s1">start += </span><span class="s5">1</span>
+        <span class="s0">while </span><span class="s1">end &gt; start </span><span class="s0">and not </span><span class="s1">self.lines[end - </span><span class="s5">1</span><span class="s1">].strip():</span>
+            <span class="s1">end -= </span><span class="s5">1</span>
+        <span class="s1">source = Source()</span>
+        <span class="s1">source.lines[:] = self.lines[start:end]</span>
+        <span class="s0">return </span><span class="s1">source</span>
+
+    <span class="s0">def </span><span class="s1">indent(self</span><span class="s0">, </span><span class="s1">indent: str = </span><span class="s3">&quot; &quot; </span><span class="s1">* </span><span class="s5">4</span><span class="s1">) -&gt; </span><span class="s3">&quot;Source&quot;</span><span class="s1">:</span>
+        <span class="s2">&quot;&quot;&quot;Return a copy of the source object with all lines indented by the 
+        given indent-string.&quot;&quot;&quot;</span>
+        <span class="s1">newsource = Source()</span>
+        <span class="s1">newsource.lines = [(indent + line) </span><span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">self.lines]</span>
+        <span class="s0">return </span><span class="s1">newsource</span>
+
+    <span class="s0">def </span><span class="s1">getstatement(self</span><span class="s0">, </span><span class="s1">lineno: int) -&gt; </span><span class="s3">&quot;Source&quot;</span><span class="s1">:</span>
+        <span class="s2">&quot;&quot;&quot;Return Source statement which contains the given linenumber 
+        (counted from 0).&quot;&quot;&quot;</span>
+        <span class="s1">start</span><span class="s0">, </span><span class="s1">end = self.getstatementrange(lineno)</span>
+        <span class="s0">return </span><span class="s1">self[start:end]</span>
+
+    <span class="s0">def </span><span class="s1">getstatementrange(self</span><span class="s0">, </span><span class="s1">lineno: int) -&gt; Tuple[int</span><span class="s0">, </span><span class="s1">int]:</span>
+        <span class="s2">&quot;&quot;&quot;Return (start, end) tuple which spans the minimal statement region 
+        which containing the given lineno.&quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">(</span><span class="s5">0 </span><span class="s1">&lt;= lineno &lt; len(self)):</span>
+            <span class="s0">raise </span><span class="s1">IndexError(</span><span class="s3">&quot;lineno out of range&quot;</span><span class="s1">)</span>
+        <span class="s1">ast</span><span class="s0">, </span><span class="s1">start</span><span class="s0">, </span><span class="s1">end = getstatementrange_ast(lineno</span><span class="s0">, </span><span class="s1">self)</span>
+        <span class="s0">return </span><span class="s1">start</span><span class="s0">, </span><span class="s1">end</span>
+
+    <span class="s0">def </span><span class="s1">deindent(self) -&gt; </span><span class="s3">&quot;Source&quot;</span><span class="s1">:</span>
+        <span class="s2">&quot;&quot;&quot;Return a new Source object deindented.&quot;&quot;&quot;</span>
+        <span class="s1">newsource = Source()</span>
+        <span class="s1">newsource.lines[:] = deindent(self.lines)</span>
+        <span class="s0">return </span><span class="s1">newsource</span>
+
+    <span class="s0">def </span><span class="s1">__str__(self) -&gt; str:</span>
+        <span class="s0">return </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.join(self.lines)</span>
+
+
+<span class="s4">#</span>
+<span class="s4"># helper functions</span>
+<span class="s4">#</span>
+
+
+<span class="s0">def </span><span class="s1">findsource(obj) -&gt; Tuple[Optional[Source]</span><span class="s0">, </span><span class="s1">int]:</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">sourcelines</span><span class="s0">, </span><span class="s1">lineno = inspect.findsource(obj)</span>
+    <span class="s0">except </span><span class="s1">Exception:</span>
+        <span class="s0">return None, </span><span class="s1">-</span><span class="s5">1</span>
+    <span class="s1">source = Source()</span>
+    <span class="s1">source.lines = [line.rstrip() </span><span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">sourcelines]</span>
+    <span class="s0">return </span><span class="s1">source</span><span class="s0">, </span><span class="s1">lineno</span>
+
+
+<span class="s0">def </span><span class="s1">getrawcode(obj: object</span><span class="s0">, </span><span class="s1">trycall: bool = </span><span class="s0">True</span><span class="s1">) -&gt; types.CodeType:</span>
+    <span class="s2">&quot;&quot;&quot;Return code object for given function.&quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">obj.__code__  </span><span class="s4"># type: ignore[attr-defined,no-any-return]</span>
+    <span class="s0">except </span><span class="s1">AttributeError:</span>
+        <span class="s0">pass</span>
+    <span class="s0">if </span><span class="s1">trycall:</span>
+        <span class="s1">call = getattr(obj</span><span class="s0">, </span><span class="s3">&quot;__call__&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">call </span><span class="s0">and not </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">type):</span>
+            <span class="s0">return </span><span class="s1">getrawcode(call</span><span class="s0">, </span><span class="s1">trycall=</span><span class="s0">False</span><span class="s1">)</span>
+    <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s3">f&quot;could not get code object for </span><span class="s0">{</span><span class="s1">obj</span><span class="s0">!r}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">deindent(lines: Iterable[str]) -&gt; List[str]:</span>
+    <span class="s0">return </span><span class="s1">textwrap.dedent(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.join(lines)).splitlines()</span>
+
+
+<span class="s0">def </span><span class="s1">get_statement_startend2(lineno: int</span><span class="s0">, </span><span class="s1">node: ast.AST) -&gt; Tuple[int</span><span class="s0">, </span><span class="s1">Optional[int]]:</span>
+    <span class="s4"># Flatten all statements and except handlers into one lineno-list.</span>
+    <span class="s4"># AST's line numbers start indexing at 1.</span>
+    <span class="s1">values: List[int] = []</span>
+    <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">ast.walk(node):</span>
+        <span class="s0">if </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">(ast.stmt</span><span class="s0">, </span><span class="s1">ast.ExceptHandler)):</span>
+            <span class="s4"># Before Python 3.8, the lineno of a decorated class or function pointed at the decorator.</span>
+            <span class="s4"># Since Python 3.8, the lineno points to the class/def, so need to include the decorators.</span>
+            <span class="s0">if </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">(ast.ClassDef</span><span class="s0">, </span><span class="s1">ast.FunctionDef</span><span class="s0">, </span><span class="s1">ast.AsyncFunctionDef)):</span>
+                <span class="s0">for </span><span class="s1">d </span><span class="s0">in </span><span class="s1">x.decorator_list:</span>
+                    <span class="s1">values.append(d.lineno - </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">values.append(x.lineno - </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">(</span><span class="s3">&quot;finalbody&quot;</span><span class="s0">, </span><span class="s3">&quot;orelse&quot;</span><span class="s1">):</span>
+                <span class="s1">val: Optional[List[ast.stmt]] = getattr(x</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, None</span><span class="s1">)</span>
+                <span class="s0">if </span><span class="s1">val:</span>
+                    <span class="s4"># Treat the finally/orelse part as its own statement.</span>
+                    <span class="s1">values.append(val[</span><span class="s5">0</span><span class="s1">].lineno - </span><span class="s5">1 </span><span class="s1">- </span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s1">values.sort()</span>
+    <span class="s1">insert_index = bisect_right(values</span><span class="s0">, </span><span class="s1">lineno)</span>
+    <span class="s1">start = values[insert_index - </span><span class="s5">1</span><span class="s1">]</span>
+    <span class="s0">if </span><span class="s1">insert_index &gt;= len(values):</span>
+        <span class="s1">end = </span><span class="s0">None</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">end = values[insert_index]</span>
+    <span class="s0">return </span><span class="s1">start</span><span class="s0">, </span><span class="s1">end</span>
+
+
+<span class="s0">def </span><span class="s1">getstatementrange_ast(</span>
+    <span class="s1">lineno: int</span><span class="s0">,</span>
+    <span class="s1">source: Source</span><span class="s0">,</span>
+    <span class="s1">assertion: bool = </span><span class="s0">False,</span>
+    <span class="s1">astnode: Optional[ast.AST] = </span><span class="s0">None,</span>
+<span class="s1">) -&gt; Tuple[ast.AST</span><span class="s0">, </span><span class="s1">int</span><span class="s0">, </span><span class="s1">int]:</span>
+    <span class="s0">if </span><span class="s1">astnode </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">content = str(source)</span>
+        <span class="s4"># See #4260:</span>
+        <span class="s4"># Don't produce duplicate warnings when compiling source to find AST.</span>
+        <span class="s0">with </span><span class="s1">warnings.catch_warnings():</span>
+            <span class="s1">warnings.simplefilter(</span><span class="s3">&quot;ignore&quot;</span><span class="s1">)</span>
+            <span class="s1">astnode = ast.parse(content</span><span class="s0">, </span><span class="s3">&quot;source&quot;</span><span class="s0">, </span><span class="s3">&quot;exec&quot;</span><span class="s1">)</span>
+
+    <span class="s1">start</span><span class="s0">, </span><span class="s1">end = get_statement_startend2(lineno</span><span class="s0">, </span><span class="s1">astnode)</span>
+    <span class="s4"># We need to correct the end:</span>
+    <span class="s4"># - ast-parsing strips comments</span>
+    <span class="s4"># - there might be empty lines</span>
+    <span class="s4"># - we might have lesser indented code blocks at the end</span>
+    <span class="s0">if </span><span class="s1">end </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">end = len(source.lines)</span>
+
+    <span class="s0">if </span><span class="s1">end &gt; start + </span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s4"># Make sure we don't span differently indented code blocks</span>
+        <span class="s4"># by using the BlockFinder helper used which inspect.getsource() uses itself.</span>
+        <span class="s1">block_finder = inspect.BlockFinder()</span>
+        <span class="s4"># If we start with an indented line, put blockfinder to &quot;started&quot; mode.</span>
+        <span class="s1">block_finder.started = source.lines[start][</span><span class="s5">0</span><span class="s1">].isspace()</span>
+        <span class="s1">it = ((x + </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">source.lines[start:end])</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">tok </span><span class="s0">in </span><span class="s1">tokenize.generate_tokens(</span><span class="s0">lambda</span><span class="s1">: next(it)):</span>
+                <span class="s1">block_finder.tokeneater(*tok)</span>
+        <span class="s0">except </span><span class="s1">(inspect.EndOfBlock</span><span class="s0">, </span><span class="s1">IndentationError):</span>
+            <span class="s1">end = block_finder.last + start</span>
+        <span class="s0">except </span><span class="s1">Exception:</span>
+            <span class="s0">pass</span>
+
+    <span class="s4"># The end might still point to a comment or empty line, correct it.</span>
+    <span class="s0">while </span><span class="s1">end:</span>
+        <span class="s1">line = source.lines[end - </span><span class="s5">1</span><span class="s1">].lstrip()</span>
+        <span class="s0">if </span><span class="s1">line.startswith(</span><span class="s3">&quot;#&quot;</span><span class="s1">) </span><span class="s0">or not </span><span class="s1">line:</span>
+            <span class="s1">end -= </span><span class="s5">1</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">break</span>
+    <span class="s0">return </span><span class="s1">astnode</span><span class="s0">, </span><span class="s1">start</span><span class="s0">, </span><span class="s1">end</span>
+</pre>
+</body>
+</html>

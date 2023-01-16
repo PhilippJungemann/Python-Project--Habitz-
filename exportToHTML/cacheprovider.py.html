@@ -1,0 +1,603 @@
+<html>
+<head>
+<title>cacheprovider.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #a5c261;}
+.s6 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cacheprovider.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Implementation of the cache provider.&quot;&quot;&quot;</span>
+<span class="s2"># This plugin was not named &quot;cache&quot; to avoid conflicts with the external</span>
+<span class="s2"># pytest-cache version.</span>
+<span class="s3">import </span><span class="s1">json</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">from </span><span class="s1">pathlib </span><span class="s3">import </span><span class="s1">Path</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Dict</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Generator</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Iterable</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">List</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Optional</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Set</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Union</span>
+
+<span class="s3">import </span><span class="s1">attr</span>
+
+<span class="s3">from </span><span class="s1">.pathlib </span><span class="s3">import </span><span class="s1">resolve_from_str</span>
+<span class="s3">from </span><span class="s1">.pathlib </span><span class="s3">import </span><span class="s1">rm_rf</span>
+<span class="s3">from </span><span class="s1">.reports </span><span class="s3">import </span><span class="s1">CollectReport</span>
+<span class="s3">from </span><span class="s1">_pytest </span><span class="s3">import </span><span class="s1">nodes</span>
+<span class="s3">from </span><span class="s1">_pytest._io </span><span class="s3">import </span><span class="s1">TerminalWriter</span>
+<span class="s3">from </span><span class="s1">_pytest.compat </span><span class="s3">import </span><span class="s1">final</span>
+<span class="s3">from </span><span class="s1">_pytest.config </span><span class="s3">import </span><span class="s1">Config</span>
+<span class="s3">from </span><span class="s1">_pytest.config </span><span class="s3">import </span><span class="s1">ExitCode</span>
+<span class="s3">from </span><span class="s1">_pytest.config </span><span class="s3">import </span><span class="s1">hookimpl</span>
+<span class="s3">from </span><span class="s1">_pytest.config.argparsing </span><span class="s3">import </span><span class="s1">Parser</span>
+<span class="s3">from </span><span class="s1">_pytest.deprecated </span><span class="s3">import </span><span class="s1">check_ispytest</span>
+<span class="s3">from </span><span class="s1">_pytest.fixtures </span><span class="s3">import </span><span class="s1">fixture</span>
+<span class="s3">from </span><span class="s1">_pytest.fixtures </span><span class="s3">import </span><span class="s1">FixtureRequest</span>
+<span class="s3">from </span><span class="s1">_pytest.main </span><span class="s3">import </span><span class="s1">Session</span>
+<span class="s3">from </span><span class="s1">_pytest.python </span><span class="s3">import </span><span class="s1">Module</span>
+<span class="s3">from </span><span class="s1">_pytest.python </span><span class="s3">import </span><span class="s1">Package</span>
+<span class="s3">from </span><span class="s1">_pytest.reports </span><span class="s3">import </span><span class="s1">TestReport</span>
+
+
+<span class="s1">README_CONTENT = </span><span class="s4">&quot;&quot;&quot;</span><span class="s3">\ 
+</span><span class="s4"># pytest cache directory # 
+ 
+This directory contains data from the pytest's cache plugin, 
+which provides the `--lf` and `--ff` options, as well as the `cache` fixture. 
+ 
+**Do not** commit this to version control. 
+ 
+See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more information. 
+&quot;&quot;&quot;</span>
+
+<span class="s1">CACHEDIR_TAG_CONTENT = </span><span class="s5">b&quot;&quot;&quot;</span><span class="s3">\ 
+</span><span class="s5">Signature: 8a477f597d28d172789f06886806bc55 
+# This file is a cache directory tag created by pytest. 
+# For information about cache directory tags, see: 
+#   https://bford.info/cachedir/spec.html 
+&quot;&quot;&quot;</span>
+
+
+<span class="s1">@final</span>
+<span class="s1">@attr.s(init=</span><span class="s3">False, </span><span class="s1">auto_attribs=</span><span class="s3">True</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">Cache:</span>
+    <span class="s1">_cachedir: Path = attr.ib(repr=</span><span class="s3">False</span><span class="s1">)</span>
+    <span class="s1">_config: Config = attr.ib(repr=</span><span class="s3">False</span><span class="s1">)</span>
+
+    <span class="s2"># Sub-directory under cache-dir for directories created by `mkdir()`.</span>
+    <span class="s1">_CACHE_PREFIX_DIRS = </span><span class="s4">&quot;d&quot;</span>
+
+    <span class="s2"># Sub-directory under cache-dir for values created by `set()`.</span>
+    <span class="s1">_CACHE_PREFIX_VALUES = </span><span class="s4">&quot;v&quot;</span>
+
+    <span class="s3">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">cachedir: Path</span><span class="s3">, </span><span class="s1">config: Config</span><span class="s3">, </span><span class="s1">*</span><span class="s3">, </span><span class="s1">_ispytest: bool = </span><span class="s3">False</span>
+    <span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self._cachedir = cachedir</span>
+        <span class="s1">self._config = config</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">for_config(cls</span><span class="s3">, </span><span class="s1">config: Config</span><span class="s3">, </span><span class="s1">*</span><span class="s3">, </span><span class="s1">_ispytest: bool = </span><span class="s3">False</span><span class="s1">) -&gt; </span><span class="s4">&quot;Cache&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Create the Cache instance for a Config. 
+ 
+        :meta private: 
+        &quot;&quot;&quot;</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">cachedir = cls.cache_dir_from_config(config</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">config.getoption(</span><span class="s4">&quot;cacheclear&quot;</span><span class="s1">) </span><span class="s3">and </span><span class="s1">cachedir.is_dir():</span>
+            <span class="s1">cls.clear_cache(cachedir</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">return </span><span class="s1">cls(cachedir</span><span class="s3">, </span><span class="s1">config</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">clear_cache(cls</span><span class="s3">, </span><span class="s1">cachedir: Path</span><span class="s3">, </span><span class="s1">_ispytest: bool = </span><span class="s3">False</span><span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Clear the sub-directories used to hold cached directories and values. 
+ 
+        :meta private: 
+        &quot;&quot;&quot;</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s3">for </span><span class="s1">prefix </span><span class="s3">in </span><span class="s1">(cls._CACHE_PREFIX_DIRS</span><span class="s3">, </span><span class="s1">cls._CACHE_PREFIX_VALUES):</span>
+            <span class="s1">d = cachedir / prefix</span>
+            <span class="s3">if </span><span class="s1">d.is_dir():</span>
+                <span class="s1">rm_rf(d)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">cache_dir_from_config(config: Config</span><span class="s3">, </span><span class="s1">*</span><span class="s3">, </span><span class="s1">_ispytest: bool = </span><span class="s3">False</span><span class="s1">) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Get the path to the cache directory for a Config. 
+ 
+        :meta private: 
+        &quot;&quot;&quot;</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s3">return </span><span class="s1">resolve_from_str(config.getini(</span><span class="s4">&quot;cache_dir&quot;</span><span class="s1">)</span><span class="s3">, </span><span class="s1">config.rootpath)</span>
+
+    <span class="s3">def </span><span class="s1">warn(self</span><span class="s3">, </span><span class="s1">fmt: str</span><span class="s3">, </span><span class="s1">*</span><span class="s3">, </span><span class="s1">_ispytest: bool = </span><span class="s3">False, </span><span class="s1">**args: object) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Issue a cache warning. 
+ 
+        :meta private: 
+        &quot;&quot;&quot;</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s3">import </span><span class="s1">warnings</span>
+        <span class="s3">from </span><span class="s1">_pytest.warning_types </span><span class="s3">import </span><span class="s1">PytestCacheWarning</span>
+
+        <span class="s1">warnings.warn(</span>
+            <span class="s1">PytestCacheWarning(fmt.format(**args) </span><span class="s3">if </span><span class="s1">args </span><span class="s3">else </span><span class="s1">fmt)</span><span class="s3">,</span>
+            <span class="s1">self._config.hook</span><span class="s3">,</span>
+            <span class="s1">stacklevel=</span><span class="s6">3</span><span class="s3">,</span>
+        <span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">mkdir(self</span><span class="s3">, </span><span class="s1">name: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Return a directory path object with the given name. 
+ 
+        If the directory does not yet exist, it will be created. You can use 
+        it to manage files to e.g. store/retrieve database dumps across test 
+        sessions. 
+ 
+        .. versionadded:: 7.0 
+ 
+        :param name: 
+            Must be a string not containing a ``/`` separator. 
+            Make sure the name contains your plugin or application 
+            identifiers to prevent clashes with other cache users. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">path = Path(name)</span>
+        <span class="s3">if </span><span class="s1">len(path.parts) &gt; </span><span class="s6">1</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;name is not allowed to contain path separators&quot;</span><span class="s1">)</span>
+        <span class="s1">res = self._cachedir.joinpath(self._CACHE_PREFIX_DIRS</span><span class="s3">, </span><span class="s1">path)</span>
+        <span class="s1">res.mkdir(exist_ok=</span><span class="s3">True, </span><span class="s1">parents=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">return </span><span class="s1">res</span>
+
+    <span class="s3">def </span><span class="s1">_getvaluepath(self</span><span class="s3">, </span><span class="s1">key: str) -&gt; Path:</span>
+        <span class="s3">return </span><span class="s1">self._cachedir.joinpath(self._CACHE_PREFIX_VALUES</span><span class="s3">, </span><span class="s1">Path(key))</span>
+
+    <span class="s3">def </span><span class="s1">get(self</span><span class="s3">, </span><span class="s1">key: str</span><span class="s3">, </span><span class="s1">default):</span>
+        <span class="s0">&quot;&quot;&quot;Return the cached value for the given key. 
+ 
+        If no value was yet cached or the value cannot be read, the specified 
+        default is returned. 
+ 
+        :param key: 
+            Must be a ``/`` separated value. Usually the first 
+            name is the name of your plugin or your application. 
+        :param default: 
+            The value to return in case of a cache-miss or invalid cache value. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">path = self._getvaluepath(key)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">with </span><span class="s1">path.open(</span><span class="s4">&quot;r&quot;</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+                <span class="s3">return </span><span class="s1">json.load(f)</span>
+        <span class="s3">except </span><span class="s1">(ValueError</span><span class="s3">, </span><span class="s1">OSError):</span>
+            <span class="s3">return </span><span class="s1">default</span>
+
+    <span class="s3">def </span><span class="s1">set(self</span><span class="s3">, </span><span class="s1">key: str</span><span class="s3">, </span><span class="s1">value: object) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Save value for the given key. 
+ 
+        :param key: 
+            Must be a ``/`` separated value. Usually the first 
+            name is the name of your plugin or your application. 
+        :param value: 
+            Must be of any combination of basic python types, 
+            including nested types like lists of dictionaries. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">path = self._getvaluepath(key)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">path.parent.is_dir():</span>
+                <span class="s1">cache_dir_exists_already = </span><span class="s3">True</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">cache_dir_exists_already = self._cachedir.exists()</span>
+                <span class="s1">path.parent.mkdir(exist_ok=</span><span class="s3">True, </span><span class="s1">parents=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">except </span><span class="s1">OSError:</span>
+            <span class="s1">self.warn(</span><span class="s4">&quot;could not create cache path {path}&quot;</span><span class="s3">, </span><span class="s1">path=path</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s3">return</span>
+        <span class="s3">if not </span><span class="s1">cache_dir_exists_already:</span>
+            <span class="s1">self._ensure_supporting_files()</span>
+        <span class="s1">data = json.dumps(value</span><span class="s3">, </span><span class="s1">indent=</span><span class="s6">2</span><span class="s1">)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">f = path.open(</span><span class="s4">&quot;w&quot;</span><span class="s1">)</span>
+        <span class="s3">except </span><span class="s1">OSError:</span>
+            <span class="s1">self.warn(</span><span class="s4">&quot;cache could not write path {path}&quot;</span><span class="s3">, </span><span class="s1">path=path</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">with </span><span class="s1">f:</span>
+                <span class="s1">f.write(data)</span>
+
+    <span class="s3">def </span><span class="s1">_ensure_supporting_files(self) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Create supporting files in the cache dir that are not really part of the cache.&quot;&quot;&quot;</span>
+        <span class="s1">readme_path = self._cachedir / </span><span class="s4">&quot;README.md&quot;</span>
+        <span class="s1">readme_path.write_text(README_CONTENT)</span>
+
+        <span class="s1">gitignore_path = self._cachedir.joinpath(</span><span class="s4">&quot;.gitignore&quot;</span><span class="s1">)</span>
+        <span class="s1">msg = </span><span class="s4">&quot;# Created by pytest automatically.</span><span class="s3">\n</span><span class="s4">*</span><span class="s3">\n</span><span class="s4">&quot;</span>
+        <span class="s1">gitignore_path.write_text(msg</span><span class="s3">, </span><span class="s1">encoding=</span><span class="s4">&quot;UTF-8&quot;</span><span class="s1">)</span>
+
+        <span class="s1">cachedir_tag_path = self._cachedir.joinpath(</span><span class="s4">&quot;CACHEDIR.TAG&quot;</span><span class="s1">)</span>
+        <span class="s1">cachedir_tag_path.write_bytes(CACHEDIR_TAG_CONTENT)</span>
+
+
+<span class="s3">class </span><span class="s1">LFPluginCollWrapper:</span>
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">lfplugin: </span><span class="s4">&quot;LFPlugin&quot;</span><span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">self.lfplugin = lfplugin</span>
+        <span class="s1">self._collected_at_least_one_failure = </span><span class="s3">False</span>
+
+    <span class="s1">@hookimpl(hookwrapper=</span><span class="s3">True</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">pytest_make_collect_report(self</span><span class="s3">, </span><span class="s1">collector: nodes.Collector):</span>
+        <span class="s3">if </span><span class="s1">isinstance(collector</span><span class="s3">, </span><span class="s1">Session):</span>
+            <span class="s1">out = </span><span class="s3">yield</span>
+            <span class="s1">res: CollectReport = out.get_result()</span>
+
+            <span class="s2"># Sort any lf-paths to the beginning.</span>
+            <span class="s1">lf_paths = self.lfplugin._last_failed_paths</span>
+
+            <span class="s1">res.result = sorted(</span>
+                <span class="s1">res.result</span><span class="s3">,</span>
+                <span class="s2"># use stable sort to priorize last failed</span>
+                <span class="s1">key=</span><span class="s3">lambda </span><span class="s1">x: x.path </span><span class="s3">in </span><span class="s1">lf_paths</span><span class="s3">,</span>
+                <span class="s1">reverse=</span><span class="s3">True,</span>
+            <span class="s1">)</span>
+            <span class="s3">return</span>
+
+        <span class="s3">elif </span><span class="s1">isinstance(collector</span><span class="s3">, </span><span class="s1">Module):</span>
+            <span class="s3">if </span><span class="s1">collector.path </span><span class="s3">in </span><span class="s1">self.lfplugin._last_failed_paths:</span>
+                <span class="s1">out = </span><span class="s3">yield</span>
+                <span class="s1">res = out.get_result()</span>
+                <span class="s1">result = res.result</span>
+                <span class="s1">lastfailed = self.lfplugin.lastfailed</span>
+
+                <span class="s2"># Only filter with known failures.</span>
+                <span class="s3">if not </span><span class="s1">self._collected_at_least_one_failure:</span>
+                    <span class="s3">if not </span><span class="s1">any(x.nodeid </span><span class="s3">in </span><span class="s1">lastfailed </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">result):</span>
+                        <span class="s3">return</span>
+                    <span class="s1">self.lfplugin.config.pluginmanager.register(</span>
+                        <span class="s1">LFPluginCollSkipfiles(self.lfplugin)</span><span class="s3">, </span><span class="s4">&quot;lfplugin-collskip&quot;</span>
+                    <span class="s1">)</span>
+                    <span class="s1">self._collected_at_least_one_failure = </span><span class="s3">True</span>
+
+                <span class="s1">session = collector.session</span>
+                <span class="s1">result[:] = [</span>
+                    <span class="s1">x</span>
+                    <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">result</span>
+                    <span class="s3">if </span><span class="s1">x.nodeid </span><span class="s3">in </span><span class="s1">lastfailed</span>
+                    <span class="s2"># Include any passed arguments (not trivial to filter).</span>
+                    <span class="s3">or </span><span class="s1">session.isinitpath(x.path)</span>
+                    <span class="s2"># Keep all sub-collectors.</span>
+                    <span class="s3">or </span><span class="s1">isinstance(x</span><span class="s3">, </span><span class="s1">nodes.Collector)</span>
+                <span class="s1">]</span>
+                <span class="s3">return</span>
+        <span class="s3">yield</span>
+
+
+<span class="s3">class </span><span class="s1">LFPluginCollSkipfiles:</span>
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">lfplugin: </span><span class="s4">&quot;LFPlugin&quot;</span><span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">self.lfplugin = lfplugin</span>
+
+    <span class="s1">@hookimpl</span>
+    <span class="s3">def </span><span class="s1">pytest_make_collect_report(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">collector: nodes.Collector</span>
+    <span class="s1">) -&gt; Optional[CollectReport]:</span>
+        <span class="s2"># Packages are Modules, but _last_failed_paths only contains</span>
+        <span class="s2"># test-bearing paths and doesn't try to include the paths of their</span>
+        <span class="s2"># packages, so don't filter them.</span>
+        <span class="s3">if </span><span class="s1">isinstance(collector</span><span class="s3">, </span><span class="s1">Module) </span><span class="s3">and not </span><span class="s1">isinstance(collector</span><span class="s3">, </span><span class="s1">Package):</span>
+            <span class="s3">if </span><span class="s1">collector.path </span><span class="s3">not in </span><span class="s1">self.lfplugin._last_failed_paths:</span>
+                <span class="s1">self.lfplugin._skipped_files += </span><span class="s6">1</span>
+
+                <span class="s3">return </span><span class="s1">CollectReport(</span>
+                    <span class="s1">collector.nodeid</span><span class="s3">, </span><span class="s4">&quot;passed&quot;</span><span class="s3">, </span><span class="s1">longrepr=</span><span class="s3">None, </span><span class="s1">result=[]</span>
+                <span class="s1">)</span>
+        <span class="s3">return None</span>
+
+
+<span class="s3">class </span><span class="s1">LFPlugin:</span>
+    <span class="s0">&quot;&quot;&quot;Plugin which implements the --lf (run last-failing) option.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">config: Config) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">self.config = config</span>
+        <span class="s1">active_keys = </span><span class="s4">&quot;lf&quot;</span><span class="s3">, </span><span class="s4">&quot;failedfirst&quot;</span>
+        <span class="s1">self.active = any(config.getoption(key) </span><span class="s3">for </span><span class="s1">key </span><span class="s3">in </span><span class="s1">active_keys)</span>
+        <span class="s3">assert </span><span class="s1">config.cache</span>
+        <span class="s1">self.lastfailed: Dict[str</span><span class="s3">, </span><span class="s1">bool] = config.cache.get(</span><span class="s4">&quot;cache/lastfailed&quot;</span><span class="s3">, </span><span class="s1">{})</span>
+        <span class="s1">self._previously_failed_count: Optional[int] = </span><span class="s3">None</span>
+        <span class="s1">self._report_status: Optional[str] = </span><span class="s3">None</span>
+        <span class="s1">self._skipped_files = </span><span class="s6">0  </span><span class="s2"># count skipped files during collection due to --lf</span>
+
+        <span class="s3">if </span><span class="s1">config.getoption(</span><span class="s4">&quot;lf&quot;</span><span class="s1">):</span>
+            <span class="s1">self._last_failed_paths = self.get_last_failed_paths()</span>
+            <span class="s1">config.pluginmanager.register(</span>
+                <span class="s1">LFPluginCollWrapper(self)</span><span class="s3">, </span><span class="s4">&quot;lfplugin-collwrapper&quot;</span>
+            <span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">get_last_failed_paths(self) -&gt; Set[Path]:</span>
+        <span class="s0">&quot;&quot;&quot;Return a set with all Paths()s of the previously failed nodeids.&quot;&quot;&quot;</span>
+        <span class="s1">rootpath = self.config.rootpath</span>
+        <span class="s1">result = {rootpath / nodeid.split(</span><span class="s4">&quot;::&quot;</span><span class="s1">)[</span><span class="s6">0</span><span class="s1">] </span><span class="s3">for </span><span class="s1">nodeid </span><span class="s3">in </span><span class="s1">self.lastfailed}</span>
+        <span class="s3">return </span><span class="s1">{x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">result </span><span class="s3">if </span><span class="s1">x.exists()}</span>
+
+    <span class="s3">def </span><span class="s1">pytest_report_collectionfinish(self) -&gt; Optional[str]:</span>
+        <span class="s3">if </span><span class="s1">self.active </span><span class="s3">and </span><span class="s1">self.config.getoption(</span><span class="s4">&quot;verbose&quot;</span><span class="s1">) &gt;= </span><span class="s6">0</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s4">&quot;run-last-failure: %s&quot; </span><span class="s1">% self._report_status</span>
+        <span class="s3">return None</span>
+
+    <span class="s3">def </span><span class="s1">pytest_runtest_logreport(self</span><span class="s3">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s3">if </span><span class="s1">(report.when == </span><span class="s4">&quot;call&quot; </span><span class="s3">and </span><span class="s1">report.passed) </span><span class="s3">or </span><span class="s1">report.skipped:</span>
+            <span class="s1">self.lastfailed.pop(report.nodeid</span><span class="s3">, None</span><span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">report.failed:</span>
+            <span class="s1">self.lastfailed[report.nodeid] = </span><span class="s3">True</span>
+
+    <span class="s3">def </span><span class="s1">pytest_collectreport(self</span><span class="s3">, </span><span class="s1">report: CollectReport) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">passed = report.outcome </span><span class="s3">in </span><span class="s1">(</span><span class="s4">&quot;passed&quot;</span><span class="s3">, </span><span class="s4">&quot;skipped&quot;</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">passed:</span>
+            <span class="s3">if </span><span class="s1">report.nodeid </span><span class="s3">in </span><span class="s1">self.lastfailed:</span>
+                <span class="s1">self.lastfailed.pop(report.nodeid)</span>
+                <span class="s1">self.lastfailed.update((item.nodeid</span><span class="s3">, True</span><span class="s1">) </span><span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">report.result)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.lastfailed[report.nodeid] = </span><span class="s3">True</span>
+
+    <span class="s1">@hookimpl(hookwrapper=</span><span class="s3">True, </span><span class="s1">tryfirst=</span><span class="s3">True</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">pytest_collection_modifyitems(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">config: Config</span><span class="s3">, </span><span class="s1">items: List[nodes.Item]</span>
+    <span class="s1">) -&gt; Generator[</span><span class="s3">None, None, None</span><span class="s1">]:</span>
+        <span class="s3">yield</span>
+
+        <span class="s3">if not </span><span class="s1">self.active:</span>
+            <span class="s3">return</span>
+
+        <span class="s3">if </span><span class="s1">self.lastfailed:</span>
+            <span class="s1">previously_failed = []</span>
+            <span class="s1">previously_passed = []</span>
+            <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">items:</span>
+                <span class="s3">if </span><span class="s1">item.nodeid </span><span class="s3">in </span><span class="s1">self.lastfailed:</span>
+                    <span class="s1">previously_failed.append(item)</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s1">previously_passed.append(item)</span>
+            <span class="s1">self._previously_failed_count = len(previously_failed)</span>
+
+            <span class="s3">if not </span><span class="s1">previously_failed:</span>
+                <span class="s2"># Running a subset of all tests with recorded failures</span>
+                <span class="s2"># only outside of it.</span>
+                <span class="s1">self._report_status = </span><span class="s4">&quot;%d known failures not in selected tests&quot; </span><span class="s1">% (</span>
+                    <span class="s1">len(self.lastfailed)</span><span class="s3">,</span>
+                <span class="s1">)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">if </span><span class="s1">self.config.getoption(</span><span class="s4">&quot;lf&quot;</span><span class="s1">):</span>
+                    <span class="s1">items[:] = previously_failed</span>
+                    <span class="s1">config.hook.pytest_deselected(items=previously_passed)</span>
+                <span class="s3">else</span><span class="s1">:  </span><span class="s2"># --failedfirst</span>
+                    <span class="s1">items[:] = previously_failed + previously_passed</span>
+
+                <span class="s1">noun = </span><span class="s4">&quot;failure&quot; </span><span class="s3">if </span><span class="s1">self._previously_failed_count == </span><span class="s6">1 </span><span class="s3">else </span><span class="s4">&quot;failures&quot;</span>
+                <span class="s1">suffix = </span><span class="s4">&quot; first&quot; </span><span class="s3">if </span><span class="s1">self.config.getoption(</span><span class="s4">&quot;failedfirst&quot;</span><span class="s1">) </span><span class="s3">else </span><span class="s4">&quot;&quot;</span>
+                <span class="s1">self._report_status = </span><span class="s4">&quot;rerun previous {count} {noun}{suffix}&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">count=self._previously_failed_count</span><span class="s3">, </span><span class="s1">suffix=suffix</span><span class="s3">, </span><span class="s1">noun=noun</span>
+                <span class="s1">)</span>
+
+            <span class="s3">if </span><span class="s1">self._skipped_files &gt; </span><span class="s6">0</span><span class="s1">:</span>
+                <span class="s1">files_noun = </span><span class="s4">&quot;file&quot; </span><span class="s3">if </span><span class="s1">self._skipped_files == </span><span class="s6">1 </span><span class="s3">else </span><span class="s4">&quot;files&quot;</span>
+                <span class="s1">self._report_status += </span><span class="s4">&quot; (skipped {files} {files_noun})&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">files=self._skipped_files</span><span class="s3">, </span><span class="s1">files_noun=files_noun</span>
+                <span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self._report_status = </span><span class="s4">&quot;no previously failed tests, &quot;</span>
+            <span class="s3">if </span><span class="s1">self.config.getoption(</span><span class="s4">&quot;last_failed_no_failures&quot;</span><span class="s1">) == </span><span class="s4">&quot;none&quot;</span><span class="s1">:</span>
+                <span class="s1">self._report_status += </span><span class="s4">&quot;deselecting all items.&quot;</span>
+                <span class="s1">config.hook.pytest_deselected(items=items[:])</span>
+                <span class="s1">items[:] = []</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self._report_status += </span><span class="s4">&quot;not deselecting items.&quot;</span>
+
+    <span class="s3">def </span><span class="s1">pytest_sessionfinish(self</span><span class="s3">, </span><span class="s1">session: Session) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">config = self.config</span>
+        <span class="s3">if </span><span class="s1">config.getoption(</span><span class="s4">&quot;cacheshow&quot;</span><span class="s1">) </span><span class="s3">or </span><span class="s1">hasattr(config</span><span class="s3">, </span><span class="s4">&quot;workerinput&quot;</span><span class="s1">):</span>
+            <span class="s3">return</span>
+
+        <span class="s3">assert </span><span class="s1">config.cache </span><span class="s3">is not None</span>
+        <span class="s1">saved_lastfailed = config.cache.get(</span><span class="s4">&quot;cache/lastfailed&quot;</span><span class="s3">, </span><span class="s1">{})</span>
+        <span class="s3">if </span><span class="s1">saved_lastfailed != self.lastfailed:</span>
+            <span class="s1">config.cache.set(</span><span class="s4">&quot;cache/lastfailed&quot;</span><span class="s3">, </span><span class="s1">self.lastfailed)</span>
+
+
+<span class="s3">class </span><span class="s1">NFPlugin:</span>
+    <span class="s0">&quot;&quot;&quot;Plugin which implements the --nf (run new-first) option.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">config: Config) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">self.config = config</span>
+        <span class="s1">self.active = config.option.newfirst</span>
+        <span class="s3">assert </span><span class="s1">config.cache </span><span class="s3">is not None</span>
+        <span class="s1">self.cached_nodeids = set(config.cache.get(</span><span class="s4">&quot;cache/nodeids&quot;</span><span class="s3">, </span><span class="s1">[]))</span>
+
+    <span class="s1">@hookimpl(hookwrapper=</span><span class="s3">True, </span><span class="s1">tryfirst=</span><span class="s3">True</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">pytest_collection_modifyitems(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">items: List[nodes.Item]</span>
+    <span class="s1">) -&gt; Generator[</span><span class="s3">None, None, None</span><span class="s1">]:</span>
+        <span class="s3">yield</span>
+
+        <span class="s3">if </span><span class="s1">self.active:</span>
+            <span class="s1">new_items: Dict[str</span><span class="s3">, </span><span class="s1">nodes.Item] = {}</span>
+            <span class="s1">other_items: Dict[str</span><span class="s3">, </span><span class="s1">nodes.Item] = {}</span>
+            <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">items:</span>
+                <span class="s3">if </span><span class="s1">item.nodeid </span><span class="s3">not in </span><span class="s1">self.cached_nodeids:</span>
+                    <span class="s1">new_items[item.nodeid] = item</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s1">other_items[item.nodeid] = item</span>
+
+            <span class="s1">items[:] = self._get_increasing_order(</span>
+                <span class="s1">new_items.values()</span>
+            <span class="s1">) + self._get_increasing_order(other_items.values())</span>
+            <span class="s1">self.cached_nodeids.update(new_items)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.cached_nodeids.update(item.nodeid </span><span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">items)</span>
+
+    <span class="s3">def </span><span class="s1">_get_increasing_order(self</span><span class="s3">, </span><span class="s1">items: Iterable[nodes.Item]) -&gt; List[nodes.Item]:</span>
+        <span class="s3">return </span><span class="s1">sorted(items</span><span class="s3">, </span><span class="s1">key=</span><span class="s3">lambda </span><span class="s1">item: item.path.stat().st_mtime</span><span class="s3">, </span><span class="s1">reverse=</span><span class="s3">True</span><span class="s1">)  </span><span class="s2"># type: ignore[no-any-return]</span>
+
+    <span class="s3">def </span><span class="s1">pytest_sessionfinish(self) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+        <span class="s1">config = self.config</span>
+        <span class="s3">if </span><span class="s1">config.getoption(</span><span class="s4">&quot;cacheshow&quot;</span><span class="s1">) </span><span class="s3">or </span><span class="s1">hasattr(config</span><span class="s3">, </span><span class="s4">&quot;workerinput&quot;</span><span class="s1">):</span>
+            <span class="s3">return</span>
+
+        <span class="s3">if </span><span class="s1">config.getoption(</span><span class="s4">&quot;collectonly&quot;</span><span class="s1">):</span>
+            <span class="s3">return</span>
+
+        <span class="s3">assert </span><span class="s1">config.cache </span><span class="s3">is not None</span>
+        <span class="s1">config.cache.set(</span><span class="s4">&quot;cache/nodeids&quot;</span><span class="s3">, </span><span class="s1">sorted(self.cached_nodeids))</span>
+
+
+<span class="s3">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+    <span class="s1">group = parser.getgroup(</span><span class="s4">&quot;general&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--lf&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;--last-failed&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;store_true&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;lf&quot;</span><span class="s3">,</span>
+        <span class="s1">help=</span><span class="s4">&quot;rerun only the tests that failed &quot;</span>
+        <span class="s4">&quot;at the last run (or all if none failed)&quot;</span><span class="s3">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--ff&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;--failed-first&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;store_true&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;failedfirst&quot;</span><span class="s3">,</span>
+        <span class="s1">help=</span><span class="s4">&quot;run all tests, but run the last failures first.</span><span class="s3">\n</span><span class="s4">&quot;</span>
+        <span class="s4">&quot;This may re-order tests and thus lead to &quot;</span>
+        <span class="s4">&quot;repeated fixture setup/teardown.&quot;</span><span class="s3">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--nf&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;--new-first&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;store_true&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;newfirst&quot;</span><span class="s3">,</span>
+        <span class="s1">help=</span><span class="s4">&quot;run tests from new files first, then the rest of the tests &quot;</span>
+        <span class="s4">&quot;sorted by file mtime&quot;</span><span class="s3">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--cache-show&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;append&quot;</span><span class="s3">,</span>
+        <span class="s1">nargs=</span><span class="s4">&quot;?&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;cacheshow&quot;</span><span class="s3">,</span>
+        <span class="s1">help=(</span>
+            <span class="s4">&quot;show cache contents, don't perform collection or tests. &quot;</span>
+            <span class="s4">&quot;Optional argument: glob (default: '*').&quot;</span>
+        <span class="s1">)</span><span class="s3">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--cache-clear&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;store_true&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;cacheclear&quot;</span><span class="s3">,</span>
+        <span class="s1">help=</span><span class="s4">&quot;remove all cache contents at start of test run.&quot;</span><span class="s3">,</span>
+    <span class="s1">)</span>
+    <span class="s1">cache_dir_default = </span><span class="s4">&quot;.pytest_cache&quot;</span>
+    <span class="s3">if </span><span class="s4">&quot;TOX_ENV_DIR&quot; </span><span class="s3">in </span><span class="s1">os.environ:</span>
+        <span class="s1">cache_dir_default = os.path.join(os.environ[</span><span class="s4">&quot;TOX_ENV_DIR&quot;</span><span class="s1">]</span><span class="s3">, </span><span class="s1">cache_dir_default)</span>
+    <span class="s1">parser.addini(</span><span class="s4">&quot;cache_dir&quot;</span><span class="s3">, </span><span class="s1">default=cache_dir_default</span><span class="s3">, </span><span class="s1">help=</span><span class="s4">&quot;cache directory path.&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s4">&quot;--lfnf&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;--last-failed-no-failures&quot;</span><span class="s3">,</span>
+        <span class="s1">action=</span><span class="s4">&quot;store&quot;</span><span class="s3">,</span>
+        <span class="s1">dest=</span><span class="s4">&quot;last_failed_no_failures&quot;</span><span class="s3">,</span>
+        <span class="s1">choices=(</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;none&quot;</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s1">default=</span><span class="s4">&quot;all&quot;</span><span class="s3">,</span>
+        <span class="s1">help=</span><span class="s4">&quot;which tests to run with no previously (known) failures.&quot;</span><span class="s3">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">pytest_cmdline_main(config: Config) -&gt; Optional[Union[int</span><span class="s3">, </span><span class="s1">ExitCode]]:</span>
+    <span class="s3">if </span><span class="s1">config.option.cacheshow:</span>
+        <span class="s3">from </span><span class="s1">_pytest.main </span><span class="s3">import </span><span class="s1">wrap_session</span>
+
+        <span class="s3">return </span><span class="s1">wrap_session(config</span><span class="s3">, </span><span class="s1">cacheshow)</span>
+    <span class="s3">return None</span>
+
+
+<span class="s1">@hookimpl(tryfirst=</span><span class="s3">True</span><span class="s1">)</span>
+<span class="s3">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+    <span class="s1">config.cache = Cache.for_config(config</span><span class="s3">, </span><span class="s1">_ispytest=</span><span class="s3">True</span><span class="s1">)</span>
+    <span class="s1">config.pluginmanager.register(LFPlugin(config)</span><span class="s3">, </span><span class="s4">&quot;lfplugin&quot;</span><span class="s1">)</span>
+    <span class="s1">config.pluginmanager.register(NFPlugin(config)</span><span class="s3">, </span><span class="s4">&quot;nfplugin&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s3">def </span><span class="s1">cache(request: FixtureRequest) -&gt; Cache:</span>
+    <span class="s0">&quot;&quot;&quot;Return a cache object that can persist state between testing sessions. 
+ 
+    cache.get(key, default) 
+    cache.set(key, value) 
+ 
+    Keys must be ``/`` separated strings, where the first part is usually the 
+    name of your plugin or application to avoid clashes with other cache users. 
+ 
+    Values can be any object handled by the json stdlib module. 
+    &quot;&quot;&quot;</span>
+    <span class="s3">assert </span><span class="s1">request.config.cache </span><span class="s3">is not None</span>
+    <span class="s3">return </span><span class="s1">request.config.cache</span>
+
+
+<span class="s3">def </span><span class="s1">pytest_report_header(config: Config) -&gt; Optional[str]:</span>
+    <span class="s0">&quot;&quot;&quot;Display cachedir with --cache-show and if non-default.&quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">config.option.verbose &gt; </span><span class="s6">0 </span><span class="s3">or </span><span class="s1">config.getini(</span><span class="s4">&quot;cache_dir&quot;</span><span class="s1">) != </span><span class="s4">&quot;.pytest_cache&quot;</span><span class="s1">:</span>
+        <span class="s3">assert </span><span class="s1">config.cache </span><span class="s3">is not None</span>
+        <span class="s1">cachedir = config.cache._cachedir</span>
+        <span class="s2"># TODO: evaluate generating upward relative paths</span>
+        <span class="s2"># starting with .., ../.. if sensible</span>
+
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">displaypath = cachedir.relative_to(config.rootpath)</span>
+        <span class="s3">except </span><span class="s1">ValueError:</span>
+            <span class="s1">displaypath = cachedir</span>
+        <span class="s3">return </span><span class="s4">f&quot;cachedir: </span><span class="s3">{</span><span class="s1">displaypath</span><span class="s3">}</span><span class="s4">&quot;</span>
+    <span class="s3">return None</span>
+
+
+<span class="s3">def </span><span class="s1">cacheshow(config: Config</span><span class="s3">, </span><span class="s1">session: Session) -&gt; int:</span>
+    <span class="s3">from </span><span class="s1">pprint </span><span class="s3">import </span><span class="s1">pformat</span>
+
+    <span class="s3">assert </span><span class="s1">config.cache </span><span class="s3">is not None</span>
+
+    <span class="s1">tw = TerminalWriter()</span>
+    <span class="s1">tw.line(</span><span class="s4">&quot;cachedir: &quot; </span><span class="s1">+ str(config.cache._cachedir))</span>
+    <span class="s3">if not </span><span class="s1">config.cache._cachedir.is_dir():</span>
+        <span class="s1">tw.line(</span><span class="s4">&quot;cache is empty&quot;</span><span class="s1">)</span>
+        <span class="s3">return </span><span class="s6">0</span>
+
+    <span class="s1">glob = config.option.cacheshow[</span><span class="s6">0</span><span class="s1">]</span>
+    <span class="s3">if </span><span class="s1">glob </span><span class="s3">is None</span><span class="s1">:</span>
+        <span class="s1">glob = </span><span class="s4">&quot;*&quot;</span>
+
+    <span class="s1">dummy = object()</span>
+    <span class="s1">basedir = config.cache._cachedir</span>
+    <span class="s1">vdir = basedir / Cache._CACHE_PREFIX_VALUES</span>
+    <span class="s1">tw.sep(</span><span class="s4">&quot;-&quot;</span><span class="s3">, </span><span class="s4">&quot;cache values for %r&quot; </span><span class="s1">% glob)</span>
+    <span class="s3">for </span><span class="s1">valpath </span><span class="s3">in </span><span class="s1">sorted(x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">vdir.rglob(glob) </span><span class="s3">if </span><span class="s1">x.is_file()):</span>
+        <span class="s1">key = str(valpath.relative_to(vdir))</span>
+        <span class="s1">val = config.cache.get(key</span><span class="s3">, </span><span class="s1">dummy)</span>
+        <span class="s3">if </span><span class="s1">val </span><span class="s3">is </span><span class="s1">dummy:</span>
+            <span class="s1">tw.line(</span><span class="s4">&quot;%s contains unreadable content, will be ignored&quot; </span><span class="s1">% key)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">tw.line(</span><span class="s4">&quot;%s contains:&quot; </span><span class="s1">% key)</span>
+            <span class="s3">for </span><span class="s1">line </span><span class="s3">in </span><span class="s1">pformat(val).splitlines():</span>
+                <span class="s1">tw.line(</span><span class="s4">&quot;  &quot; </span><span class="s1">+ line)</span>
+
+    <span class="s1">ddir = basedir / Cache._CACHE_PREFIX_DIRS</span>
+    <span class="s3">if </span><span class="s1">ddir.is_dir():</span>
+        <span class="s1">contents = sorted(ddir.rglob(glob))</span>
+        <span class="s1">tw.sep(</span><span class="s4">&quot;-&quot;</span><span class="s3">, </span><span class="s4">&quot;cache directories for %r&quot; </span><span class="s1">% glob)</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">contents:</span>
+            <span class="s2"># if p.is_dir():</span>
+            <span class="s2">#    print(&quot;%s/&quot; % p.relative_to(basedir))</span>
+            <span class="s3">if </span><span class="s1">p.is_file():</span>
+                <span class="s1">key = str(p.relative_to(basedir))</span>
+                <span class="s1">tw.line(</span><span class="s4">f&quot;</span><span class="s3">{</span><span class="s1">key</span><span class="s3">} </span><span class="s4">is a file of length </span><span class="s3">{</span><span class="s1">p.stat().st_size</span><span class="s3">:</span><span class="s4">d</span><span class="s3">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+    <span class="s3">return </span><span class="s6">0</span>
+</pre>
+</body>
+</html>

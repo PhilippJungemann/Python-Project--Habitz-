@@ -1,0 +1,132 @@
+<html>
+<head>
+<title>stash.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+stash.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">cast</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Dict</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Generic</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TypeVar</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+
+<span class="s1">__all__ = [</span><span class="s2">&quot;Stash&quot;</span><span class="s0">, </span><span class="s2">&quot;StashKey&quot;</span><span class="s1">]</span>
+
+
+<span class="s1">T = TypeVar(</span><span class="s2">&quot;T&quot;</span><span class="s1">)</span>
+<span class="s1">D = TypeVar(</span><span class="s2">&quot;D&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">StashKey(Generic[T]):</span>
+    <span class="s3">&quot;&quot;&quot;``StashKey`` is an object used as a key to a :class:`Stash`. 
+ 
+    A ``StashKey`` is associated with the type ``T`` of the value of the key. 
+ 
+    A ``StashKey`` is unique and cannot conflict with another key. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ = ()</span>
+
+
+<span class="s0">class </span><span class="s1">Stash:</span>
+    <span class="s3">r&quot;&quot;&quot;``Stash`` is a type-safe heterogeneous mutable mapping that 
+    allows keys and value types to be defined separately from 
+    where it (the ``Stash``) is created. 
+ 
+    Usually you will be given an object which has a ``Stash``, for example 
+    :class:`~pytest.Config` or a :class:`~_pytest.nodes.Node`: 
+ 
+    .. code-block:: python 
+ 
+        stash: Stash = some_object.stash 
+ 
+    If a module or plugin wants to store data in this ``Stash``, it creates 
+    :class:`StashKey`\s for its keys (at the module level): 
+ 
+    .. code-block:: python 
+ 
+        # At the top-level of the module 
+        some_str_key = StashKey[str]() 
+        some_bool_key = StashKey[bool]() 
+ 
+    To store information: 
+ 
+    .. code-block:: python 
+ 
+        # Value type must match the key. 
+        stash[some_str_key] = &quot;value&quot; 
+        stash[some_bool_key] = True 
+ 
+    To retrieve the information: 
+ 
+    .. code-block:: python 
+ 
+        # The static type of some_str is str. 
+        some_str = stash[some_str_key] 
+        # The static type of some_bool is bool. 
+        some_bool = stash[some_bool_key] 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ = (</span><span class="s2">&quot;_storage&quot;</span><span class="s0">,</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self._storage: Dict[StashKey[Any]</span><span class="s0">, </span><span class="s1">object] = {}</span>
+
+    <span class="s0">def </span><span class="s1">__setitem__(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]</span><span class="s0">, </span><span class="s1">value: T) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Set a value for key.&quot;&quot;&quot;</span>
+        <span class="s1">self._storage[key] = value</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]) -&gt; T:</span>
+        <span class="s3">&quot;&quot;&quot;Get the value for key. 
+ 
+        Raises ``KeyError`` if the key wasn't set before. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">cast(T</span><span class="s0">, </span><span class="s1">self._storage[key])</span>
+
+    <span class="s0">def </span><span class="s1">get(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]</span><span class="s0">, </span><span class="s1">default: D) -&gt; Union[T</span><span class="s0">, </span><span class="s1">D]:</span>
+        <span class="s3">&quot;&quot;&quot;Get the value for key, or return default if the key wasn't set 
+        before.&quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self[key]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">return </span><span class="s1">default</span>
+
+    <span class="s0">def </span><span class="s1">setdefault(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]</span><span class="s0">, </span><span class="s1">default: T) -&gt; T:</span>
+        <span class="s3">&quot;&quot;&quot;Return the value of key if already set, otherwise set the value 
+        of key to default and return default.&quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self[key]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s1">self[key] = default</span>
+            <span class="s0">return </span><span class="s1">default</span>
+
+    <span class="s0">def </span><span class="s1">__delitem__(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Delete the value for key. 
+ 
+        Raises ``KeyError`` if the key wasn't set before. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">del </span><span class="s1">self._storage[key]</span>
+
+    <span class="s0">def </span><span class="s1">__contains__(self</span><span class="s0">, </span><span class="s1">key: StashKey[T]) -&gt; bool:</span>
+        <span class="s3">&quot;&quot;&quot;Return whether key was set.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self._storage</span>
+
+    <span class="s0">def </span><span class="s1">__len__(self) -&gt; int:</span>
+        <span class="s3">&quot;&quot;&quot;Return how many items exist in the stash.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">len(self._storage)</span>
+</pre>
+</body>
+</html>

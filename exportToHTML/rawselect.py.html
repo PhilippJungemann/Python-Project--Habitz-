@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>rawselect.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+rawselect.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Sequence</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Union</span><span class="s0">, </span><span class="s1">Dict</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">Style</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">, </span><span class="s1">DEFAULT_SELECTED_POINTER</span>
+<span class="s0">from </span><span class="s1">questionary.prompts </span><span class="s0">import </span><span class="s1">select</span>
+<span class="s0">from </span><span class="s1">questionary.prompts.common </span><span class="s0">import </span><span class="s1">Choice</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">def </span><span class="s1">rawselect(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">choices: Sequence[Union[str</span><span class="s0">, </span><span class="s1">Choice</span><span class="s0">, </span><span class="s1">Dict[str</span><span class="s0">, </span><span class="s1">Any]]]</span><span class="s0">,</span>
+    <span class="s1">default: Optional[str] = </span><span class="s0">None,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">pointer: Optional[str] = DEFAULT_SELECTED_POINTER</span><span class="s0">,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s2">&quot;&quot;&quot;Ask the user to select one item from a list of choices using shortcuts. 
+ 
+    The user can only select one option. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.rawselect( 
+        ...     &quot;What do you want to do?&quot;, 
+        ...     choices=[ 
+        ...         &quot;Order a pizza&quot;, 
+        ...         &quot;Make a reservation&quot;, 
+        ...         &quot;Ask for opening hours&quot; 
+        ...     ]).ask() 
+        ? What do you want to do? Order a pizza 
+        'Order a pizza' 
+ 
+    .. image:: ../images/rawselect.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+    Args: 
+        message: Question text. 
+ 
+        choices: Items shown in the selection, this can contain :class:`Choice` or 
+                 or :class:`Separator` objects or simple items as strings. Passing 
+                 :class:`Choice` objects, allows you to configure the item more 
+                 (e.g. preselecting it or disabling it). 
+ 
+        default: Default return value (single value). 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?``. 
+ 
+        pointer: Pointer symbol in front of the currently highlighted element. 
+                 By default this is a ``»``. 
+                 Use ``None`` to disable it. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using ``.ask()``). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">select.select(</span>
+        <span class="s1">message</span><span class="s0">,</span>
+        <span class="s1">choices</span><span class="s0">,</span>
+        <span class="s1">default</span><span class="s0">,</span>
+        <span class="s1">qmark</span><span class="s0">,</span>
+        <span class="s1">pointer</span><span class="s0">,</span>
+        <span class="s1">style</span><span class="s0">,</span>
+        <span class="s1">use_shortcuts=</span><span class="s0">True,</span>
+        <span class="s1">use_arrow_keys=</span><span class="s0">False,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">)</span>
+</pre>
+</body>
+</html>

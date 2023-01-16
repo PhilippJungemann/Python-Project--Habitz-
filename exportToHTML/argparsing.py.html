@@ -1,0 +1,557 @@
+<html>
+<head>
+<title>argparsing.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+argparsing.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">argparse</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">gettext </span><span class="s0">import </span><span class="s1">gettext</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Callable</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">cast</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Dict</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">List</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Mapping</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Sequence</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Tuple</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TYPE_CHECKING</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+<span class="s0">import </span><span class="s1">_pytest._io</span>
+<span class="s0">from </span><span class="s1">_pytest.compat </span><span class="s0">import </span><span class="s1">final</span>
+<span class="s0">from </span><span class="s1">_pytest.config.exceptions </span><span class="s0">import </span><span class="s1">UsageError</span>
+<span class="s0">from </span><span class="s1">_pytest.deprecated </span><span class="s0">import </span><span class="s1">ARGUMENT_PERCENT_DEFAULT</span>
+<span class="s0">from </span><span class="s1">_pytest.deprecated </span><span class="s0">import </span><span class="s1">ARGUMENT_TYPE_STR</span>
+<span class="s0">from </span><span class="s1">_pytest.deprecated </span><span class="s0">import </span><span class="s1">ARGUMENT_TYPE_STR_CHOICE</span>
+<span class="s0">from </span><span class="s1">_pytest.deprecated </span><span class="s0">import </span><span class="s1">check_ispytest</span>
+
+<span class="s0">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">NoReturn</span>
+    <span class="s0">from </span><span class="s1">typing_extensions </span><span class="s0">import </span><span class="s1">Literal</span>
+
+<span class="s1">FILE_OR_DIR = </span><span class="s2">&quot;file_or_dir&quot;</span>
+
+
+<span class="s1">@final</span>
+<span class="s0">class </span><span class="s1">Parser:</span>
+    <span class="s3">&quot;&quot;&quot;Parser for command line arguments and ini-file values. 
+ 
+    :ivar extra_info: Dict of generic param -&gt; value to display in case 
+        there's an error processing the command line arguments. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">prog: Optional[str] = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">usage: Optional[str] = </span><span class="s0">None,</span>
+        <span class="s1">processopt: Optional[Callable[[</span><span class="s2">&quot;Argument&quot;</span><span class="s1">]</span><span class="s0">, None</span><span class="s1">]] = </span><span class="s0">None,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">_ispytest: bool = </span><span class="s0">False,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self._anonymous = OptionGroup(</span><span class="s2">&quot;custom options&quot;</span><span class="s0">, </span><span class="s1">parser=self</span><span class="s0">, </span><span class="s1">_ispytest=</span><span class="s0">True</span><span class="s1">)</span>
+        <span class="s1">self._groups: List[OptionGroup] = []</span>
+        <span class="s1">self._processopt = processopt</span>
+        <span class="s1">self._usage = usage</span>
+        <span class="s1">self._inidict: Dict[str</span><span class="s0">, </span><span class="s1">Tuple[str</span><span class="s0">, </span><span class="s1">Optional[str]</span><span class="s0">, </span><span class="s1">Any]] = {}</span>
+        <span class="s1">self._ininames: List[str] = []</span>
+        <span class="s1">self.extra_info: Dict[str</span><span class="s0">, </span><span class="s1">Any] = {}</span>
+
+    <span class="s0">def </span><span class="s1">processoption(self</span><span class="s0">, </span><span class="s1">option: </span><span class="s2">&quot;Argument&quot;</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">self._processopt:</span>
+            <span class="s0">if </span><span class="s1">option.dest:</span>
+                <span class="s1">self._processopt(option)</span>
+
+    <span class="s0">def </span><span class="s1">getgroup(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">name: str</span><span class="s0">, </span><span class="s1">description: str = </span><span class="s2">&quot;&quot;</span><span class="s0">, </span><span class="s1">after: Optional[str] = </span><span class="s0">None</span>
+    <span class="s1">) -&gt; </span><span class="s2">&quot;OptionGroup&quot;</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Get (or create) a named option Group. 
+ 
+        :name: Name of the option group. 
+        :description: Long description for --help output. 
+        :after: Name of another group, used for ordering --help output. 
+ 
+        The returned group object has an ``addoption`` method with the same 
+        signature as :func:`parser.addoption &lt;pytest.Parser.addoption&gt;` but 
+        will be shown in the respective group in the output of 
+        ``pytest. --help``. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">group </span><span class="s0">in </span><span class="s1">self._groups:</span>
+            <span class="s0">if </span><span class="s1">group.name == name:</span>
+                <span class="s0">return </span><span class="s1">group</span>
+        <span class="s1">group = OptionGroup(name</span><span class="s0">, </span><span class="s1">description</span><span class="s0">, </span><span class="s1">parser=self</span><span class="s0">, </span><span class="s1">_ispytest=</span><span class="s0">True</span><span class="s1">)</span>
+        <span class="s1">i = </span><span class="s4">0</span>
+        <span class="s0">for </span><span class="s1">i</span><span class="s0">, </span><span class="s1">grp </span><span class="s0">in </span><span class="s1">enumerate(self._groups):</span>
+            <span class="s0">if </span><span class="s1">grp.name == after:</span>
+                <span class="s0">break</span>
+        <span class="s1">self._groups.insert(i + </span><span class="s4">1</span><span class="s0">, </span><span class="s1">group)</span>
+        <span class="s0">return </span><span class="s1">group</span>
+
+    <span class="s0">def </span><span class="s1">addoption(self</span><span class="s0">, </span><span class="s1">*opts: str</span><span class="s0">, </span><span class="s1">**attrs: Any) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Register a command line option. 
+ 
+        :opts: Option names, can be short or long options. 
+        :attrs: Same attributes which the ``add_argument()`` function of the 
+           `argparse library &lt;https://docs.python.org/library/argparse.html&gt;`_ 
+           accepts. 
+ 
+        After command line parsing, options are available on the pytest config 
+        object via ``config.option.NAME`` where ``NAME`` is usually set 
+        by passing a ``dest`` attribute, for example 
+        ``addoption(&quot;--long&quot;, dest=&quot;NAME&quot;, ...)``. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self._anonymous.addoption(*opts</span><span class="s0">, </span><span class="s1">**attrs)</span>
+
+    <span class="s0">def </span><span class="s1">parse(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">args: Sequence[Union[str</span><span class="s0">, </span><span class="s2">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span><span class="s0">,</span>
+        <span class="s1">namespace: Optional[argparse.Namespace] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; argparse.Namespace:</span>
+        <span class="s0">from </span><span class="s1">_pytest._argcomplete </span><span class="s0">import </span><span class="s1">try_argcomplete</span>
+
+        <span class="s1">self.optparser = self._getparser()</span>
+        <span class="s1">try_argcomplete(self.optparser)</span>
+        <span class="s1">strargs = [os.fspath(x) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">args]</span>
+        <span class="s0">return </span><span class="s1">self.optparser.parse_args(strargs</span><span class="s0">, </span><span class="s1">namespace=namespace)</span>
+
+    <span class="s0">def </span><span class="s1">_getparser(self) -&gt; </span><span class="s2">&quot;MyOptionParser&quot;</span><span class="s1">:</span>
+        <span class="s0">from </span><span class="s1">_pytest._argcomplete </span><span class="s0">import </span><span class="s1">filescompleter</span>
+
+        <span class="s1">optparser = MyOptionParser(self</span><span class="s0">, </span><span class="s1">self.extra_info</span><span class="s0">, </span><span class="s1">prog=self.prog)</span>
+        <span class="s1">groups = self._groups + [self._anonymous]</span>
+        <span class="s0">for </span><span class="s1">group </span><span class="s0">in </span><span class="s1">groups:</span>
+            <span class="s0">if </span><span class="s1">group.options:</span>
+                <span class="s1">desc = group.description </span><span class="s0">or </span><span class="s1">group.name</span>
+                <span class="s1">arggroup = optparser.add_argument_group(desc)</span>
+                <span class="s0">for </span><span class="s1">option </span><span class="s0">in </span><span class="s1">group.options:</span>
+                    <span class="s1">n = option.names()</span>
+                    <span class="s1">a = option.attrs()</span>
+                    <span class="s1">arggroup.add_argument(*n</span><span class="s0">, </span><span class="s1">**a)</span>
+        <span class="s1">file_or_dir_arg = optparser.add_argument(FILE_OR_DIR</span><span class="s0">, </span><span class="s1">nargs=</span><span class="s2">&quot;*&quot;</span><span class="s1">)</span>
+        <span class="s5"># bash like autocompletion for dirs (appending '/')</span>
+        <span class="s5"># Type ignored because typeshed doesn't know about argcomplete.</span>
+        <span class="s1">file_or_dir_arg.completer = filescompleter  </span><span class="s5"># type: ignore</span>
+        <span class="s0">return </span><span class="s1">optparser</span>
+
+    <span class="s0">def </span><span class="s1">parse_setoption(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">args: Sequence[Union[str</span><span class="s0">, </span><span class="s2">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span><span class="s0">,</span>
+        <span class="s1">option: argparse.Namespace</span><span class="s0">,</span>
+        <span class="s1">namespace: Optional[argparse.Namespace] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; List[str]:</span>
+        <span class="s1">parsedoption = self.parse(args</span><span class="s0">, </span><span class="s1">namespace=namespace)</span>
+        <span class="s0">for </span><span class="s1">name</span><span class="s0">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">parsedoption.__dict__.items():</span>
+            <span class="s1">setattr(option</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">value)</span>
+        <span class="s0">return </span><span class="s1">cast(List[str]</span><span class="s0">, </span><span class="s1">getattr(parsedoption</span><span class="s0">, </span><span class="s1">FILE_OR_DIR))</span>
+
+    <span class="s0">def </span><span class="s1">parse_known_args(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">args: Sequence[Union[str</span><span class="s0">, </span><span class="s2">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span><span class="s0">,</span>
+        <span class="s1">namespace: Optional[argparse.Namespace] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; argparse.Namespace:</span>
+        <span class="s3">&quot;&quot;&quot;Parse and return a namespace object with known arguments at this point.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self.parse_known_and_unknown_args(args</span><span class="s0">, </span><span class="s1">namespace=namespace)[</span><span class="s4">0</span><span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">parse_known_and_unknown_args(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">args: Sequence[Union[str</span><span class="s0">, </span><span class="s2">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span><span class="s0">,</span>
+        <span class="s1">namespace: Optional[argparse.Namespace] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; Tuple[argparse.Namespace</span><span class="s0">, </span><span class="s1">List[str]]:</span>
+        <span class="s3">&quot;&quot;&quot;Parse and return a namespace object with known arguments, and 
+        the remaining arguments unknown at this point.&quot;&quot;&quot;</span>
+        <span class="s1">optparser = self._getparser()</span>
+        <span class="s1">strargs = [os.fspath(x) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">args]</span>
+        <span class="s0">return </span><span class="s1">optparser.parse_known_args(strargs</span><span class="s0">, </span><span class="s1">namespace=namespace)</span>
+
+    <span class="s0">def </span><span class="s1">addini(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">name: str</span><span class="s0">,</span>
+        <span class="s1">help: str</span><span class="s0">,</span>
+        <span class="s1">type: Optional[</span>
+            <span class="s2">&quot;Literal['string', 'paths', 'pathlist', 'args', 'linelist', 'bool']&quot;</span>
+        <span class="s1">] = </span><span class="s0">None,</span>
+        <span class="s1">default=</span><span class="s0">None,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Register an ini-file option. 
+ 
+        :name: 
+            Name of the ini-variable. 
+        :type: 
+            Type of the variable. Can be: 
+ 
+                * ``string``: a string 
+                * ``bool``: a boolean 
+                * ``args``: a list of strings, separated as in a shell 
+                * ``linelist``: a list of strings, separated by line breaks 
+                * ``paths``: a list of :class:`pathlib.Path`, separated as in a shell 
+                * ``pathlist``: a list of ``py.path``, separated as in a shell 
+ 
+            .. versionadded:: 7.0 
+                The ``paths`` variable type. 
+ 
+            Defaults to ``string`` if ``None`` or not passed. 
+        :default: 
+            Default value if no ini-file option exists but is queried. 
+ 
+        The value of ini-variables can be retrieved via a call to 
+        :py:func:`config.getini(name) &lt;pytest.Config.getini&gt;`. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">assert </span><span class="s1">type </span><span class="s0">in </span><span class="s1">(</span><span class="s0">None, </span><span class="s2">&quot;string&quot;</span><span class="s0">, </span><span class="s2">&quot;paths&quot;</span><span class="s0">, </span><span class="s2">&quot;pathlist&quot;</span><span class="s0">, </span><span class="s2">&quot;args&quot;</span><span class="s0">, </span><span class="s2">&quot;linelist&quot;</span><span class="s0">, </span><span class="s2">&quot;bool&quot;</span><span class="s1">)</span>
+        <span class="s1">self._inidict[name] = (help</span><span class="s0">, </span><span class="s1">type</span><span class="s0">, </span><span class="s1">default)</span>
+        <span class="s1">self._ininames.append(name)</span>
+
+
+<span class="s0">class </span><span class="s1">ArgumentError(Exception):</span>
+    <span class="s3">&quot;&quot;&quot;Raised if an Argument instance is created with invalid or 
+    inconsistent arguments.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">msg: str</span><span class="s0">, </span><span class="s1">option: Union[</span><span class="s2">&quot;Argument&quot;</span><span class="s0">, </span><span class="s1">str]) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.msg = msg</span>
+        <span class="s1">self.option_id = str(option)</span>
+
+    <span class="s0">def </span><span class="s1">__str__(self) -&gt; str:</span>
+        <span class="s0">if </span><span class="s1">self.option_id:</span>
+            <span class="s0">return </span><span class="s2">f&quot;option </span><span class="s0">{</span><span class="s1">self.option_id</span><span class="s0">}</span><span class="s2">: </span><span class="s0">{</span><span class="s1">self.msg</span><span class="s0">}</span><span class="s2">&quot;</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.msg</span>
+
+
+<span class="s0">class </span><span class="s1">Argument:</span>
+    <span class="s3">&quot;&quot;&quot;Class that mimics the necessary behaviour of optparse.Option. 
+ 
+    It's currently a least effort implementation and ignoring choices 
+    and integer prefixes. 
+ 
+    https://docs.python.org/3/library/optparse.html#optparse-standard-option-types 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_typ_map = {</span><span class="s2">&quot;int&quot;</span><span class="s1">: int</span><span class="s0">, </span><span class="s2">&quot;string&quot;</span><span class="s1">: str</span><span class="s0">, </span><span class="s2">&quot;float&quot;</span><span class="s1">: float</span><span class="s0">, </span><span class="s2">&quot;complex&quot;</span><span class="s1">: complex}</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*names: str</span><span class="s0">, </span><span class="s1">**attrs: Any) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Store parms in private vars for use in add_argument.&quot;&quot;&quot;</span>
+        <span class="s1">self._attrs = attrs</span>
+        <span class="s1">self._short_opts: List[str] = []</span>
+        <span class="s1">self._long_opts: List[str] = []</span>
+        <span class="s0">if </span><span class="s2">&quot;%default&quot; </span><span class="s0">in </span><span class="s1">(attrs.get(</span><span class="s2">&quot;help&quot;</span><span class="s1">) </span><span class="s0">or </span><span class="s2">&quot;&quot;</span><span class="s1">):</span>
+            <span class="s1">warnings.warn(ARGUMENT_PERCENT_DEFAULT</span><span class="s0">, </span><span class="s1">stacklevel=</span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">typ = attrs[</span><span class="s2">&quot;type&quot;</span><span class="s1">]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s5"># This might raise a keyerror as well, don't want to catch that.</span>
+            <span class="s0">if </span><span class="s1">isinstance(typ</span><span class="s0">, </span><span class="s1">str):</span>
+                <span class="s0">if </span><span class="s1">typ == </span><span class="s2">&quot;choice&quot;</span><span class="s1">:</span>
+                    <span class="s1">warnings.warn(</span>
+                        <span class="s1">ARGUMENT_TYPE_STR_CHOICE.format(typ=typ</span><span class="s0">, </span><span class="s1">names=names)</span><span class="s0">,</span>
+                        <span class="s1">stacklevel=</span><span class="s4">4</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+                    <span class="s5"># argparse expects a type here take it from</span>
+                    <span class="s5"># the type of the first element</span>
+                    <span class="s1">attrs[</span><span class="s2">&quot;type&quot;</span><span class="s1">] = type(attrs[</span><span class="s2">&quot;choices&quot;</span><span class="s1">][</span><span class="s4">0</span><span class="s1">])</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">warnings.warn(</span>
+                        <span class="s1">ARGUMENT_TYPE_STR.format(typ=typ</span><span class="s0">, </span><span class="s1">names=names)</span><span class="s0">, </span><span class="s1">stacklevel=</span><span class="s4">4</span>
+                    <span class="s1">)</span>
+                    <span class="s1">attrs[</span><span class="s2">&quot;type&quot;</span><span class="s1">] = Argument._typ_map[typ]</span>
+                <span class="s5"># Used in test_parseopt -&gt; test_parse_defaultgetter.</span>
+                <span class="s1">self.type = attrs[</span><span class="s2">&quot;type&quot;</span><span class="s1">]</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">self.type = typ</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s5"># Attribute existence is tested in Config._processopt.</span>
+            <span class="s1">self.default = attrs[</span><span class="s2">&quot;default&quot;</span><span class="s1">]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">pass</span>
+        <span class="s1">self._set_opt_strings(names)</span>
+        <span class="s1">dest: Optional[str] = attrs.get(</span><span class="s2">&quot;dest&quot;</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">dest:</span>
+            <span class="s1">self.dest = dest</span>
+        <span class="s0">elif </span><span class="s1">self._long_opts:</span>
+            <span class="s1">self.dest = self._long_opts[</span><span class="s4">0</span><span class="s1">][</span><span class="s4">2</span><span class="s1">:].replace(</span><span class="s2">&quot;-&quot;</span><span class="s0">, </span><span class="s2">&quot;_&quot;</span><span class="s1">)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self.dest = self._short_opts[</span><span class="s4">0</span><span class="s1">][</span><span class="s4">1</span><span class="s1">:]</span>
+            <span class="s0">except </span><span class="s1">IndexError </span><span class="s0">as </span><span class="s1">e:</span>
+                <span class="s1">self.dest = </span><span class="s2">&quot;???&quot;  </span><span class="s5"># Needed for the error repr.</span>
+                <span class="s0">raise </span><span class="s1">ArgumentError(</span><span class="s2">&quot;need a long or short option&quot;</span><span class="s0">, </span><span class="s1">self) </span><span class="s0">from </span><span class="s1">e</span>
+
+    <span class="s0">def </span><span class="s1">names(self) -&gt; List[str]:</span>
+        <span class="s0">return </span><span class="s1">self._short_opts + self._long_opts</span>
+
+    <span class="s0">def </span><span class="s1">attrs(self) -&gt; Mapping[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s5"># Update any attributes set by processopt.</span>
+        <span class="s1">attrs = </span><span class="s2">&quot;default dest help&quot;</span><span class="s1">.split()</span>
+        <span class="s1">attrs.append(self.dest)</span>
+        <span class="s0">for </span><span class="s1">attr </span><span class="s0">in </span><span class="s1">attrs:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self._attrs[attr] = getattr(self</span><span class="s0">, </span><span class="s1">attr)</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s0">pass</span>
+        <span class="s0">if </span><span class="s1">self._attrs.get(</span><span class="s2">&quot;help&quot;</span><span class="s1">):</span>
+            <span class="s1">a = self._attrs[</span><span class="s2">&quot;help&quot;</span><span class="s1">]</span>
+            <span class="s1">a = a.replace(</span><span class="s2">&quot;%default&quot;</span><span class="s0">, </span><span class="s2">&quot;%(default)s&quot;</span><span class="s1">)</span>
+            <span class="s5"># a = a.replace('%prog', '%(prog)s')</span>
+            <span class="s1">self._attrs[</span><span class="s2">&quot;help&quot;</span><span class="s1">] = a</span>
+        <span class="s0">return </span><span class="s1">self._attrs</span>
+
+    <span class="s0">def </span><span class="s1">_set_opt_strings(self</span><span class="s0">, </span><span class="s1">opts: Sequence[str]) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Directly from optparse. 
+ 
+        Might not be necessary as this is passed to argparse later on. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">opt </span><span class="s0">in </span><span class="s1">opts:</span>
+            <span class="s0">if </span><span class="s1">len(opt) &lt; </span><span class="s4">2</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">ArgumentError(</span>
+                    <span class="s2">&quot;invalid option string %r: &quot;</span>
+                    <span class="s2">&quot;must be at least two characters long&quot; </span><span class="s1">% opt</span><span class="s0">,</span>
+                    <span class="s1">self</span><span class="s0">,</span>
+                <span class="s1">)</span>
+            <span class="s0">elif </span><span class="s1">len(opt) == </span><span class="s4">2</span><span class="s1">:</span>
+                <span class="s0">if not </span><span class="s1">(opt[</span><span class="s4">0</span><span class="s1">] == </span><span class="s2">&quot;-&quot; </span><span class="s0">and </span><span class="s1">opt[</span><span class="s4">1</span><span class="s1">] != </span><span class="s2">&quot;-&quot;</span><span class="s1">):</span>
+                    <span class="s0">raise </span><span class="s1">ArgumentError(</span>
+                        <span class="s2">&quot;invalid short option string %r: &quot;</span>
+                        <span class="s2">&quot;must be of the form -x, (x any non-dash char)&quot; </span><span class="s1">% opt</span><span class="s0">,</span>
+                        <span class="s1">self</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+                <span class="s1">self._short_opts.append(opt)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">if not </span><span class="s1">(opt[</span><span class="s4">0</span><span class="s1">:</span><span class="s4">2</span><span class="s1">] == </span><span class="s2">&quot;--&quot; </span><span class="s0">and </span><span class="s1">opt[</span><span class="s4">2</span><span class="s1">] != </span><span class="s2">&quot;-&quot;</span><span class="s1">):</span>
+                    <span class="s0">raise </span><span class="s1">ArgumentError(</span>
+                        <span class="s2">&quot;invalid long option string %r: &quot;</span>
+                        <span class="s2">&quot;must start with --, followed by non-dash&quot; </span><span class="s1">% opt</span><span class="s0">,</span>
+                        <span class="s1">self</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+                <span class="s1">self._long_opts.append(opt)</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s1">args: List[str] = []</span>
+        <span class="s0">if </span><span class="s1">self._short_opts:</span>
+            <span class="s1">args += [</span><span class="s2">&quot;_short_opts: &quot; </span><span class="s1">+ repr(self._short_opts)]</span>
+        <span class="s0">if </span><span class="s1">self._long_opts:</span>
+            <span class="s1">args += [</span><span class="s2">&quot;_long_opts: &quot; </span><span class="s1">+ repr(self._long_opts)]</span>
+        <span class="s1">args += [</span><span class="s2">&quot;dest: &quot; </span><span class="s1">+ repr(self.dest)]</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s2">&quot;type&quot;</span><span class="s1">):</span>
+            <span class="s1">args += [</span><span class="s2">&quot;type: &quot; </span><span class="s1">+ repr(self.type)]</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s2">&quot;default&quot;</span><span class="s1">):</span>
+            <span class="s1">args += [</span><span class="s2">&quot;default: &quot; </span><span class="s1">+ repr(self.default)]</span>
+        <span class="s0">return </span><span class="s2">&quot;Argument({})&quot;</span><span class="s1">.format(</span><span class="s2">&quot;, &quot;</span><span class="s1">.join(args))</span>
+
+
+<span class="s0">class </span><span class="s1">OptionGroup:</span>
+    <span class="s3">&quot;&quot;&quot;A group of options shown in its own section.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">name: str</span><span class="s0">,</span>
+        <span class="s1">description: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">parser: Optional[Parser] = </span><span class="s0">None,</span>
+        <span class="s1">*</span><span class="s0">,</span>
+        <span class="s1">_ispytest: bool = </span><span class="s0">False,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.description = description</span>
+        <span class="s1">self.options: List[Argument] = []</span>
+        <span class="s1">self.parser = parser</span>
+
+    <span class="s0">def </span><span class="s1">addoption(self</span><span class="s0">, </span><span class="s1">*optnames: str</span><span class="s0">, </span><span class="s1">**attrs: Any) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Add an option to this group. 
+ 
+        If a shortened version of a long option is specified, it will 
+        be suppressed in the help. ``addoption('--twowords', '--two-words')`` 
+        results in help showing ``--two-words`` only, but ``--twowords`` gets 
+        accepted **and** the automatic destination is in ``args.twowords``. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">conflict = set(optnames).intersection(</span>
+            <span class="s1">name </span><span class="s0">for </span><span class="s1">opt </span><span class="s0">in </span><span class="s1">self.options </span><span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">opt.names()</span>
+        <span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">conflict:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;option names %s already added&quot; </span><span class="s1">% conflict)</span>
+        <span class="s1">option = Argument(*optnames</span><span class="s0">, </span><span class="s1">**attrs)</span>
+        <span class="s1">self._addoption_instance(option</span><span class="s0">, </span><span class="s1">shortupper=</span><span class="s0">False</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_addoption(self</span><span class="s0">, </span><span class="s1">*optnames: str</span><span class="s0">, </span><span class="s1">**attrs: Any) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">option = Argument(*optnames</span><span class="s0">, </span><span class="s1">**attrs)</span>
+        <span class="s1">self._addoption_instance(option</span><span class="s0">, </span><span class="s1">shortupper=</span><span class="s0">True</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_addoption_instance(self</span><span class="s0">, </span><span class="s1">option: </span><span class="s2">&quot;Argument&quot;</span><span class="s0">, </span><span class="s1">shortupper: bool = </span><span class="s0">False</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">shortupper:</span>
+            <span class="s0">for </span><span class="s1">opt </span><span class="s0">in </span><span class="s1">option._short_opts:</span>
+                <span class="s0">if </span><span class="s1">opt[</span><span class="s4">0</span><span class="s1">] == </span><span class="s2">&quot;-&quot; </span><span class="s0">and </span><span class="s1">opt[</span><span class="s4">1</span><span class="s1">].islower():</span>
+                    <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;lowercase shortoptions reserved&quot;</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">self.parser:</span>
+            <span class="s1">self.parser.processoption(option)</span>
+        <span class="s1">self.options.append(option)</span>
+
+
+<span class="s0">class </span><span class="s1">MyOptionParser(argparse.ArgumentParser):</span>
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">parser: Parser</span><span class="s0">,</span>
+        <span class="s1">extra_info: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+        <span class="s1">prog: Optional[str] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self._parser = parser</span>
+        <span class="s1">super().__init__(</span>
+            <span class="s1">prog=prog</span><span class="s0">,</span>
+            <span class="s1">usage=parser._usage</span><span class="s0">,</span>
+            <span class="s1">add_help=</span><span class="s0">False,</span>
+            <span class="s1">formatter_class=DropShorterLongHelpFormatter</span><span class="s0">,</span>
+            <span class="s1">allow_abbrev=</span><span class="s0">False,</span>
+        <span class="s1">)</span>
+        <span class="s5"># extra_info is a dict of (param -&gt; value) to display if there's</span>
+        <span class="s5"># an usage error to provide more contextual information to the user.</span>
+        <span class="s1">self.extra_info = extra_info </span><span class="s0">if </span><span class="s1">extra_info </span><span class="s0">else </span><span class="s1">{}</span>
+
+    <span class="s0">def </span><span class="s1">error(self</span><span class="s0">, </span><span class="s1">message: str) -&gt; </span><span class="s2">&quot;NoReturn&quot;</span><span class="s1">:</span>
+        <span class="s3">&quot;&quot;&quot;Transform argparse error message into UsageError.&quot;&quot;&quot;</span>
+        <span class="s1">msg = </span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">self.prog</span><span class="s0">}</span><span class="s2">: error: </span><span class="s0">{</span><span class="s1">message</span><span class="s0">}</span><span class="s2">&quot;</span>
+
+        <span class="s0">if </span><span class="s1">hasattr(self._parser</span><span class="s0">, </span><span class="s2">&quot;_config_source_hint&quot;</span><span class="s1">):</span>
+            <span class="s5"># Type ignored because the attribute is set dynamically.</span>
+            <span class="s1">msg = </span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">msg</span><span class="s0">} </span><span class="s2">(</span><span class="s0">{</span><span class="s1">self._parser._config_source_hint</span><span class="s0">}</span><span class="s2">)&quot;  </span><span class="s5"># type: ignore</span>
+
+        <span class="s0">raise </span><span class="s1">UsageError(self.format_usage() + msg)</span>
+
+    <span class="s5"># Type ignored because typeshed has a very complex type in the superclass.</span>
+    <span class="s0">def </span><span class="s1">parse_args(  </span><span class="s5"># type: ignore</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">args: Optional[Sequence[str]] = </span><span class="s0">None,</span>
+        <span class="s1">namespace: Optional[argparse.Namespace] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; argparse.Namespace:</span>
+        <span class="s3">&quot;&quot;&quot;Allow splitting of positional arguments.&quot;&quot;&quot;</span>
+        <span class="s1">parsed</span><span class="s0">, </span><span class="s1">unrecognized = self.parse_known_args(args</span><span class="s0">, </span><span class="s1">namespace)</span>
+        <span class="s0">if </span><span class="s1">unrecognized:</span>
+            <span class="s0">for </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">unrecognized:</span>
+                <span class="s0">if </span><span class="s1">arg </span><span class="s0">and </span><span class="s1">arg[</span><span class="s4">0</span><span class="s1">] == </span><span class="s2">&quot;-&quot;</span><span class="s1">:</span>
+                    <span class="s1">lines = [</span><span class="s2">&quot;unrecognized arguments: %s&quot; </span><span class="s1">% (</span><span class="s2">&quot; &quot;</span><span class="s1">.join(unrecognized))]</span>
+                    <span class="s0">for </span><span class="s1">k</span><span class="s0">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">sorted(self.extra_info.items()):</span>
+                        <span class="s1">lines.append(</span><span class="s2">f&quot;  </span><span class="s0">{</span><span class="s1">k</span><span class="s0">}</span><span class="s2">: </span><span class="s0">{</span><span class="s1">v</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+                    <span class="s1">self.error(</span><span class="s2">&quot;</span><span class="s0">\n</span><span class="s2">&quot;</span><span class="s1">.join(lines))</span>
+            <span class="s1">getattr(parsed</span><span class="s0">, </span><span class="s1">FILE_OR_DIR).extend(unrecognized)</span>
+        <span class="s0">return </span><span class="s1">parsed</span>
+
+    <span class="s0">if </span><span class="s1">sys.version_info[:</span><span class="s4">2</span><span class="s1">] &lt; (</span><span class="s4">3</span><span class="s0">, </span><span class="s4">9</span><span class="s1">):  </span><span class="s5"># pragma: no cover</span>
+        <span class="s5"># Backport of https://github.com/python/cpython/pull/14316 so we can</span>
+        <span class="s5"># disable long --argument abbreviations without breaking short flags.</span>
+        <span class="s0">def </span><span class="s1">_parse_optional(</span>
+            <span class="s1">self</span><span class="s0">, </span><span class="s1">arg_string: str</span>
+        <span class="s1">) -&gt; Optional[Tuple[Optional[argparse.Action]</span><span class="s0">, </span><span class="s1">str</span><span class="s0">, </span><span class="s1">Optional[str]]]:</span>
+            <span class="s0">if not </span><span class="s1">arg_string:</span>
+                <span class="s0">return None</span>
+            <span class="s0">if not </span><span class="s1">arg_string[</span><span class="s4">0</span><span class="s1">] </span><span class="s0">in </span><span class="s1">self.prefix_chars:</span>
+                <span class="s0">return None</span>
+            <span class="s0">if </span><span class="s1">arg_string </span><span class="s0">in </span><span class="s1">self._option_string_actions:</span>
+                <span class="s1">action = self._option_string_actions[arg_string]</span>
+                <span class="s0">return </span><span class="s1">action</span><span class="s0">, </span><span class="s1">arg_string</span><span class="s0">, None</span>
+            <span class="s0">if </span><span class="s1">len(arg_string) == </span><span class="s4">1</span><span class="s1">:</span>
+                <span class="s0">return None</span>
+            <span class="s0">if </span><span class="s2">&quot;=&quot; </span><span class="s0">in </span><span class="s1">arg_string:</span>
+                <span class="s1">option_string</span><span class="s0">, </span><span class="s1">explicit_arg = arg_string.split(</span><span class="s2">&quot;=&quot;</span><span class="s0">, </span><span class="s4">1</span><span class="s1">)</span>
+                <span class="s0">if </span><span class="s1">option_string </span><span class="s0">in </span><span class="s1">self._option_string_actions:</span>
+                    <span class="s1">action = self._option_string_actions[option_string]</span>
+                    <span class="s0">return </span><span class="s1">action</span><span class="s0">, </span><span class="s1">option_string</span><span class="s0">, </span><span class="s1">explicit_arg</span>
+            <span class="s0">if </span><span class="s1">self.allow_abbrev </span><span class="s0">or not </span><span class="s1">arg_string.startswith(</span><span class="s2">&quot;--&quot;</span><span class="s1">):</span>
+                <span class="s1">option_tuples = self._get_option_tuples(arg_string)</span>
+                <span class="s0">if </span><span class="s1">len(option_tuples) &gt; </span><span class="s4">1</span><span class="s1">:</span>
+                    <span class="s1">msg = gettext(</span>
+                        <span class="s2">&quot;ambiguous option: %(option)s could match %(matches)s&quot;</span>
+                    <span class="s1">)</span>
+                    <span class="s1">options = </span><span class="s2">&quot;, &quot;</span><span class="s1">.join(option </span><span class="s0">for </span><span class="s1">_</span><span class="s0">, </span><span class="s1">option</span><span class="s0">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">option_tuples)</span>
+                    <span class="s1">self.error(msg % {</span><span class="s2">&quot;option&quot;</span><span class="s1">: arg_string</span><span class="s0">, </span><span class="s2">&quot;matches&quot;</span><span class="s1">: options})</span>
+                <span class="s0">elif </span><span class="s1">len(option_tuples) == </span><span class="s4">1</span><span class="s1">:</span>
+                    <span class="s1">(option_tuple</span><span class="s0">,</span><span class="s1">) = option_tuples</span>
+                    <span class="s0">return </span><span class="s1">option_tuple</span>
+            <span class="s0">if </span><span class="s1">self._negative_number_matcher.match(arg_string):</span>
+                <span class="s0">if not </span><span class="s1">self._has_negative_number_optionals:</span>
+                    <span class="s0">return None</span>
+            <span class="s0">if </span><span class="s2">&quot; &quot; </span><span class="s0">in </span><span class="s1">arg_string:</span>
+                <span class="s0">return None</span>
+            <span class="s0">return None, </span><span class="s1">arg_string</span><span class="s0">, None</span>
+
+
+<span class="s0">class </span><span class="s1">DropShorterLongHelpFormatter(argparse.HelpFormatter):</span>
+    <span class="s3">&quot;&quot;&quot;Shorten help for long options that differ only in extra hyphens. 
+ 
+    - Collapse **long** options that are the same except for extra hyphens. 
+    - Shortcut if there are only two options and one of them is a short one. 
+    - Cache result on the action object as this is called at least 2 times. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*args: Any</span><span class="s0">, </span><span class="s1">**kwargs: Any) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s5"># Use more accurate terminal width.</span>
+        <span class="s0">if </span><span class="s2">&quot;width&quot; </span><span class="s0">not in </span><span class="s1">kwargs:</span>
+            <span class="s1">kwargs[</span><span class="s2">&quot;width&quot;</span><span class="s1">] = _pytest._io.get_terminal_width()</span>
+        <span class="s1">super().__init__(*args</span><span class="s0">, </span><span class="s1">**kwargs)</span>
+
+    <span class="s0">def </span><span class="s1">_format_action_invocation(self</span><span class="s0">, </span><span class="s1">action: argparse.Action) -&gt; str:</span>
+        <span class="s1">orgstr = super()._format_action_invocation(action)</span>
+        <span class="s0">if </span><span class="s1">orgstr </span><span class="s0">and </span><span class="s1">orgstr[</span><span class="s4">0</span><span class="s1">] != </span><span class="s2">&quot;-&quot;</span><span class="s1">:  </span><span class="s5"># only optional arguments</span>
+            <span class="s0">return </span><span class="s1">orgstr</span>
+        <span class="s1">res: Optional[str] = getattr(action</span><span class="s0">, </span><span class="s2">&quot;_formatted_action_invocation&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">res:</span>
+            <span class="s0">return </span><span class="s1">res</span>
+        <span class="s1">options = orgstr.split(</span><span class="s2">&quot;, &quot;</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">len(options) == </span><span class="s4">2 </span><span class="s0">and </span><span class="s1">(len(options[</span><span class="s4">0</span><span class="s1">]) == </span><span class="s4">2 </span><span class="s0">or </span><span class="s1">len(options[</span><span class="s4">1</span><span class="s1">]) == </span><span class="s4">2</span><span class="s1">):</span>
+            <span class="s5"># a shortcut for '-h, --help' or '--abc', '-a'</span>
+            <span class="s1">action._formatted_action_invocation = orgstr  </span><span class="s5"># type: ignore</span>
+            <span class="s0">return </span><span class="s1">orgstr</span>
+        <span class="s1">return_list = []</span>
+        <span class="s1">short_long: Dict[str</span><span class="s0">, </span><span class="s1">str] = {}</span>
+        <span class="s0">for </span><span class="s1">option </span><span class="s0">in </span><span class="s1">options:</span>
+            <span class="s0">if </span><span class="s1">len(option) == </span><span class="s4">2 </span><span class="s0">or </span><span class="s1">option[</span><span class="s4">2</span><span class="s1">] == </span><span class="s2">&quot; &quot;</span><span class="s1">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">if not </span><span class="s1">option.startswith(</span><span class="s2">&quot;--&quot;</span><span class="s1">):</span>
+                <span class="s0">raise </span><span class="s1">ArgumentError(</span>
+                    <span class="s2">'long optional argument without &quot;--&quot;: [%s]' </span><span class="s1">% (option)</span><span class="s0">, </span><span class="s1">option</span>
+                <span class="s1">)</span>
+            <span class="s1">xxoption = option[</span><span class="s4">2</span><span class="s1">:]</span>
+            <span class="s1">shortened = xxoption.replace(</span><span class="s2">&quot;-&quot;</span><span class="s0">, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">shortened </span><span class="s0">not in </span><span class="s1">short_long </span><span class="s0">or </span><span class="s1">len(short_long[shortened]) &lt; len(</span>
+                <span class="s1">xxoption</span>
+            <span class="s1">):</span>
+                <span class="s1">short_long[shortened] = xxoption</span>
+        <span class="s5"># now short_long has been filled out to the longest with dashes</span>
+        <span class="s5"># **and** we keep the right option ordering from add_argument</span>
+        <span class="s0">for </span><span class="s1">option </span><span class="s0">in </span><span class="s1">options:</span>
+            <span class="s0">if </span><span class="s1">len(option) == </span><span class="s4">2 </span><span class="s0">or </span><span class="s1">option[</span><span class="s4">2</span><span class="s1">] == </span><span class="s2">&quot; &quot;</span><span class="s1">:</span>
+                <span class="s1">return_list.append(option)</span>
+            <span class="s0">if </span><span class="s1">option[</span><span class="s4">2</span><span class="s1">:] == short_long.get(option.replace(</span><span class="s2">&quot;-&quot;</span><span class="s0">, </span><span class="s2">&quot;&quot;</span><span class="s1">)):</span>
+                <span class="s1">return_list.append(option.replace(</span><span class="s2">&quot; &quot;</span><span class="s0">, </span><span class="s2">&quot;=&quot;</span><span class="s0">, </span><span class="s4">1</span><span class="s1">))</span>
+        <span class="s1">formatted_action_invocation = </span><span class="s2">&quot;, &quot;</span><span class="s1">.join(return_list)</span>
+        <span class="s1">action._formatted_action_invocation = formatted_action_invocation  </span><span class="s5"># type: ignore</span>
+        <span class="s0">return </span><span class="s1">formatted_action_invocation</span>
+
+    <span class="s0">def </span><span class="s1">_split_lines(self</span><span class="s0">, </span><span class="s1">text</span><span class="s0">, </span><span class="s1">width):</span>
+        <span class="s3">&quot;&quot;&quot;Wrap lines after splitting on original newlines. 
+ 
+        This allows to have explicit line breaks in the help text. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">import </span><span class="s1">textwrap</span>
+
+        <span class="s1">lines = []</span>
+        <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">text.splitlines():</span>
+            <span class="s1">lines.extend(textwrap.wrap(line.strip()</span><span class="s0">, </span><span class="s1">width))</span>
+        <span class="s0">return </span><span class="s1">lines</span>
+</pre>
+</body>
+</html>

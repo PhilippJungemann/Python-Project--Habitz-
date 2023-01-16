@@ -1,0 +1,286 @@
+<html>
+<head>
+<title>helpconfig.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+helpconfig.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Version info, help messages, tracing configuration.&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">from </span><span class="s1">argparse </span><span class="s2">import </span><span class="s1">Action</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">import </span><span class="s1">pytest</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">Config</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">ExitCode</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">PrintHelp</span>
+<span class="s2">from </span><span class="s1">_pytest.config.argparsing </span><span class="s2">import </span><span class="s1">Parser</span>
+
+
+<span class="s2">class </span><span class="s1">HelpAction(Action):</span>
+    <span class="s0">&quot;&quot;&quot;An argparse Action that will raise an exception in order to skip the 
+    rest of the argument parsing when --help is passed. 
+ 
+    This prevents argparse from quitting due to missing required arguments 
+    when any are defined, for example by ``pytest_addoption``. 
+    This is similar to the way that the builtin argparse --help option is 
+    implemented by raising SystemExit. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">option_strings</span><span class="s2">, </span><span class="s1">dest=</span><span class="s2">None, </span><span class="s1">default=</span><span class="s2">False, </span><span class="s1">help=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">super().__init__(</span>
+            <span class="s1">option_strings=option_strings</span><span class="s2">,</span>
+            <span class="s1">dest=dest</span><span class="s2">,</span>
+            <span class="s1">const=</span><span class="s2">True,</span>
+            <span class="s1">default=default</span><span class="s2">,</span>
+            <span class="s1">nargs=</span><span class="s3">0</span><span class="s2">,</span>
+            <span class="s1">help=help</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__call__(self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">, </span><span class="s1">namespace</span><span class="s2">, </span><span class="s1">values</span><span class="s2">, </span><span class="s1">option_string=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">setattr(namespace</span><span class="s2">, </span><span class="s1">self.dest</span><span class="s2">, </span><span class="s1">self.const)</span>
+
+        <span class="s4"># We should only skip the rest of the parsing after preparse is done.</span>
+        <span class="s2">if </span><span class="s1">getattr(parser._parser</span><span class="s2">, </span><span class="s5">&quot;after_preparse&quot;</span><span class="s2">, False</span><span class="s1">):</span>
+            <span class="s2">raise </span><span class="s1">PrintHelp</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">group = parser.getgroup(</span><span class="s5">&quot;debugconfig&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s5">&quot;--version&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;-V&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s5">&quot;count&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s3">0</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s5">&quot;version&quot;</span><span class="s2">,</span>
+        <span class="s1">help=</span><span class="s5">&quot;display pytest version and information about plugins. &quot;</span>
+        <span class="s5">&quot;When given twice, also display information about plugins.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group._addoption(</span>
+        <span class="s5">&quot;-h&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;--help&quot;</span><span class="s2">,</span>
+        <span class="s1">action=HelpAction</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s5">&quot;help&quot;</span><span class="s2">,</span>
+        <span class="s1">help=</span><span class="s5">&quot;show help message and configuration info&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group._addoption(</span>
+        <span class="s5">&quot;-p&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s5">&quot;append&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s5">&quot;plugins&quot;</span><span class="s2">,</span>
+        <span class="s1">default=[]</span><span class="s2">,</span>
+        <span class="s1">metavar=</span><span class="s5">&quot;name&quot;</span><span class="s2">,</span>
+        <span class="s1">help=</span><span class="s5">&quot;early-load given plugin module name or entry point (multi-allowed).</span><span class="s2">\n</span><span class="s5">&quot;</span>
+        <span class="s5">&quot;To avoid loading of plugins, use the `no:` prefix, e.g. &quot;</span>
+        <span class="s5">&quot;`no:doctest`.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s5">&quot;--traceconfig&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;--trace-config&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s5">&quot;store_true&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s2">False,</span>
+        <span class="s1">help=</span><span class="s5">&quot;trace considerations of conftest.py files.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s5">&quot;--debug&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s5">&quot;store&quot;</span><span class="s2">,</span>
+        <span class="s1">nargs=</span><span class="s5">&quot;?&quot;</span><span class="s2">,</span>
+        <span class="s1">const=</span><span class="s5">&quot;pytestdebug.log&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s5">&quot;debug&quot;</span><span class="s2">,</span>
+        <span class="s1">metavar=</span><span class="s5">&quot;DEBUG_FILE_NAME&quot;</span><span class="s2">,</span>
+        <span class="s1">help=</span><span class="s5">&quot;store internal tracing debug information in this log file.</span><span class="s2">\n</span><span class="s5">&quot;</span>
+        <span class="s5">&quot;This file is opened with 'w' and truncated as a result, care advised.</span><span class="s2">\n</span><span class="s5">&quot;</span>
+        <span class="s5">&quot;Defaults to 'pytestdebug.log'.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group._addoption(</span>
+        <span class="s5">&quot;-o&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;--override-ini&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s5">&quot;override_ini&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s5">&quot;append&quot;</span><span class="s2">,</span>
+        <span class="s1">help=</span><span class="s5">'override ini option with &quot;option=value&quot; style, e.g. `-o xfail_strict=True -o cache_dir=cache`.'</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s1">@pytest.hookimpl(hookwrapper=</span><span class="s2">True</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">pytest_cmdline_parse():</span>
+    <span class="s1">outcome = </span><span class="s2">yield</span>
+    <span class="s1">config: Config = outcome.get_result()</span>
+
+    <span class="s2">if </span><span class="s1">config.option.debug:</span>
+        <span class="s4"># --debug | --debug &lt;file.log&gt; was provided.</span>
+        <span class="s1">path = config.option.debug</span>
+        <span class="s1">debugfile = open(path</span><span class="s2">, </span><span class="s5">&quot;w&quot;</span><span class="s1">)</span>
+        <span class="s1">debugfile.write(</span>
+            <span class="s5">&quot;versions pytest-%s, &quot;</span>
+            <span class="s5">&quot;python-%s</span><span class="s2">\n</span><span class="s5">cwd=%s</span><span class="s2">\n</span><span class="s5">args=%s</span><span class="s2">\n\n</span><span class="s5">&quot;</span>
+            <span class="s1">% (</span>
+                <span class="s1">pytest.__version__</span><span class="s2">,</span>
+                <span class="s5">&quot;.&quot;</span><span class="s1">.join(map(str</span><span class="s2">, </span><span class="s1">sys.version_info))</span><span class="s2">,</span>
+                <span class="s1">os.getcwd()</span><span class="s2">,</span>
+                <span class="s1">config.invocation_params.args</span><span class="s2">,</span>
+            <span class="s1">)</span>
+        <span class="s1">)</span>
+        <span class="s1">config.trace.root.setwriter(debugfile.write)</span>
+        <span class="s1">undo_tracing = config.pluginmanager.enable_tracing()</span>
+        <span class="s1">sys.stderr.write(</span><span class="s5">&quot;writing pytest debug information to %s</span><span class="s2">\n</span><span class="s5">&quot; </span><span class="s1">% path)</span>
+
+        <span class="s2">def </span><span class="s1">unset_tracing() -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+            <span class="s1">debugfile.close()</span>
+            <span class="s1">sys.stderr.write(</span><span class="s5">&quot;wrote pytest debug information to %s</span><span class="s2">\n</span><span class="s5">&quot; </span><span class="s1">% debugfile.name)</span>
+            <span class="s1">config.trace.root.setwriter(</span><span class="s2">None</span><span class="s1">)</span>
+            <span class="s1">undo_tracing()</span>
+
+        <span class="s1">config.add_cleanup(unset_tracing)</span>
+
+
+<span class="s2">def </span><span class="s1">showversion(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">if </span><span class="s1">config.option.version &gt; </span><span class="s3">1</span><span class="s1">:</span>
+        <span class="s1">sys.stdout.write(</span>
+            <span class="s5">&quot;This is pytest version {}, imported from {}</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s1">.format(</span>
+                <span class="s1">pytest.__version__</span><span class="s2">, </span><span class="s1">pytest.__file__</span>
+            <span class="s1">)</span>
+        <span class="s1">)</span>
+        <span class="s1">plugininfo = getpluginversioninfo(config)</span>
+        <span class="s2">if </span><span class="s1">plugininfo:</span>
+            <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">plugininfo:</span>
+                <span class="s1">sys.stdout.write(line + </span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s1">)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">sys.stdout.write(</span><span class="s5">f&quot;pytest </span><span class="s2">{</span><span class="s1">pytest.__version__</span><span class="s2">}\n</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_cmdline_main(config: Config) -&gt; Optional[Union[int</span><span class="s2">, </span><span class="s1">ExitCode]]:</span>
+    <span class="s2">if </span><span class="s1">config.option.version &gt; </span><span class="s3">0</span><span class="s1">:</span>
+        <span class="s1">showversion(config)</span>
+        <span class="s2">return </span><span class="s3">0</span>
+    <span class="s2">elif </span><span class="s1">config.option.help:</span>
+        <span class="s1">config._do_configure()</span>
+        <span class="s1">showhelp(config)</span>
+        <span class="s1">config._ensure_unconfigure()</span>
+        <span class="s2">return </span><span class="s3">0</span>
+    <span class="s2">return None</span>
+
+
+<span class="s2">def </span><span class="s1">showhelp(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">import </span><span class="s1">textwrap</span>
+
+    <span class="s1">reporter = config.pluginmanager.get_plugin(</span><span class="s5">&quot;terminalreporter&quot;</span><span class="s1">)</span>
+    <span class="s1">tw = reporter._tw</span>
+    <span class="s1">tw.write(config._parser.optparser.format_help())</span>
+    <span class="s1">tw.line()</span>
+    <span class="s1">tw.line(</span>
+        <span class="s5">&quot;[pytest] ini-options in the first pytest.ini|tox.ini|setup.cfg file found:&quot;</span>
+    <span class="s1">)</span>
+    <span class="s1">tw.line()</span>
+
+    <span class="s1">columns = tw.fullwidth  </span><span class="s4"># costly call</span>
+    <span class="s1">indent_len = </span><span class="s3">24  </span><span class="s4"># based on argparse's max_help_position=24</span>
+    <span class="s1">indent = </span><span class="s5">&quot; &quot; </span><span class="s1">* indent_len</span>
+    <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">config._parser._ininames:</span>
+        <span class="s1">help</span><span class="s2">, </span><span class="s1">type</span><span class="s2">, </span><span class="s1">default = config._parser._inidict[name]</span>
+        <span class="s2">if </span><span class="s1">type </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">type = </span><span class="s5">&quot;string&quot;</span>
+        <span class="s2">if </span><span class="s1">help </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">TypeError(</span><span class="s5">f&quot;help argument cannot be None for </span><span class="s2">{</span><span class="s1">name</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+        <span class="s1">spec = </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">name</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">type</span><span class="s2">}</span><span class="s5">):&quot;</span>
+        <span class="s1">tw.write(</span><span class="s5">&quot;  %s&quot; </span><span class="s1">% spec)</span>
+        <span class="s1">spec_len = len(spec)</span>
+        <span class="s2">if </span><span class="s1">spec_len &gt; (indent_len - </span><span class="s3">3</span><span class="s1">):</span>
+            <span class="s4"># Display help starting at a new line.</span>
+            <span class="s1">tw.line()</span>
+            <span class="s1">helplines = textwrap.wrap(</span>
+                <span class="s1">help</span><span class="s2">,</span>
+                <span class="s1">columns</span><span class="s2">,</span>
+                <span class="s1">initial_indent=indent</span><span class="s2">,</span>
+                <span class="s1">subsequent_indent=indent</span><span class="s2">,</span>
+                <span class="s1">break_on_hyphens=</span><span class="s2">False,</span>
+            <span class="s1">)</span>
+
+            <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">helplines:</span>
+                <span class="s1">tw.line(line)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s4"># Display help starting after the spec, following lines indented.</span>
+            <span class="s1">tw.write(</span><span class="s5">&quot; &quot; </span><span class="s1">* (indent_len - spec_len - </span><span class="s3">2</span><span class="s1">))</span>
+            <span class="s1">wrapped = textwrap.wrap(help</span><span class="s2">, </span><span class="s1">columns - indent_len</span><span class="s2">, </span><span class="s1">break_on_hyphens=</span><span class="s2">False</span><span class="s1">)</span>
+
+            <span class="s2">if </span><span class="s1">wrapped:</span>
+                <span class="s1">tw.line(wrapped[</span><span class="s3">0</span><span class="s1">])</span>
+                <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">wrapped[</span><span class="s3">1</span><span class="s1">:]:</span>
+                    <span class="s1">tw.line(indent + line)</span>
+
+    <span class="s1">tw.line()</span>
+    <span class="s1">tw.line(</span><span class="s5">&quot;environment variables:&quot;</span><span class="s1">)</span>
+    <span class="s1">vars = [</span>
+        <span class="s1">(</span><span class="s5">&quot;PYTEST_ADDOPTS&quot;</span><span class="s2">, </span><span class="s5">&quot;extra command line options&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;PYTEST_PLUGINS&quot;</span><span class="s2">, </span><span class="s5">&quot;comma-separated plugins to load during startup&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;PYTEST_DISABLE_PLUGIN_AUTOLOAD&quot;</span><span class="s2">, </span><span class="s5">&quot;set to disable plugin auto-loading&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;PYTEST_DEBUG&quot;</span><span class="s2">, </span><span class="s5">&quot;set to enable debug tracing of pytest's internals&quot;</span><span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">]</span>
+    <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">help </span><span class="s2">in </span><span class="s1">vars:</span>
+        <span class="s1">tw.line(</span><span class="s5">f&quot;  </span><span class="s2">{</span><span class="s1">name</span><span class="s2">:</span><span class="s5">&lt;24</span><span class="s2">} {</span><span class="s1">help</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+    <span class="s1">tw.line()</span>
+    <span class="s1">tw.line()</span>
+
+    <span class="s1">tw.line(</span><span class="s5">&quot;to see available markers type: pytest --markers&quot;</span><span class="s1">)</span>
+    <span class="s1">tw.line(</span><span class="s5">&quot;to see available fixtures type: pytest --fixtures&quot;</span><span class="s1">)</span>
+    <span class="s1">tw.line(</span>
+        <span class="s5">&quot;(shown according to specified file_or_dir or current dir &quot;</span>
+        <span class="s5">&quot;if not specified; fixtures with leading '_' are only shown &quot;</span>
+        <span class="s5">&quot;with the '-v' option&quot;</span>
+    <span class="s1">)</span>
+
+    <span class="s2">for </span><span class="s1">warningreport </span><span class="s2">in </span><span class="s1">reporter.stats.get(</span><span class="s5">&quot;warnings&quot;</span><span class="s2">, </span><span class="s1">[]):</span>
+        <span class="s1">tw.line(</span><span class="s5">&quot;warning : &quot; </span><span class="s1">+ warningreport.message</span><span class="s2">, </span><span class="s1">red=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">return</span>
+
+
+<span class="s1">conftest_options = [(</span><span class="s5">&quot;pytest_plugins&quot;</span><span class="s2">, </span><span class="s5">&quot;list of plugin names to load&quot;</span><span class="s1">)]</span>
+
+
+<span class="s2">def </span><span class="s1">getpluginversioninfo(config: Config) -&gt; List[str]:</span>
+    <span class="s1">lines = []</span>
+    <span class="s1">plugininfo = config.pluginmanager.list_plugin_distinfo()</span>
+    <span class="s2">if </span><span class="s1">plugininfo:</span>
+        <span class="s1">lines.append(</span><span class="s5">&quot;setuptools registered plugins:&quot;</span><span class="s1">)</span>
+        <span class="s2">for </span><span class="s1">plugin</span><span class="s2">, </span><span class="s1">dist </span><span class="s2">in </span><span class="s1">plugininfo:</span>
+            <span class="s1">loc = getattr(plugin</span><span class="s2">, </span><span class="s5">&quot;__file__&quot;</span><span class="s2">, </span><span class="s1">repr(plugin))</span>
+            <span class="s1">content = </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">dist.project_name</span><span class="s2">}</span><span class="s5">-</span><span class="s2">{</span><span class="s1">dist.version</span><span class="s2">} </span><span class="s5">at </span><span class="s2">{</span><span class="s1">loc</span><span class="s2">}</span><span class="s5">&quot;</span>
+            <span class="s1">lines.append(</span><span class="s5">&quot;  &quot; </span><span class="s1">+ content)</span>
+    <span class="s2">return </span><span class="s1">lines</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_report_header(config: Config) -&gt; List[str]:</span>
+    <span class="s1">lines = []</span>
+    <span class="s2">if </span><span class="s1">config.option.debug </span><span class="s2">or </span><span class="s1">config.option.traceconfig:</span>
+        <span class="s1">lines.append(</span><span class="s5">f&quot;using: pytest-</span><span class="s2">{</span><span class="s1">pytest.__version__</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+        <span class="s1">verinfo = getpluginversioninfo(config)</span>
+        <span class="s2">if </span><span class="s1">verinfo:</span>
+            <span class="s1">lines.extend(verinfo)</span>
+
+    <span class="s2">if </span><span class="s1">config.option.traceconfig:</span>
+        <span class="s1">lines.append(</span><span class="s5">&quot;active plugins:&quot;</span><span class="s1">)</span>
+        <span class="s1">items = config.pluginmanager.list_name_plugin()</span>
+        <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">plugin </span><span class="s2">in </span><span class="s1">items:</span>
+            <span class="s2">if </span><span class="s1">hasattr(plugin</span><span class="s2">, </span><span class="s5">&quot;__file__&quot;</span><span class="s1">):</span>
+                <span class="s1">r = plugin.__file__</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">r = repr(plugin)</span>
+            <span class="s1">lines.append(</span><span class="s5">f&quot;    </span><span class="s2">{</span><span class="s1">name</span><span class="s2">:</span><span class="s5">&lt;20</span><span class="s2">}</span><span class="s5">: </span><span class="s2">{</span><span class="s1">r</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">lines</span>
+</pre>
+</body>
+</html>

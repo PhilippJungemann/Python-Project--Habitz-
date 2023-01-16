@@ -1,0 +1,112 @@
+<html>
+<head>
+<title>_error.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_error.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+create errno-specific classes for IO or os calls. 
+ 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">types </span><span class="s2">import </span><span class="s1">ModuleType</span>
+<span class="s2">import </span><span class="s1">sys</span><span class="s2">, </span><span class="s1">os</span><span class="s2">, </span><span class="s1">errno</span>
+
+<span class="s2">class </span><span class="s1">Error(EnvironmentError):</span>
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s3">&quot;%s.%s %r: %s &quot; </span><span class="s1">%(self.__class__.__module__</span><span class="s2">,</span>
+                               <span class="s1">self.__class__.__name__</span><span class="s2">,</span>
+                               <span class="s1">self.__class__.__doc__</span><span class="s2">,</span>
+                               <span class="s3">&quot; &quot;</span><span class="s1">.join(map(str</span><span class="s2">, </span><span class="s1">self.args))</span><span class="s2">,</span>
+                               <span class="s4">#repr(self.args)</span>
+                                <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s1">s = </span><span class="s3">&quot;[%s]: %s&quot; </span><span class="s1">%(self.__class__.__doc__</span><span class="s2">,</span>
+                          <span class="s3">&quot; &quot;</span><span class="s1">.join(map(str</span><span class="s2">, </span><span class="s1">self.args))</span><span class="s2">,</span>
+                          <span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">s</span>
+
+<span class="s1">_winerrnomap = {</span>
+    <span class="s5">2</span><span class="s1">: errno.ENOENT</span><span class="s2">,</span>
+    <span class="s5">3</span><span class="s1">: errno.ENOENT</span><span class="s2">,</span>
+    <span class="s5">17</span><span class="s1">: errno.EEXIST</span><span class="s2">,</span>
+    <span class="s5">18</span><span class="s1">: errno.EXDEV</span><span class="s2">,</span>
+    <span class="s5">13</span><span class="s1">: errno.EBUSY</span><span class="s2">, </span><span class="s4"># empty cd drive, but ENOMEDIUM seems unavailiable</span>
+    <span class="s5">22</span><span class="s1">: errno.ENOTDIR</span><span class="s2">,</span>
+    <span class="s5">20</span><span class="s1">: errno.ENOTDIR</span><span class="s2">,</span>
+    <span class="s5">267</span><span class="s1">: errno.ENOTDIR</span><span class="s2">,</span>
+    <span class="s5">5</span><span class="s1">: errno.EACCES</span><span class="s2">,  </span><span class="s4"># anything better?</span>
+<span class="s1">}</span>
+
+<span class="s2">class </span><span class="s1">ErrorMaker(ModuleType):</span>
+    <span class="s0">&quot;&quot;&quot; lazily provides Exception classes for each possible POSIX errno 
+        (as defined per the 'errno' module).  All such instances 
+        subclass EnvironmentError. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">Error = Error</span>
+    <span class="s1">_errno2class = {}</span>
+
+    <span class="s2">def </span><span class="s1">__getattr__(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s2">if </span><span class="s1">name[</span><span class="s5">0</span><span class="s1">] == </span><span class="s3">&quot;_&quot;</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError(name)</span>
+        <span class="s1">eno = getattr(errno</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s1">cls = self._geterrnoclass(eno)</span>
+        <span class="s1">setattr(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">cls)</span>
+        <span class="s2">return </span><span class="s1">cls</span>
+
+    <span class="s2">def </span><span class="s1">_geterrnoclass(self</span><span class="s2">, </span><span class="s1">eno):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">self._errno2class[eno]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s1">clsname = errno.errorcode.get(eno</span><span class="s2">, </span><span class="s3">&quot;UnknownErrno%d&quot; </span><span class="s1">%(eno</span><span class="s2">,</span><span class="s1">))</span>
+            <span class="s1">errorcls = type(Error)(clsname</span><span class="s2">, </span><span class="s1">(Error</span><span class="s2">,</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">{</span><span class="s3">'__module__'</span><span class="s1">:</span><span class="s3">'py.error'</span><span class="s2">,</span>
+                     <span class="s3">'__doc__'</span><span class="s1">: os.strerror(eno)})</span>
+            <span class="s1">self._errno2class[eno] = errorcls</span>
+            <span class="s2">return </span><span class="s1">errorcls</span>
+
+    <span class="s2">def </span><span class="s1">checked_call(self</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; call a function and raise an errno-exception if applicable. &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">func(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+        <span class="s2">except </span><span class="s1">self.Error:</span>
+            <span class="s2">raise</span>
+        <span class="s2">except </span><span class="s1">(OSError</span><span class="s2">, </span><span class="s1">EnvironmentError):</span>
+            <span class="s1">cls</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">tb = sys.exc_info()</span>
+            <span class="s2">if not </span><span class="s1">hasattr(value</span><span class="s2">, </span><span class="s3">'errno'</span><span class="s1">):</span>
+                <span class="s2">raise</span>
+            <span class="s1">__tracebackhide__ = </span><span class="s2">False</span>
+            <span class="s1">errno = value.errno</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">if not </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">WindowsError):</span>
+                    <span class="s2">raise </span><span class="s1">NameError</span>
+            <span class="s2">except </span><span class="s1">NameError:</span>
+                <span class="s4"># we are not on Windows, or we got a proper OSError</span>
+                <span class="s1">cls = self._geterrnoclass(errno)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">cls = self._geterrnoclass(_winerrnomap[errno])</span>
+                <span class="s2">except </span><span class="s1">KeyError:</span>
+                    <span class="s2">raise </span><span class="s1">value</span>
+            <span class="s2">raise </span><span class="s1">cls(</span><span class="s3">&quot;%s%r&quot; </span><span class="s1">% (func.__name__</span><span class="s2">, </span><span class="s1">args))</span>
+            <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+            
+
+<span class="s1">error = ErrorMaker(</span><span class="s3">'py.error'</span><span class="s1">)</span>
+<span class="s1">sys.modules[error.__name__] = error</span></pre>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<html>
+<head>
+<title>entry_points.txt</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+.s1 { color: #cc7832;}
+.s2 { color: #a9b7c6;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+entry_points.txt</font>
+</center></td></tr></table>
+<pre><span class="s0">[</span><span class="s1">distutils.commands</span><span class="s2">]</span>
+<span class="s1">alias </span><span class="s0">= </span><span class="s2">setuptools.command.alias:alias</span>
+<span class="s1">bdist_egg </span><span class="s0">= </span><span class="s2">setuptools.command.bdist_egg:bdist_egg</span>
+<span class="s1">bdist_rpm </span><span class="s0">= </span><span class="s2">setuptools.command.bdist_rpm:bdist_rpm</span>
+<span class="s1">build </span><span class="s0">= </span><span class="s2">setuptools.command.build:build</span>
+<span class="s1">build_clib </span><span class="s0">= </span><span class="s2">setuptools.command.build_clib:build_clib</span>
+<span class="s1">build_ext </span><span class="s0">= </span><span class="s2">setuptools.command.build_ext:build_ext</span>
+<span class="s1">build_py </span><span class="s0">= </span><span class="s2">setuptools.command.build_py:build_py</span>
+<span class="s1">develop </span><span class="s0">= </span><span class="s2">setuptools.command.develop:develop</span>
+<span class="s1">dist_info </span><span class="s0">= </span><span class="s2">setuptools.command.dist_info:dist_info</span>
+<span class="s1">easy_install </span><span class="s0">= </span><span class="s2">setuptools.command.easy_install:easy_install</span>
+<span class="s1">egg_info </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:egg_info</span>
+<span class="s1">install </span><span class="s0">= </span><span class="s2">setuptools.command.install:install</span>
+<span class="s1">install_egg_info </span><span class="s0">= </span><span class="s2">setuptools.command.install_egg_info:install_egg_info</span>
+<span class="s1">install_lib </span><span class="s0">= </span><span class="s2">setuptools.command.install_lib:install_lib</span>
+<span class="s1">install_scripts </span><span class="s0">= </span><span class="s2">setuptools.command.install_scripts:install_scripts</span>
+<span class="s1">rotate </span><span class="s0">= </span><span class="s2">setuptools.command.rotate:rotate</span>
+<span class="s1">saveopts </span><span class="s0">= </span><span class="s2">setuptools.command.saveopts:saveopts</span>
+<span class="s1">sdist </span><span class="s0">= </span><span class="s2">setuptools.command.sdist:sdist</span>
+<span class="s1">setopt </span><span class="s0">= </span><span class="s2">setuptools.command.setopt:setopt</span>
+<span class="s1">test </span><span class="s0">= </span><span class="s2">setuptools.command.test:test</span>
+<span class="s1">upload_docs </span><span class="s0">= </span><span class="s2">setuptools.command.upload_docs:upload_docs</span>
+
+<span class="s0">[</span><span class="s1">distutils.setup_keywords</span><span class="s2">]</span>
+<span class="s1">dependency_links </span><span class="s0">= </span><span class="s2">setuptools.dist:assert_string_list</span>
+<span class="s1">eager_resources </span><span class="s0">= </span><span class="s2">setuptools.dist:assert_string_list</span>
+<span class="s1">entry_points </span><span class="s0">= </span><span class="s2">setuptools.dist:check_entry_points</span>
+<span class="s1">exclude_package_data </span><span class="s0">= </span><span class="s2">setuptools.dist:check_package_data</span>
+<span class="s1">extras_require </span><span class="s0">= </span><span class="s2">setuptools.dist:check_extras</span>
+<span class="s1">include_package_data </span><span class="s0">= </span><span class="s2">setuptools.dist:assert_bool</span>
+<span class="s1">install_requires </span><span class="s0">= </span><span class="s2">setuptools.dist:check_requirements</span>
+<span class="s1">namespace_packages </span><span class="s0">= </span><span class="s2">setuptools.dist:check_nsp</span>
+<span class="s1">package_data </span><span class="s0">= </span><span class="s2">setuptools.dist:check_package_data</span>
+<span class="s1">packages </span><span class="s0">= </span><span class="s2">setuptools.dist:check_packages</span>
+<span class="s1">python_requires </span><span class="s0">= </span><span class="s2">setuptools.dist:check_specifier</span>
+<span class="s1">setup_requires </span><span class="s0">= </span><span class="s2">setuptools.dist:check_requirements</span>
+<span class="s1">test_loader </span><span class="s0">= </span><span class="s2">setuptools.dist:check_importable</span>
+<span class="s1">test_runner </span><span class="s0">= </span><span class="s2">setuptools.dist:check_importable</span>
+<span class="s1">test_suite </span><span class="s0">= </span><span class="s2">setuptools.dist:check_test_suite</span>
+<span class="s1">tests_require </span><span class="s0">= </span><span class="s2">setuptools.dist:check_requirements</span>
+<span class="s1">use_2to3 </span><span class="s0">= </span><span class="s2">setuptools.dist:invalid_unless_false</span>
+<span class="s1">zip_safe </span><span class="s0">= </span><span class="s2">setuptools.dist:assert_bool</span>
+
+<span class="s0">[</span><span class="s1">egg_info.writers</span><span class="s2">]</span>
+<span class="s1">PKG-INFO </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:write_pkg_info</span>
+<span class="s1">dependency_links.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:overwrite_arg</span>
+<span class="s1">depends.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:warn_depends_obsolete</span>
+<span class="s1">eager_resources.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:overwrite_arg</span>
+<span class="s1">entry_points.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:write_entries</span>
+<span class="s1">namespace_packages.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:overwrite_arg</span>
+<span class="s1">requires.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:write_requirements</span>
+<span class="s1">top_level.txt </span><span class="s0">= </span><span class="s2">setuptools.command.egg_info:write_toplevel_names</span>
+
+<span class="s0">[</span><span class="s1">setuptools.finalize_distribution_options</span><span class="s2">]</span>
+<span class="s1">keywords </span><span class="s0">= </span><span class="s2">setuptools.dist:Distribution._finalize_setup_keywords</span>
+<span class="s1">parent_finalize </span><span class="s0">= </span><span class="s2">setuptools.dist:_Distribution.finalize_options</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<html>
+<head>
+<title>test_project.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_project.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">counter </span><span class="s0">import </span><span class="s1">Counter</span>
+<span class="s0">from </span><span class="s1">db </span><span class="s0">import </span><span class="s1">get_db</span><span class="s0">, </span><span class="s1">add_counter</span><span class="s0">, </span><span class="s1">increment_counter</span><span class="s0">, </span><span class="s1">get_counter_data</span>
+<span class="s0">from </span><span class="s1">analyse </span><span class="s0">import </span><span class="s1">calculate_count</span>
+
+<span class="s0">class </span><span class="s1">TestCounter:</span>
+
+    <span class="s0">def </span><span class="s1">setup_method(self):</span>
+        <span class="s1">self.db = get_db(</span><span class="s2">&quot;test.db&quot;</span><span class="s1">)</span>
+        <span class="s1">add_counter(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s0">, </span><span class="s2">&quot;test_description&quot;</span><span class="s1">)</span>
+        <span class="s1">increment_counter(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s0">, </span><span class="s2">&quot;2021-12-06&quot;</span><span class="s1">)</span>
+        <span class="s1">increment_counter(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s0">, </span><span class="s2">&quot;2021-12-07&quot;</span><span class="s1">)</span>
+
+        <span class="s1">increment_counter(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s0">, </span><span class="s2">&quot;2021-12-09&quot;</span><span class="s1">)</span>
+        <span class="s1">increment_counter(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s0">, </span><span class="s2">&quot;2021-12-10&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_db_counter(self):</span>
+        <span class="s1">counter = Counter(</span><span class="s2">&quot;test_counter_1&quot;</span><span class="s0">, </span><span class="s2">&quot;test_description_1&quot;</span><span class="s1">)</span>
+        <span class="s1">counter.store(self.db)</span>
+
+        <span class="s1">counter.increment()</span>
+        <span class="s1">counter.add_event(self.db)</span>
+        <span class="s1">counter.reset()</span>
+        <span class="s1">counter.increment()</span>
+
+    <span class="s0">def </span><span class="s1">test_db_counter(self):</span>
+        <span class="s1">data = get_counter_data(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s1">)</span>
+        <span class="s0">assert </span><span class="s1">len(data) == </span><span class="s3">4</span>
+
+        <span class="s1">count = calculate_count(self.db</span><span class="s0">, </span><span class="s2">&quot;test_counter&quot;</span><span class="s1">)</span>
+        <span class="s0">assert </span><span class="s1">count == </span><span class="s3">4</span>
+
+
+
+    <span class="s0">def </span><span class="s1">teardown_method(self):</span>
+        <span class="s0">import </span><span class="s1">os</span>
+        <span class="s1">os.remove(</span><span class="s2">&quot;test.db&quot;</span><span class="s1">)</span>
+
+
+
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,718 @@
+<html>
+<head>
+<title>junitxml.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+junitxml.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Report test results in JUnit-XML format, for use with Jenkins and build 
+integration servers. 
+ 
+Based on initial code from Ross Lawley. 
+ 
+Output conforms to 
+https://github.com/jenkinsci/xunit-plugin/blob/master/src/main/resources/org/jenkinsci/plugins/xunit/types/model/xsd/junit-10.xsd 
+&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">functools</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">platform</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">xml.etree.ElementTree </span><span class="s2">as </span><span class="s1">ET</span>
+<span class="s2">from </span><span class="s1">datetime </span><span class="s2">import </span><span class="s1">datetime</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Callable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Dict</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Match</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Tuple</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">import </span><span class="s1">pytest</span>
+<span class="s2">from </span><span class="s1">_pytest </span><span class="s2">import </span><span class="s1">nodes</span>
+<span class="s2">from </span><span class="s1">_pytest </span><span class="s2">import </span><span class="s1">timing</span>
+<span class="s2">from </span><span class="s1">_pytest._code.code </span><span class="s2">import </span><span class="s1">ExceptionRepr</span>
+<span class="s2">from </span><span class="s1">_pytest._code.code </span><span class="s2">import </span><span class="s1">ReprFileLocation</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">Config</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">filename_arg</span>
+<span class="s2">from </span><span class="s1">_pytest.config.argparsing </span><span class="s2">import </span><span class="s1">Parser</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">FixtureRequest</span>
+<span class="s2">from </span><span class="s1">_pytest.reports </span><span class="s2">import </span><span class="s1">TestReport</span>
+<span class="s2">from </span><span class="s1">_pytest.stash </span><span class="s2">import </span><span class="s1">StashKey</span>
+<span class="s2">from </span><span class="s1">_pytest.terminal </span><span class="s2">import </span><span class="s1">TerminalReporter</span>
+
+
+<span class="s1">xml_key = StashKey[</span><span class="s3">&quot;LogXML&quot;</span><span class="s1">]()</span>
+
+
+<span class="s2">def </span><span class="s1">bin_xml_escape(arg: object) -&gt; str:</span>
+    <span class="s0">r&quot;&quot;&quot;Visually escape invalid XML characters. 
+ 
+    For example, transforms 
+        'hello\aworld\b' 
+    into 
+        'hello#x07world#x08' 
+    Note that the #xABs are *not* XML escapes - missing the ampersand &amp;#xAB. 
+    The idea is to escape visually for the user rather than for XML itself. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">repl(matchobj: Match[str]) -&gt; str:</span>
+        <span class="s1">i = ord(matchobj.group())</span>
+        <span class="s2">if </span><span class="s1">i &lt;= </span><span class="s4">0xFF</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s3">&quot;#x%02X&quot; </span><span class="s1">% i</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s3">&quot;#x%04X&quot; </span><span class="s1">% i</span>
+
+    <span class="s5"># The spec range of valid chars is:</span>
+    <span class="s5"># Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]</span>
+    <span class="s5"># For an unknown(?) reason, we disallow #x7F (DEL) as well.</span>
+    <span class="s1">illegal_xml_re = (</span>
+        <span class="s3">&quot;[^</span><span class="s2">\u0009\u000A\u000D\u0020</span><span class="s3">-</span><span class="s2">\u007E\u0080</span><span class="s3">-</span><span class="s2">\uD7FF\uE000</span><span class="s3">-</span><span class="s2">\uFFFD\u1000</span><span class="s3">0-</span><span class="s2">\u10FF</span><span class="s3">FF]&quot;</span>
+    <span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">re.sub(illegal_xml_re</span><span class="s2">, </span><span class="s1">repl</span><span class="s2">, </span><span class="s1">str(arg))</span>
+
+
+<span class="s2">def </span><span class="s1">merge_family(left</span><span class="s2">, </span><span class="s1">right) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">result = {}</span>
+    <span class="s2">for </span><span class="s1">kl</span><span class="s2">, </span><span class="s1">vl </span><span class="s2">in </span><span class="s1">left.items():</span>
+        <span class="s2">for </span><span class="s1">kr</span><span class="s2">, </span><span class="s1">vr </span><span class="s2">in </span><span class="s1">right.items():</span>
+            <span class="s2">if not </span><span class="s1">isinstance(vl</span><span class="s2">, </span><span class="s1">list):</span>
+                <span class="s2">raise </span><span class="s1">TypeError(type(vl))</span>
+            <span class="s1">result[kl] = vl + vr</span>
+    <span class="s1">left.update(result)</span>
+
+
+<span class="s1">families = {}</span>
+<span class="s1">families[</span><span class="s3">&quot;_base&quot;</span><span class="s1">] = {</span><span class="s3">&quot;testcase&quot;</span><span class="s1">: [</span><span class="s3">&quot;classname&quot;</span><span class="s2">, </span><span class="s3">&quot;name&quot;</span><span class="s1">]}</span>
+<span class="s1">families[</span><span class="s3">&quot;_base_legacy&quot;</span><span class="s1">] = {</span><span class="s3">&quot;testcase&quot;</span><span class="s1">: [</span><span class="s3">&quot;file&quot;</span><span class="s2">, </span><span class="s3">&quot;line&quot;</span><span class="s2">, </span><span class="s3">&quot;url&quot;</span><span class="s1">]}</span>
+
+<span class="s5"># xUnit 1.x inherits legacy attributes.</span>
+<span class="s1">families[</span><span class="s3">&quot;xunit1&quot;</span><span class="s1">] = families[</span><span class="s3">&quot;_base&quot;</span><span class="s1">].copy()</span>
+<span class="s1">merge_family(families[</span><span class="s3">&quot;xunit1&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">families[</span><span class="s3">&quot;_base_legacy&quot;</span><span class="s1">])</span>
+
+<span class="s5"># xUnit 2.x uses strict base attributes.</span>
+<span class="s1">families[</span><span class="s3">&quot;xunit2&quot;</span><span class="s1">] = families[</span><span class="s3">&quot;_base&quot;</span><span class="s1">]</span>
+
+
+<span class="s2">class </span><span class="s1">_NodeReporter:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">nodeid: Union[str</span><span class="s2">, </span><span class="s1">TestReport]</span><span class="s2">, </span><span class="s1">xml: </span><span class="s3">&quot;LogXML&quot;</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.id = nodeid</span>
+        <span class="s1">self.xml = xml</span>
+        <span class="s1">self.add_stats = self.xml.add_stats</span>
+        <span class="s1">self.family = self.xml.family</span>
+        <span class="s1">self.duration = </span><span class="s4">0.0</span>
+        <span class="s1">self.properties: List[Tuple[str</span><span class="s2">, </span><span class="s1">str]] = []</span>
+        <span class="s1">self.nodes: List[ET.Element] = []</span>
+        <span class="s1">self.attrs: Dict[str</span><span class="s2">, </span><span class="s1">str] = {}</span>
+
+    <span class="s2">def </span><span class="s1">append(self</span><span class="s2">, </span><span class="s1">node: ET.Element) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.xml.add_stats(node.tag)</span>
+        <span class="s1">self.nodes.append(node)</span>
+
+    <span class="s2">def </span><span class="s1">add_property(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.properties.append((str(name)</span><span class="s2">, </span><span class="s1">bin_xml_escape(value)))</span>
+
+    <span class="s2">def </span><span class="s1">add_attribute(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.attrs[str(name)] = bin_xml_escape(value)</span>
+
+    <span class="s2">def </span><span class="s1">make_properties_node(self) -&gt; Optional[ET.Element]:</span>
+        <span class="s0">&quot;&quot;&quot;Return a Junit node containing custom properties, if any.&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.properties:</span>
+            <span class="s1">properties = ET.Element(</span><span class="s3">&quot;properties&quot;</span><span class="s1">)</span>
+            <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">self.properties:</span>
+                <span class="s1">properties.append(ET.Element(</span><span class="s3">&quot;property&quot;</span><span class="s2">, </span><span class="s1">name=name</span><span class="s2">, </span><span class="s1">value=value))</span>
+            <span class="s2">return </span><span class="s1">properties</span>
+        <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">record_testreport(self</span><span class="s2">, </span><span class="s1">testreport: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">names = mangle_test_address(testreport.nodeid)</span>
+        <span class="s1">existing_attrs = self.attrs</span>
+        <span class="s1">classnames = names[:-</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s2">if </span><span class="s1">self.xml.prefix:</span>
+            <span class="s1">classnames.insert(</span><span class="s4">0</span><span class="s2">, </span><span class="s1">self.xml.prefix)</span>
+        <span class="s1">attrs: Dict[str</span><span class="s2">, </span><span class="s1">str] = {</span>
+            <span class="s3">&quot;classname&quot;</span><span class="s1">: </span><span class="s3">&quot;.&quot;</span><span class="s1">.join(classnames)</span><span class="s2">,</span>
+            <span class="s3">&quot;name&quot;</span><span class="s1">: bin_xml_escape(names[-</span><span class="s4">1</span><span class="s1">])</span><span class="s2">,</span>
+            <span class="s3">&quot;file&quot;</span><span class="s1">: testreport.location[</span><span class="s4">0</span><span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">testreport.location[</span><span class="s4">1</span><span class="s1">] </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">attrs[</span><span class="s3">&quot;line&quot;</span><span class="s1">] = str(testreport.location[</span><span class="s4">1</span><span class="s1">])</span>
+        <span class="s2">if </span><span class="s1">hasattr(testreport</span><span class="s2">, </span><span class="s3">&quot;url&quot;</span><span class="s1">):</span>
+            <span class="s1">attrs[</span><span class="s3">&quot;url&quot;</span><span class="s1">] = testreport.url</span>
+        <span class="s1">self.attrs = attrs</span>
+        <span class="s1">self.attrs.update(existing_attrs)  </span><span class="s5"># Restore any user-defined attributes.</span>
+
+        <span class="s5"># Preserve legacy testcase behavior.</span>
+        <span class="s2">if </span><span class="s1">self.family == </span><span class="s3">&quot;xunit1&quot;</span><span class="s1">:</span>
+            <span class="s2">return</span>
+
+        <span class="s5"># Filter out attributes not permitted by this test family.</span>
+        <span class="s5"># Including custom attributes because they are not valid here.</span>
+        <span class="s1">temp_attrs = {}</span>
+        <span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">self.attrs.keys():</span>
+            <span class="s2">if </span><span class="s1">key </span><span class="s2">in </span><span class="s1">families[self.family][</span><span class="s3">&quot;testcase&quot;</span><span class="s1">]:</span>
+                <span class="s1">temp_attrs[key] = self.attrs[key]</span>
+        <span class="s1">self.attrs = temp_attrs</span>
+
+    <span class="s2">def </span><span class="s1">to_xml(self) -&gt; ET.Element:</span>
+        <span class="s1">testcase = ET.Element(</span><span class="s3">&quot;testcase&quot;</span><span class="s2">, </span><span class="s1">self.attrs</span><span class="s2">, </span><span class="s1">time=</span><span class="s3">&quot;%.3f&quot; </span><span class="s1">% self.duration)</span>
+        <span class="s1">properties = self.make_properties_node()</span>
+        <span class="s2">if </span><span class="s1">properties </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">testcase.append(properties)</span>
+        <span class="s1">testcase.extend(self.nodes)</span>
+        <span class="s2">return </span><span class="s1">testcase</span>
+
+    <span class="s2">def </span><span class="s1">_add_simple(self</span><span class="s2">, </span><span class="s1">tag: str</span><span class="s2">, </span><span class="s1">message: str</span><span class="s2">, </span><span class="s1">data: Optional[str] = </span><span class="s2">None</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">node = ET.Element(tag</span><span class="s2">, </span><span class="s1">message=message)</span>
+        <span class="s1">node.text = bin_xml_escape(data)</span>
+        <span class="s1">self.append(node)</span>
+
+    <span class="s2">def </span><span class="s1">write_captured_output(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if not </span><span class="s1">self.xml.log_passing_tests </span><span class="s2">and </span><span class="s1">report.passed:</span>
+            <span class="s2">return</span>
+
+        <span class="s1">content_out = report.capstdout</span>
+        <span class="s1">content_log = report.caplog</span>
+        <span class="s1">content_err = report.capstderr</span>
+        <span class="s2">if </span><span class="s1">self.xml.logging == </span><span class="s3">&quot;no&quot;</span><span class="s1">:</span>
+            <span class="s2">return</span>
+        <span class="s1">content_all = </span><span class="s3">&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.xml.logging </span><span class="s2">in </span><span class="s1">[</span><span class="s3">&quot;log&quot;</span><span class="s2">, </span><span class="s3">&quot;all&quot;</span><span class="s1">]:</span>
+            <span class="s1">content_all = self._prepare_content(content_log</span><span class="s2">, </span><span class="s3">&quot; Captured Log &quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">self.xml.logging </span><span class="s2">in </span><span class="s1">[</span><span class="s3">&quot;system-out&quot;</span><span class="s2">, </span><span class="s3">&quot;out-err&quot;</span><span class="s2">, </span><span class="s3">&quot;all&quot;</span><span class="s1">]:</span>
+            <span class="s1">content_all += self._prepare_content(content_out</span><span class="s2">, </span><span class="s3">&quot; Captured Out &quot;</span><span class="s1">)</span>
+            <span class="s1">self._write_content(report</span><span class="s2">, </span><span class="s1">content_all</span><span class="s2">, </span><span class="s3">&quot;system-out&quot;</span><span class="s1">)</span>
+            <span class="s1">content_all = </span><span class="s3">&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.xml.logging </span><span class="s2">in </span><span class="s1">[</span><span class="s3">&quot;system-err&quot;</span><span class="s2">, </span><span class="s3">&quot;out-err&quot;</span><span class="s2">, </span><span class="s3">&quot;all&quot;</span><span class="s1">]:</span>
+            <span class="s1">content_all += self._prepare_content(content_err</span><span class="s2">, </span><span class="s3">&quot; Captured Err &quot;</span><span class="s1">)</span>
+            <span class="s1">self._write_content(report</span><span class="s2">, </span><span class="s1">content_all</span><span class="s2">, </span><span class="s3">&quot;system-err&quot;</span><span class="s1">)</span>
+            <span class="s1">content_all = </span><span class="s3">&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">content_all:</span>
+            <span class="s1">self._write_content(report</span><span class="s2">, </span><span class="s1">content_all</span><span class="s2">, </span><span class="s3">&quot;system-out&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_prepare_content(self</span><span class="s2">, </span><span class="s1">content: str</span><span class="s2">, </span><span class="s1">header: str) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join([header.center(</span><span class="s4">80</span><span class="s2">, </span><span class="s3">&quot;-&quot;</span><span class="s1">)</span><span class="s2">, </span><span class="s1">content</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s1">])</span>
+
+    <span class="s2">def </span><span class="s1">_write_content(self</span><span class="s2">, </span><span class="s1">report: TestReport</span><span class="s2">, </span><span class="s1">content: str</span><span class="s2">, </span><span class="s1">jheader: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">tag = ET.Element(jheader)</span>
+        <span class="s1">tag.text = bin_xml_escape(content)</span>
+        <span class="s1">self.append(tag)</span>
+
+    <span class="s2">def </span><span class="s1">append_pass(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.add_stats(</span><span class="s3">&quot;passed&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">append_failure(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s5"># msg = str(report.longrepr.reprtraceback.extraline)</span>
+        <span class="s2">if </span><span class="s1">hasattr(report</span><span class="s2">, </span><span class="s3">&quot;wasxfail&quot;</span><span class="s1">):</span>
+            <span class="s1">self._add_simple(</span><span class="s3">&quot;skipped&quot;</span><span class="s2">, </span><span class="s3">&quot;xfail-marked test passes unexpectedly&quot;</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">assert </span><span class="s1">report.longrepr </span><span class="s2">is not None</span>
+            <span class="s1">reprcrash: Optional[ReprFileLocation] = getattr(</span>
+                <span class="s1">report.longrepr</span><span class="s2">, </span><span class="s3">&quot;reprcrash&quot;</span><span class="s2">, None</span>
+            <span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">reprcrash </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">message = reprcrash.message</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">message = str(report.longrepr)</span>
+            <span class="s1">message = bin_xml_escape(message)</span>
+            <span class="s1">self._add_simple(</span><span class="s3">&quot;failure&quot;</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">str(report.longrepr))</span>
+
+    <span class="s2">def </span><span class="s1">append_collect_error(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s5"># msg = str(report.longrepr.reprtraceback.extraline)</span>
+        <span class="s2">assert </span><span class="s1">report.longrepr </span><span class="s2">is not None</span>
+        <span class="s1">self._add_simple(</span><span class="s3">&quot;error&quot;</span><span class="s2">, </span><span class="s3">&quot;collection failure&quot;</span><span class="s2">, </span><span class="s1">str(report.longrepr))</span>
+
+    <span class="s2">def </span><span class="s1">append_collect_skipped(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self._add_simple(</span><span class="s3">&quot;skipped&quot;</span><span class="s2">, </span><span class="s3">&quot;collection skipped&quot;</span><span class="s2">, </span><span class="s1">str(report.longrepr))</span>
+
+    <span class="s2">def </span><span class="s1">append_error(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">assert </span><span class="s1">report.longrepr </span><span class="s2">is not None</span>
+        <span class="s1">reprcrash: Optional[ReprFileLocation] = getattr(</span>
+            <span class="s1">report.longrepr</span><span class="s2">, </span><span class="s3">&quot;reprcrash&quot;</span><span class="s2">, None</span>
+        <span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">reprcrash </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">reason = reprcrash.message</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">reason = str(report.longrepr)</span>
+
+        <span class="s2">if </span><span class="s1">report.when == </span><span class="s3">&quot;teardown&quot;</span><span class="s1">:</span>
+            <span class="s1">msg = </span><span class="s3">f'failed on teardown with &quot;</span><span class="s2">{</span><span class="s1">reason</span><span class="s2">}</span><span class="s3">&quot;'</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">msg = </span><span class="s3">f'failed on setup with &quot;</span><span class="s2">{</span><span class="s1">reason</span><span class="s2">}</span><span class="s3">&quot;'</span>
+        <span class="s1">self._add_simple(</span><span class="s3">&quot;error&quot;</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">, </span><span class="s1">str(report.longrepr))</span>
+
+    <span class="s2">def </span><span class="s1">append_skipped(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">hasattr(report</span><span class="s2">, </span><span class="s3">&quot;wasxfail&quot;</span><span class="s1">):</span>
+            <span class="s1">xfailreason = report.wasxfail</span>
+            <span class="s2">if </span><span class="s1">xfailreason.startswith(</span><span class="s3">&quot;reason: &quot;</span><span class="s1">):</span>
+                <span class="s1">xfailreason = xfailreason[</span><span class="s4">8</span><span class="s1">:]</span>
+            <span class="s1">xfailreason = bin_xml_escape(xfailreason)</span>
+            <span class="s1">skipped = ET.Element(</span><span class="s3">&quot;skipped&quot;</span><span class="s2">, </span><span class="s1">type=</span><span class="s3">&quot;pytest.xfail&quot;</span><span class="s2">, </span><span class="s1">message=xfailreason)</span>
+            <span class="s1">self.append(skipped)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">assert </span><span class="s1">isinstance(report.longrepr</span><span class="s2">, </span><span class="s1">tuple)</span>
+            <span class="s1">filename</span><span class="s2">, </span><span class="s1">lineno</span><span class="s2">, </span><span class="s1">skipreason = report.longrepr</span>
+            <span class="s2">if </span><span class="s1">skipreason.startswith(</span><span class="s3">&quot;Skipped: &quot;</span><span class="s1">):</span>
+                <span class="s1">skipreason = skipreason[</span><span class="s4">9</span><span class="s1">:]</span>
+            <span class="s1">details = </span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">filename</span><span class="s2">}</span><span class="s3">:</span><span class="s2">{</span><span class="s1">lineno</span><span class="s2">}</span><span class="s3">: </span><span class="s2">{</span><span class="s1">skipreason</span><span class="s2">}</span><span class="s3">&quot;</span>
+
+            <span class="s1">skipped = ET.Element(</span><span class="s3">&quot;skipped&quot;</span><span class="s2">, </span><span class="s1">type=</span><span class="s3">&quot;pytest.skip&quot;</span><span class="s2">, </span><span class="s1">message=skipreason)</span>
+            <span class="s1">skipped.text = bin_xml_escape(details)</span>
+            <span class="s1">self.append(skipped)</span>
+            <span class="s1">self.write_captured_output(report)</span>
+
+    <span class="s2">def </span><span class="s1">finalize(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">data = self.to_xml()</span>
+        <span class="s1">self.__dict__.clear()</span>
+        <span class="s5"># Type ignored because mypy doesn't like overriding a method.</span>
+        <span class="s5"># Also the return value doesn't match...</span>
+        <span class="s1">self.to_xml = </span><span class="s2">lambda</span><span class="s1">: data  </span><span class="s5"># type: ignore[assignment]</span>
+
+
+<span class="s2">def </span><span class="s1">_warn_incompatibility_with_xunit2(</span>
+    <span class="s1">request: FixtureRequest</span><span class="s2">, </span><span class="s1">fixture_name: str</span>
+<span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Emit a PytestWarning about the given fixture being incompatible with newer xunit revisions.&quot;&quot;&quot;</span>
+    <span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestWarning</span>
+
+    <span class="s1">xml = request.config.stash.get(xml_key</span><span class="s2">, None</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">xml </span><span class="s2">is not None and </span><span class="s1">xml.family </span><span class="s2">not in </span><span class="s1">(</span><span class="s3">&quot;xunit1&quot;</span><span class="s2">, </span><span class="s3">&quot;legacy&quot;</span><span class="s1">):</span>
+        <span class="s1">request.node.warn(</span>
+            <span class="s1">PytestWarning(</span>
+                <span class="s3">&quot;{fixture_name} is incompatible with junit_family '{family}' (use 'legacy' or 'xunit1')&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">fixture_name=fixture_name</span><span class="s2">, </span><span class="s1">family=xml.family</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s1">)</span>
+
+
+<span class="s1">@pytest.fixture</span>
+<span class="s2">def </span><span class="s1">record_property(request: FixtureRequest) -&gt; Callable[[str</span><span class="s2">, </span><span class="s1">object]</span><span class="s2">, None</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;Add extra properties to the calling test. 
+ 
+    User properties become part of the test report and are available to the 
+    configured reporters, like JUnit XML. 
+ 
+    The fixture is callable with ``name, value``. The value is automatically 
+    XML-encoded. 
+ 
+    Example:: 
+ 
+        def test_function(record_property): 
+            record_property(&quot;example_key&quot;, 1) 
+    &quot;&quot;&quot;</span>
+    <span class="s1">_warn_incompatibility_with_xunit2(request</span><span class="s2">, </span><span class="s3">&quot;record_property&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">append_property(name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">request.node.user_properties.append((name</span><span class="s2">, </span><span class="s1">value))</span>
+
+    <span class="s2">return </span><span class="s1">append_property</span>
+
+
+<span class="s1">@pytest.fixture</span>
+<span class="s2">def </span><span class="s1">record_xml_attribute(request: FixtureRequest) -&gt; Callable[[str</span><span class="s2">, </span><span class="s1">object]</span><span class="s2">, None</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;Add extra xml attributes to the tag for the calling test. 
+ 
+    The fixture is callable with ``name, value``. The value is 
+    automatically XML-encoded. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestExperimentalApiWarning</span>
+
+    <span class="s1">request.node.warn(</span>
+        <span class="s1">PytestExperimentalApiWarning(</span><span class="s3">&quot;record_xml_attribute is an experimental feature&quot;</span><span class="s1">)</span>
+    <span class="s1">)</span>
+
+    <span class="s1">_warn_incompatibility_with_xunit2(request</span><span class="s2">, </span><span class="s3">&quot;record_xml_attribute&quot;</span><span class="s1">)</span>
+
+    <span class="s5"># Declare noop</span>
+    <span class="s2">def </span><span class="s1">add_attr_noop(name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">pass</span>
+
+    <span class="s1">attr_func = add_attr_noop</span>
+
+    <span class="s1">xml = request.config.stash.get(xml_key</span><span class="s2">, None</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">xml </span><span class="s2">is not None</span><span class="s1">:</span>
+        <span class="s1">node_reporter = xml.node_reporter(request.node.nodeid)</span>
+        <span class="s1">attr_func = node_reporter.add_attribute</span>
+
+    <span class="s2">return </span><span class="s1">attr_func</span>
+
+
+<span class="s2">def </span><span class="s1">_check_record_param_type(param: str</span><span class="s2">, </span><span class="s1">v: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Used by record_testsuite_property to check that the given parameter name is of the proper 
+    type.&quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+    <span class="s2">if not </span><span class="s1">isinstance(v</span><span class="s2">, </span><span class="s1">str):</span>
+        <span class="s1">msg = </span><span class="s3">&quot;{param} parameter needs to be a string, but {g} given&quot;  </span><span class="s5"># type: ignore[unreachable]</span>
+        <span class="s2">raise </span><span class="s1">TypeError(msg.format(param=param</span><span class="s2">, </span><span class="s1">g=type(v).__name__))</span>
+
+
+<span class="s1">@pytest.fixture(scope=</span><span class="s3">&quot;session&quot;</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">record_testsuite_property(request: FixtureRequest) -&gt; Callable[[str</span><span class="s2">, </span><span class="s1">object]</span><span class="s2">, None</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;Record a new ``&lt;property&gt;`` tag as child of the root ``&lt;testsuite&gt;``. 
+ 
+    This is suitable to writing global information regarding the entire test 
+    suite, and is compatible with ``xunit2`` JUnit family. 
+ 
+    This is a ``session``-scoped fixture which is called with ``(name, value)``. Example: 
+ 
+    .. code-block:: python 
+ 
+        def test_foo(record_testsuite_property): 
+            record_testsuite_property(&quot;ARCH&quot;, &quot;PPC&quot;) 
+            record_testsuite_property(&quot;STORAGE_TYPE&quot;, &quot;CEPH&quot;) 
+ 
+    ``name`` must be a string, ``value`` will be converted to a string and properly xml-escaped. 
+ 
+    .. warning:: 
+ 
+        Currently this fixture **does not work** with the 
+        `pytest-xdist &lt;https://github.com/pytest-dev/pytest-xdist&gt;`__ plugin. See 
+        :issue:`7767` for details. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">record_func(name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;No-op function in case --junitxml was not passed in the command-line.&quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">_check_record_param_type(</span><span class="s3">&quot;name&quot;</span><span class="s2">, </span><span class="s1">name)</span>
+
+    <span class="s1">xml = request.config.stash.get(xml_key</span><span class="s2">, None</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">xml </span><span class="s2">is not None</span><span class="s1">:</span>
+        <span class="s1">record_func = xml.add_global_property  </span><span class="s5"># noqa</span>
+    <span class="s2">return </span><span class="s1">record_func</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">group = parser.getgroup(</span><span class="s3">&quot;terminal reporting&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s3">&quot;--junitxml&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;--junit-xml&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s3">&quot;store&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s3">&quot;xmlpath&quot;</span><span class="s2">,</span>
+        <span class="s1">metavar=</span><span class="s3">&quot;path&quot;</span><span class="s2">,</span>
+        <span class="s1">type=functools.partial(filename_arg</span><span class="s2">, </span><span class="s1">optname=</span><span class="s3">&quot;--junitxml&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s2">None,</span>
+        <span class="s1">help=</span><span class="s3">&quot;create junit-xml style report file at given path.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s3">&quot;--junitprefix&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;--junit-prefix&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s3">&quot;store&quot;</span><span class="s2">,</span>
+        <span class="s1">metavar=</span><span class="s3">&quot;str&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s2">None,</span>
+        <span class="s1">help=</span><span class="s3">&quot;prepend prefix to classnames in junit-xml output&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;junit_suite_name&quot;</span><span class="s2">, </span><span class="s3">&quot;Test suite name for JUnit report&quot;</span><span class="s2">, </span><span class="s1">default=</span><span class="s3">&quot;pytest&quot;</span>
+    <span class="s1">)</span>
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;junit_logging&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;Write captured log messages to JUnit report: &quot;</span>
+        <span class="s3">&quot;one of no|log|system-out|system-err|out-err|all&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s3">&quot;no&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;junit_log_passing_tests&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;Capture log information for passing tests to JUnit report: &quot;</span><span class="s2">,</span>
+        <span class="s1">type=</span><span class="s3">&quot;bool&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s2">True,</span>
+    <span class="s1">)</span>
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;junit_duration_report&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;Duration time to report: one of total|call&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s3">&quot;total&quot;</span><span class="s2">,</span>
+    <span class="s1">)  </span><span class="s5"># choices=['total', 'call'])</span>
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;junit_family&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;Emit XML for schema: one of legacy|xunit1|xunit2&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s3">&quot;xunit2&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">xmlpath = config.option.xmlpath</span>
+    <span class="s5"># Prevent opening xmllog on worker nodes (xdist).</span>
+    <span class="s2">if </span><span class="s1">xmlpath </span><span class="s2">and not </span><span class="s1">hasattr(config</span><span class="s2">, </span><span class="s3">&quot;workerinput&quot;</span><span class="s1">):</span>
+        <span class="s1">junit_family = config.getini(</span><span class="s3">&quot;junit_family&quot;</span><span class="s1">)</span>
+        <span class="s1">config.stash[xml_key] = LogXML(</span>
+            <span class="s1">xmlpath</span><span class="s2">,</span>
+            <span class="s1">config.option.junitprefix</span><span class="s2">,</span>
+            <span class="s1">config.getini(</span><span class="s3">&quot;junit_suite_name&quot;</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">config.getini(</span><span class="s3">&quot;junit_logging&quot;</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">config.getini(</span><span class="s3">&quot;junit_duration_report&quot;</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">junit_family</span><span class="s2">,</span>
+            <span class="s1">config.getini(</span><span class="s3">&quot;junit_log_passing_tests&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">)</span>
+        <span class="s1">config.pluginmanager.register(config.stash[xml_key])</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_unconfigure(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">xml = config.stash.get(xml_key</span><span class="s2">, None</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">xml:</span>
+        <span class="s2">del </span><span class="s1">config.stash[xml_key]</span>
+        <span class="s1">config.pluginmanager.unregister(xml)</span>
+
+
+<span class="s2">def </span><span class="s1">mangle_test_address(address: str) -&gt; List[str]:</span>
+    <span class="s1">path</span><span class="s2">, </span><span class="s1">possible_open_bracket</span><span class="s2">, </span><span class="s1">params = address.partition(</span><span class="s3">&quot;[&quot;</span><span class="s1">)</span>
+    <span class="s1">names = path.split(</span><span class="s3">&quot;::&quot;</span><span class="s1">)</span>
+    <span class="s5"># Convert file path to dotted path.</span>
+    <span class="s1">names[</span><span class="s4">0</span><span class="s1">] = names[</span><span class="s4">0</span><span class="s1">].replace(nodes.SEP</span><span class="s2">, </span><span class="s3">&quot;.&quot;</span><span class="s1">)</span>
+    <span class="s1">names[</span><span class="s4">0</span><span class="s1">] = re.sub(</span><span class="s3">r&quot;\.py$&quot;</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">names[</span><span class="s4">0</span><span class="s1">])</span>
+    <span class="s5"># Put any params back.</span>
+    <span class="s1">names[-</span><span class="s4">1</span><span class="s1">] += possible_open_bracket + params</span>
+    <span class="s2">return </span><span class="s1">names</span>
+
+
+<span class="s2">class </span><span class="s1">LogXML:</span>
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">logfile</span><span class="s2">,</span>
+        <span class="s1">prefix: Optional[str]</span><span class="s2">,</span>
+        <span class="s1">suite_name: str = </span><span class="s3">&quot;pytest&quot;</span><span class="s2">,</span>
+        <span class="s1">logging: str = </span><span class="s3">&quot;no&quot;</span><span class="s2">,</span>
+        <span class="s1">report_duration: str = </span><span class="s3">&quot;total&quot;</span><span class="s2">,</span>
+        <span class="s1">family=</span><span class="s3">&quot;xunit1&quot;</span><span class="s2">,</span>
+        <span class="s1">log_passing_tests: bool = </span><span class="s2">True,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">logfile = os.path.expanduser(os.path.expandvars(logfile))</span>
+        <span class="s1">self.logfile = os.path.normpath(os.path.abspath(logfile))</span>
+        <span class="s1">self.prefix = prefix</span>
+        <span class="s1">self.suite_name = suite_name</span>
+        <span class="s1">self.logging = logging</span>
+        <span class="s1">self.log_passing_tests = log_passing_tests</span>
+        <span class="s1">self.report_duration = report_duration</span>
+        <span class="s1">self.family = family</span>
+        <span class="s1">self.stats: Dict[str</span><span class="s2">, </span><span class="s1">int] = dict.fromkeys(</span>
+            <span class="s1">[</span><span class="s3">&quot;error&quot;</span><span class="s2">, </span><span class="s3">&quot;passed&quot;</span><span class="s2">, </span><span class="s3">&quot;failure&quot;</span><span class="s2">, </span><span class="s3">&quot;skipped&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s4">0</span>
+        <span class="s1">)</span>
+        <span class="s1">self.node_reporters: Dict[</span>
+            <span class="s1">Tuple[Union[str</span><span class="s2">, </span><span class="s1">TestReport]</span><span class="s2">, </span><span class="s1">object]</span><span class="s2">, </span><span class="s1">_NodeReporter</span>
+        <span class="s1">] = {}</span>
+        <span class="s1">self.node_reporters_ordered: List[_NodeReporter] = []</span>
+        <span class="s1">self.global_properties: List[Tuple[str</span><span class="s2">, </span><span class="s1">str]] = []</span>
+
+        <span class="s5"># List of reports that failed on call but teardown is pending.</span>
+        <span class="s1">self.open_reports: List[TestReport] = []</span>
+        <span class="s1">self.cnt_double_fail_tests = </span><span class="s4">0</span>
+
+        <span class="s5"># Replaces convenience family with real family.</span>
+        <span class="s2">if </span><span class="s1">self.family == </span><span class="s3">&quot;legacy&quot;</span><span class="s1">:</span>
+            <span class="s1">self.family = </span><span class="s3">&quot;xunit1&quot;</span>
+
+    <span class="s2">def </span><span class="s1">finalize(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">nodeid = getattr(report</span><span class="s2">, </span><span class="s3">&quot;nodeid&quot;</span><span class="s2">, </span><span class="s1">report)</span>
+        <span class="s5"># Local hack to handle xdist report order.</span>
+        <span class="s1">workernode = getattr(report</span><span class="s2">, </span><span class="s3">&quot;node&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+        <span class="s1">reporter = self.node_reporters.pop((nodeid</span><span class="s2">, </span><span class="s1">workernode))</span>
+        <span class="s2">if </span><span class="s1">reporter </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">reporter.finalize()</span>
+
+    <span class="s2">def </span><span class="s1">node_reporter(self</span><span class="s2">, </span><span class="s1">report: Union[TestReport</span><span class="s2">, </span><span class="s1">str]) -&gt; _NodeReporter:</span>
+        <span class="s1">nodeid: Union[str</span><span class="s2">, </span><span class="s1">TestReport] = getattr(report</span><span class="s2">, </span><span class="s3">&quot;nodeid&quot;</span><span class="s2">, </span><span class="s1">report)</span>
+        <span class="s5"># Local hack to handle xdist report order.</span>
+        <span class="s1">workernode = getattr(report</span><span class="s2">, </span><span class="s3">&quot;node&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+
+        <span class="s1">key = nodeid</span><span class="s2">, </span><span class="s1">workernode</span>
+
+        <span class="s2">if </span><span class="s1">key </span><span class="s2">in </span><span class="s1">self.node_reporters:</span>
+            <span class="s5"># TODO: breaks for --dist=each</span>
+            <span class="s2">return </span><span class="s1">self.node_reporters[key]</span>
+
+        <span class="s1">reporter = _NodeReporter(nodeid</span><span class="s2">, </span><span class="s1">self)</span>
+
+        <span class="s1">self.node_reporters[key] = reporter</span>
+        <span class="s1">self.node_reporters_ordered.append(reporter)</span>
+
+        <span class="s2">return </span><span class="s1">reporter</span>
+
+    <span class="s2">def </span><span class="s1">add_stats(self</span><span class="s2">, </span><span class="s1">key: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">key </span><span class="s2">in </span><span class="s1">self.stats:</span>
+            <span class="s1">self.stats[key] += </span><span class="s4">1</span>
+
+    <span class="s2">def </span><span class="s1">_opentestcase(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; _NodeReporter:</span>
+        <span class="s1">reporter = self.node_reporter(report)</span>
+        <span class="s1">reporter.record_testreport(report)</span>
+        <span class="s2">return </span><span class="s1">reporter</span>
+
+    <span class="s2">def </span><span class="s1">pytest_runtest_logreport(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Handle a setup/call/teardown report, generating the appropriate 
+        XML tags as necessary. 
+ 
+        Note: due to plugins like xdist, this hook may be called in interlaced 
+        order with reports from other nodes. For example: 
+ 
+        Usual call order: 
+            -&gt; setup node1 
+            -&gt; call node1 
+            -&gt; teardown node1 
+            -&gt; setup node2 
+            -&gt; call node2 
+            -&gt; teardown node2 
+ 
+        Possible call order in xdist: 
+            -&gt; setup node1 
+            -&gt; call node1 
+            -&gt; setup node2 
+            -&gt; call node2 
+            -&gt; teardown node2 
+            -&gt; teardown node1 
+        &quot;&quot;&quot;</span>
+        <span class="s1">close_report = </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">report.passed:</span>
+            <span class="s2">if </span><span class="s1">report.when == </span><span class="s3">&quot;call&quot;</span><span class="s1">:  </span><span class="s5"># ignore setup/teardown</span>
+                <span class="s1">reporter = self._opentestcase(report)</span>
+                <span class="s1">reporter.append_pass(report)</span>
+        <span class="s2">elif </span><span class="s1">report.failed:</span>
+            <span class="s2">if </span><span class="s1">report.when == </span><span class="s3">&quot;teardown&quot;</span><span class="s1">:</span>
+                <span class="s5"># The following vars are needed when xdist plugin is used.</span>
+                <span class="s1">report_wid = getattr(report</span><span class="s2">, </span><span class="s3">&quot;worker_id&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+                <span class="s1">report_ii = getattr(report</span><span class="s2">, </span><span class="s3">&quot;item_index&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+                <span class="s1">close_report = next(</span>
+                    <span class="s1">(</span>
+                        <span class="s1">rep</span>
+                        <span class="s2">for </span><span class="s1">rep </span><span class="s2">in </span><span class="s1">self.open_reports</span>
+                        <span class="s2">if </span><span class="s1">(</span>
+                            <span class="s1">rep.nodeid == report.nodeid</span>
+                            <span class="s2">and </span><span class="s1">getattr(rep</span><span class="s2">, </span><span class="s3">&quot;item_index&quot;</span><span class="s2">, None</span><span class="s1">) == report_ii</span>
+                            <span class="s2">and </span><span class="s1">getattr(rep</span><span class="s2">, </span><span class="s3">&quot;worker_id&quot;</span><span class="s2">, None</span><span class="s1">) == report_wid</span>
+                        <span class="s1">)</span>
+                    <span class="s1">)</span><span class="s2">,</span>
+                    <span class="s2">None,</span>
+                <span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">close_report:</span>
+                    <span class="s5"># We need to open new testcase in case we have failure in</span>
+                    <span class="s5"># call and error in teardown in order to follow junit</span>
+                    <span class="s5"># schema.</span>
+                    <span class="s1">self.finalize(close_report)</span>
+                    <span class="s1">self.cnt_double_fail_tests += </span><span class="s4">1</span>
+            <span class="s1">reporter = self._opentestcase(report)</span>
+            <span class="s2">if </span><span class="s1">report.when == </span><span class="s3">&quot;call&quot;</span><span class="s1">:</span>
+                <span class="s1">reporter.append_failure(report)</span>
+                <span class="s1">self.open_reports.append(report)</span>
+                <span class="s2">if not </span><span class="s1">self.log_passing_tests:</span>
+                    <span class="s1">reporter.write_captured_output(report)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">reporter.append_error(report)</span>
+        <span class="s2">elif </span><span class="s1">report.skipped:</span>
+            <span class="s1">reporter = self._opentestcase(report)</span>
+            <span class="s1">reporter.append_skipped(report)</span>
+        <span class="s1">self.update_testcase_duration(report)</span>
+        <span class="s2">if </span><span class="s1">report.when == </span><span class="s3">&quot;teardown&quot;</span><span class="s1">:</span>
+            <span class="s1">reporter = self._opentestcase(report)</span>
+            <span class="s1">reporter.write_captured_output(report)</span>
+
+            <span class="s2">for </span><span class="s1">propname</span><span class="s2">, </span><span class="s1">propvalue </span><span class="s2">in </span><span class="s1">report.user_properties:</span>
+                <span class="s1">reporter.add_property(propname</span><span class="s2">, </span><span class="s1">str(propvalue))</span>
+
+            <span class="s1">self.finalize(report)</span>
+            <span class="s1">report_wid = getattr(report</span><span class="s2">, </span><span class="s3">&quot;worker_id&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+            <span class="s1">report_ii = getattr(report</span><span class="s2">, </span><span class="s3">&quot;item_index&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+            <span class="s1">close_report = next(</span>
+                <span class="s1">(</span>
+                    <span class="s1">rep</span>
+                    <span class="s2">for </span><span class="s1">rep </span><span class="s2">in </span><span class="s1">self.open_reports</span>
+                    <span class="s2">if </span><span class="s1">(</span>
+                        <span class="s1">rep.nodeid == report.nodeid</span>
+                        <span class="s2">and </span><span class="s1">getattr(rep</span><span class="s2">, </span><span class="s3">&quot;item_index&quot;</span><span class="s2">, None</span><span class="s1">) == report_ii</span>
+                        <span class="s2">and </span><span class="s1">getattr(rep</span><span class="s2">, </span><span class="s3">&quot;worker_id&quot;</span><span class="s2">, None</span><span class="s1">) == report_wid</span>
+                    <span class="s1">)</span>
+                <span class="s1">)</span><span class="s2">,</span>
+                <span class="s2">None,</span>
+            <span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">close_report:</span>
+                <span class="s1">self.open_reports.remove(close_report)</span>
+
+    <span class="s2">def </span><span class="s1">update_testcase_duration(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Accumulate total duration for nodeid from given report and update 
+        the Junit.testcase with the new total if already created.&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.report_duration == </span><span class="s3">&quot;total&quot; </span><span class="s2">or </span><span class="s1">report.when == self.report_duration:</span>
+            <span class="s1">reporter = self.node_reporter(report)</span>
+            <span class="s1">reporter.duration += getattr(report</span><span class="s2">, </span><span class="s3">&quot;duration&quot;</span><span class="s2">, </span><span class="s4">0.0</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">pytest_collectreport(self</span><span class="s2">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if not </span><span class="s1">report.passed:</span>
+            <span class="s1">reporter = self._opentestcase(report)</span>
+            <span class="s2">if </span><span class="s1">report.failed:</span>
+                <span class="s1">reporter.append_collect_error(report)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">reporter.append_collect_skipped(report)</span>
+
+    <span class="s2">def </span><span class="s1">pytest_internalerror(self</span><span class="s2">, </span><span class="s1">excrepr: ExceptionRepr) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">reporter = self.node_reporter(</span><span class="s3">&quot;internal&quot;</span><span class="s1">)</span>
+        <span class="s1">reporter.attrs.update(classname=</span><span class="s3">&quot;pytest&quot;</span><span class="s2">, </span><span class="s1">name=</span><span class="s3">&quot;internal&quot;</span><span class="s1">)</span>
+        <span class="s1">reporter._add_simple(</span><span class="s3">&quot;error&quot;</span><span class="s2">, </span><span class="s3">&quot;internal error&quot;</span><span class="s2">, </span><span class="s1">str(excrepr))</span>
+
+    <span class="s2">def </span><span class="s1">pytest_sessionstart(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.suite_start_time = timing.time()</span>
+
+    <span class="s2">def </span><span class="s1">pytest_sessionfinish(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">dirname = os.path.dirname(os.path.abspath(self.logfile))</span>
+        <span class="s2">if not </span><span class="s1">os.path.isdir(dirname):</span>
+            <span class="s1">os.makedirs(dirname)</span>
+
+        <span class="s2">with </span><span class="s1">open(self.logfile</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding=</span><span class="s3">&quot;utf-8&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">logfile:</span>
+            <span class="s1">suite_stop_time = timing.time()</span>
+            <span class="s1">suite_time_delta = suite_stop_time - self.suite_start_time</span>
+
+            <span class="s1">numtests = (</span>
+                <span class="s1">self.stats[</span><span class="s3">&quot;passed&quot;</span><span class="s1">]</span>
+                <span class="s1">+ self.stats[</span><span class="s3">&quot;failure&quot;</span><span class="s1">]</span>
+                <span class="s1">+ self.stats[</span><span class="s3">&quot;skipped&quot;</span><span class="s1">]</span>
+                <span class="s1">+ self.stats[</span><span class="s3">&quot;error&quot;</span><span class="s1">]</span>
+                <span class="s1">- self.cnt_double_fail_tests</span>
+            <span class="s1">)</span>
+            <span class="s1">logfile.write(</span><span class="s3">'&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;'</span><span class="s1">)</span>
+
+            <span class="s1">suite_node = ET.Element(</span>
+                <span class="s3">&quot;testsuite&quot;</span><span class="s2">,</span>
+                <span class="s1">name=self.suite_name</span><span class="s2">,</span>
+                <span class="s1">errors=str(self.stats[</span><span class="s3">&quot;error&quot;</span><span class="s1">])</span><span class="s2">,</span>
+                <span class="s1">failures=str(self.stats[</span><span class="s3">&quot;failure&quot;</span><span class="s1">])</span><span class="s2">,</span>
+                <span class="s1">skipped=str(self.stats[</span><span class="s3">&quot;skipped&quot;</span><span class="s1">])</span><span class="s2">,</span>
+                <span class="s1">tests=str(numtests)</span><span class="s2">,</span>
+                <span class="s1">time=</span><span class="s3">&quot;%.3f&quot; </span><span class="s1">% suite_time_delta</span><span class="s2">,</span>
+                <span class="s1">timestamp=datetime.fromtimestamp(self.suite_start_time).isoformat()</span><span class="s2">,</span>
+                <span class="s1">hostname=platform.node()</span><span class="s2">,</span>
+            <span class="s1">)</span>
+            <span class="s1">global_properties = self._get_global_properties_node()</span>
+            <span class="s2">if </span><span class="s1">global_properties </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">suite_node.append(global_properties)</span>
+            <span class="s2">for </span><span class="s1">node_reporter </span><span class="s2">in </span><span class="s1">self.node_reporters_ordered:</span>
+                <span class="s1">suite_node.append(node_reporter.to_xml())</span>
+            <span class="s1">testsuites = ET.Element(</span><span class="s3">&quot;testsuites&quot;</span><span class="s1">)</span>
+            <span class="s1">testsuites.append(suite_node)</span>
+            <span class="s1">logfile.write(ET.tostring(testsuites</span><span class="s2">, </span><span class="s1">encoding=</span><span class="s3">&quot;unicode&quot;</span><span class="s1">))</span>
+
+    <span class="s2">def </span><span class="s1">pytest_terminal_summary(self</span><span class="s2">, </span><span class="s1">terminalreporter: TerminalReporter) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">terminalreporter.write_sep(</span><span class="s3">&quot;-&quot;</span><span class="s2">, </span><span class="s3">f&quot;generated xml file: </span><span class="s2">{</span><span class="s1">self.logfile</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">add_global_property(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">value: object) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">_check_record_param_type(</span><span class="s3">&quot;name&quot;</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s1">self.global_properties.append((name</span><span class="s2">, </span><span class="s1">bin_xml_escape(value)))</span>
+
+    <span class="s2">def </span><span class="s1">_get_global_properties_node(self) -&gt; Optional[ET.Element]:</span>
+        <span class="s0">&quot;&quot;&quot;Return a Junit node containing custom properties, if any.&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.global_properties:</span>
+            <span class="s1">properties = ET.Element(</span><span class="s3">&quot;properties&quot;</span><span class="s1">)</span>
+            <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">self.global_properties:</span>
+                <span class="s1">properties.append(ET.Element(</span><span class="s3">&quot;property&quot;</span><span class="s2">, </span><span class="s1">name=name</span><span class="s2">, </span><span class="s1">value=value))</span>
+            <span class="s2">return </span><span class="s1">properties</span>
+        <span class="s2">return None</span>
+</pre>
+</body>
+</html>

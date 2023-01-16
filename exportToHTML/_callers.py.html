@@ -1,0 +1,82 @@
+<html>
+<head>
+<title>_callers.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_callers.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Call loop machinery 
+&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">sys</span>
+
+<span class="s2">from </span><span class="s1">._result </span><span class="s2">import </span><span class="s1">HookCallError</span><span class="s2">, </span><span class="s1">_Result</span><span class="s2">, </span><span class="s1">_raise_wrapfail</span>
+
+
+<span class="s2">def </span><span class="s1">_multicall(hook_name</span><span class="s2">, </span><span class="s1">hook_impls</span><span class="s2">, </span><span class="s1">caller_kwargs</span><span class="s2">, </span><span class="s1">firstresult):</span>
+    <span class="s0">&quot;&quot;&quot;Execute a call into multiple python functions/methods and return the 
+    result(s). 
+ 
+    ``caller_kwargs`` comes from _HookCaller.__call__(). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+    <span class="s1">results = []</span>
+    <span class="s1">excinfo = </span><span class="s2">None</span>
+    <span class="s2">try</span><span class="s1">:  </span><span class="s3"># run impl and wrapper setup functions in a loop</span>
+        <span class="s1">teardowns = []</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">for </span><span class="s1">hook_impl </span><span class="s2">in </span><span class="s1">reversed(hook_impls):</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">args = [caller_kwargs[argname] </span><span class="s2">for </span><span class="s1">argname </span><span class="s2">in </span><span class="s1">hook_impl.argnames]</span>
+                <span class="s2">except </span><span class="s1">KeyError:</span>
+                    <span class="s2">for </span><span class="s1">argname </span><span class="s2">in </span><span class="s1">hook_impl.argnames:</span>
+                        <span class="s2">if </span><span class="s1">argname </span><span class="s2">not in </span><span class="s1">caller_kwargs:</span>
+                            <span class="s2">raise </span><span class="s1">HookCallError(</span>
+                                <span class="s4">f&quot;hook call must provide argument </span><span class="s2">{</span><span class="s1">argname</span><span class="s2">!r}</span><span class="s4">&quot;</span>
+                            <span class="s1">)</span>
+
+                <span class="s2">if </span><span class="s1">hook_impl.hookwrapper:</span>
+                    <span class="s2">try</span><span class="s1">:</span>
+                        <span class="s1">gen = hook_impl.function(*args)</span>
+                        <span class="s1">next(gen)  </span><span class="s3"># first yield</span>
+                        <span class="s1">teardowns.append(gen)</span>
+                    <span class="s2">except </span><span class="s1">StopIteration:</span>
+                        <span class="s1">_raise_wrapfail(gen</span><span class="s2">, </span><span class="s4">&quot;did not yield&quot;</span><span class="s1">)</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">res = hook_impl.function(*args)</span>
+                    <span class="s2">if </span><span class="s1">res </span><span class="s2">is not None</span><span class="s1">:</span>
+                        <span class="s1">results.append(res)</span>
+                        <span class="s2">if </span><span class="s1">firstresult:  </span><span class="s3"># halt further impl calls</span>
+                            <span class="s2">break</span>
+        <span class="s2">except </span><span class="s1">BaseException:</span>
+            <span class="s1">excinfo = sys.exc_info()</span>
+    <span class="s2">finally</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">firstresult:  </span><span class="s3"># first result hooks return a single value</span>
+            <span class="s1">outcome = _Result(results[</span><span class="s5">0</span><span class="s1">] </span><span class="s2">if </span><span class="s1">results </span><span class="s2">else None, </span><span class="s1">excinfo)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">outcome = _Result(results</span><span class="s2">, </span><span class="s1">excinfo)</span>
+
+        <span class="s3"># run all wrapper post-yield blocks</span>
+        <span class="s2">for </span><span class="s1">gen </span><span class="s2">in </span><span class="s1">reversed(teardowns):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">gen.send(outcome)</span>
+                <span class="s1">_raise_wrapfail(gen</span><span class="s2">, </span><span class="s4">&quot;has second yield&quot;</span><span class="s1">)</span>
+            <span class="s2">except </span><span class="s1">StopIteration:</span>
+                <span class="s2">pass</span>
+
+        <span class="s2">return </span><span class="s1">outcome.get_result()</span>
+</pre>
+</body>
+</html>

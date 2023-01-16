@@ -1,0 +1,51 @@
+<html>
+<head>
+<title>__init__.pyi</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+__init__.pyi</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Callable</span><span class="s0">, </span><span class="s1">Iterator</span><span class="s0">, </span><span class="s1">Mapping</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Tuple</span><span class="s0">, </span><span class="s1">TypeVar</span><span class="s0">, </span><span class="s1">Union</span>
+<span class="s0">from </span><span class="s1">typing_extensions </span><span class="s0">import </span><span class="s1">Final</span>
+
+<span class="s1">_D = TypeVar(</span><span class="s2">'_D'</span><span class="s1">)</span>
+<span class="s1">_T = TypeVar(</span><span class="s2">'_T'</span><span class="s1">)</span>
+
+<span class="s0">class </span><span class="s1">ParseError(Exception):</span>
+    <span class="s3"># Private __init__.</span>
+    <span class="s1">path: Final[str]</span>
+    <span class="s1">lineno: Final[int]</span>
+    <span class="s1">msg: Final[str]</span>
+
+<span class="s0">class </span><span class="s1">SectionWrapper:</span>
+    <span class="s3"># Private __init__.</span>
+    <span class="s1">config: Final[IniConfig]</span>
+    <span class="s1">name: Final[str]</span>
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">key: str) -&gt; str: ...</span>
+    <span class="s0">def </span><span class="s1">__iter__(self) -&gt; Iterator[str]: ...</span>
+    <span class="s0">def </span><span class="s1">get(self</span><span class="s0">, </span><span class="s1">key: str</span><span class="s0">, </span><span class="s1">default: _D = ...</span><span class="s0">, </span><span class="s1">convert: Callable[[str]</span><span class="s0">, </span><span class="s1">_T] = ...) -&gt; Union[_T</span><span class="s0">, </span><span class="s1">_D]: ...</span>
+    <span class="s0">def </span><span class="s1">items(self) -&gt; Iterator[Tuple[str</span><span class="s0">, </span><span class="s1">str]]: ...</span>
+    <span class="s0">def </span><span class="s1">lineof(self</span><span class="s0">, </span><span class="s1">name: str) -&gt; Optional[int]: ...</span>
+
+<span class="s0">class </span><span class="s1">IniConfig:</span>
+    <span class="s1">path: Final[str]</span>
+    <span class="s1">sections: Final[Mapping[str</span><span class="s0">, </span><span class="s1">Mapping[str</span><span class="s0">, </span><span class="s1">str]]]</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">path: str</span><span class="s0">, </span><span class="s1">data: Optional[str] = </span><span class="s0">None</span><span class="s1">): ...</span>
+    <span class="s0">def </span><span class="s1">__contains__(self</span><span class="s0">, </span><span class="s1">arg: str) -&gt; bool: ...</span>
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">name: str) -&gt; SectionWrapper: ...</span>
+    <span class="s0">def </span><span class="s1">__iter__(self) -&gt; Iterator[SectionWrapper]: ...</span>
+    <span class="s0">def </span><span class="s1">get(self</span><span class="s0">, </span><span class="s1">section: str</span><span class="s0">, </span><span class="s1">name: str</span><span class="s0">, </span><span class="s1">default: _D = ...</span><span class="s0">, </span><span class="s1">convert: Callable[[str]</span><span class="s0">, </span><span class="s1">_T] = ...) -&gt; Union[_T</span><span class="s0">, </span><span class="s1">_D]: ...</span>
+    <span class="s0">def </span><span class="s1">lineof(self</span><span class="s0">, </span><span class="s1">section: str</span><span class="s0">, </span><span class="s1">name: Optional[str] = ...) -&gt; Optional[int]: ...</span>
+</pre>
+</body>
+</html>

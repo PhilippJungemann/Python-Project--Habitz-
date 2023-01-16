@@ -1,0 +1,277 @@
+<html>
+<head>
+<title>_xmlgen.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_xmlgen.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+module for generating and serializing xml and html structures 
+by using simple python objects. 
+ 
+(c) holger krekel, holger at merlinux eu. 2009 
+&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">sys</span><span class="s2">, </span><span class="s1">re</span>
+
+<span class="s2">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s2">,</span><span class="s3">0</span><span class="s1">):</span>
+    <span class="s2">def </span><span class="s1">u(s):</span>
+        <span class="s2">return </span><span class="s1">s</span>
+    <span class="s2">def </span><span class="s1">unicode(x</span><span class="s2">, </span><span class="s1">errors=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s2">if </span><span class="s1">hasattr(x</span><span class="s2">, </span><span class="s4">'__unicode__'</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">x.__unicode__()</span>
+        <span class="s2">return </span><span class="s1">str(x)</span>
+<span class="s2">else</span><span class="s1">:</span>
+    <span class="s2">def </span><span class="s1">u(s):</span>
+        <span class="s2">return </span><span class="s1">unicode(s)</span>
+    <span class="s1">unicode = unicode</span>
+
+
+<span class="s2">class </span><span class="s1">NamespaceMetaclass(type):</span>
+    <span class="s2">def </span><span class="s1">__getattr__(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s2">if </span><span class="s1">name[:</span><span class="s3">1</span><span class="s1">] == </span><span class="s4">'_'</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError(name)</span>
+        <span class="s2">if </span><span class="s1">self == Namespace:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;Namespace class is abstract&quot;</span><span class="s1">)</span>
+        <span class="s1">tagspec = self.__tagspec__</span>
+        <span class="s2">if </span><span class="s1">tagspec </span><span class="s2">is not None and </span><span class="s1">name </span><span class="s2">not in </span><span class="s1">tagspec:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError(name)</span>
+        <span class="s1">classattr = {}</span>
+        <span class="s2">if </span><span class="s1">self.__stickyname__:</span>
+            <span class="s1">classattr[</span><span class="s4">'xmlname'</span><span class="s1">] = name</span>
+        <span class="s1">cls = type(name</span><span class="s2">, </span><span class="s1">(self.__tagclass__</span><span class="s2">,</span><span class="s1">)</span><span class="s2">, </span><span class="s1">classattr)</span>
+        <span class="s1">setattr(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">cls)</span>
+        <span class="s2">return </span><span class="s1">cls</span>
+
+<span class="s2">class </span><span class="s1">Tag(list):</span>
+    <span class="s2">class </span><span class="s1">Attr(object):</span>
+        <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+            <span class="s1">self.__dict__.update(kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s1">super(Tag</span><span class="s2">, </span><span class="s1">self).__init__(args)</span>
+        <span class="s1">self.attr = self.Attr(**kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">__unicode__(self):</span>
+        <span class="s2">return </span><span class="s1">self.unicode(indent=</span><span class="s3">0</span><span class="s1">)</span>
+    <span class="s1">__str__ = __unicode__</span>
+
+    <span class="s2">def </span><span class="s1">unicode(self</span><span class="s2">, </span><span class="s1">indent=</span><span class="s3">2</span><span class="s1">):</span>
+        <span class="s1">l = []</span>
+        <span class="s1">SimpleUnicodeVisitor(l.append</span><span class="s2">, </span><span class="s1">indent).visit(self)</span>
+        <span class="s2">return </span><span class="s1">u(</span><span class="s4">&quot;&quot;</span><span class="s1">).join(l)</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s1">name = self.__class__.__name__</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%r tag object %d&gt;&quot; </span><span class="s1">% (name</span><span class="s2">, </span><span class="s1">id(self))</span>
+
+<span class="s1">Namespace = NamespaceMetaclass(</span><span class="s4">'Namespace'</span><span class="s2">, </span><span class="s1">(object</span><span class="s2">, </span><span class="s1">)</span><span class="s2">, </span><span class="s1">{</span>
+    <span class="s4">'__tagspec__'</span><span class="s1">: </span><span class="s2">None,</span>
+    <span class="s4">'__tagclass__'</span><span class="s1">: Tag</span><span class="s2">,</span>
+    <span class="s4">'__stickyname__'</span><span class="s1">: </span><span class="s2">False,</span>
+<span class="s1">})</span>
+
+<span class="s2">class </span><span class="s1">HtmlTag(Tag):</span>
+    <span class="s2">def </span><span class="s1">unicode(self</span><span class="s2">, </span><span class="s1">indent=</span><span class="s3">2</span><span class="s1">):</span>
+        <span class="s1">l = []</span>
+        <span class="s1">HtmlVisitor(l.append</span><span class="s2">, </span><span class="s1">indent</span><span class="s2">, </span><span class="s1">shortempty=</span><span class="s2">False</span><span class="s1">).visit(self)</span>
+        <span class="s2">return </span><span class="s1">u(</span><span class="s4">&quot;&quot;</span><span class="s1">).join(l)</span>
+
+<span class="s5"># exported plain html namespace</span>
+<span class="s2">class </span><span class="s1">html(Namespace):</span>
+    <span class="s1">__tagclass__ = HtmlTag</span>
+    <span class="s1">__stickyname__ = </span><span class="s2">True</span>
+    <span class="s1">__tagspec__ = dict([(x</span><span class="s2">,</span><span class="s3">1</span><span class="s1">) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">(</span>
+        <span class="s4">'a,abbr,acronym,address,applet,area,article,aside,audio,b,'</span>
+        <span class="s4">'base,basefont,bdi,bdo,big,blink,blockquote,body,br,button,'</span>
+        <span class="s4">'canvas,caption,center,cite,code,col,colgroup,command,comment,'</span>
+        <span class="s4">'datalist,dd,del,details,dfn,dir,div,dl,dt,em,embed,'</span>
+        <span class="s4">'fieldset,figcaption,figure,footer,font,form,frame,frameset,h1,'</span>
+        <span class="s4">'h2,h3,h4,h5,h6,head,header,hgroup,hr,html,i,iframe,img,input,'</span>
+        <span class="s4">'ins,isindex,kbd,keygen,label,legend,li,link,listing,map,mark,'</span>
+        <span class="s4">'marquee,menu,meta,meter,multicol,nav,nobr,noembed,noframes,'</span>
+        <span class="s4">'noscript,object,ol,optgroup,option,output,p,param,pre,progress,'</span>
+        <span class="s4">'q,rp,rt,ruby,s,samp,script,section,select,small,source,span,'</span>
+        <span class="s4">'strike,strong,style,sub,summary,sup,table,tbody,td,textarea,'</span>
+        <span class="s4">'tfoot,th,thead,time,title,tr,track,tt,u,ul,xmp,var,video,wbr'</span>
+    <span class="s1">).split(</span><span class="s4">','</span><span class="s1">) </span><span class="s2">if </span><span class="s1">x])</span>
+
+    <span class="s2">class </span><span class="s1">Style(object):</span>
+        <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+            <span class="s2">for </span><span class="s1">x</span><span class="s2">, </span><span class="s1">y </span><span class="s2">in </span><span class="s1">kw.items():</span>
+                <span class="s1">x = x.replace(</span><span class="s4">'_'</span><span class="s2">, </span><span class="s4">'-'</span><span class="s1">)</span>
+                <span class="s1">setattr(self</span><span class="s2">, </span><span class="s1">x</span><span class="s2">, </span><span class="s1">y)</span>
+
+
+<span class="s2">class </span><span class="s1">raw(object):</span>
+    <span class="s0">&quot;&quot;&quot;just a box that can contain a unicode string that will be 
+    included directly in the output&quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">uniobj):</span>
+        <span class="s1">self.uniobj = uniobj</span>
+
+<span class="s2">class </span><span class="s1">SimpleUnicodeVisitor(object):</span>
+    <span class="s0">&quot;&quot;&quot; recursive visitor to write unicode. &quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">write</span><span class="s2">, </span><span class="s1">indent=</span><span class="s3">0</span><span class="s2">, </span><span class="s1">curindent=</span><span class="s3">0</span><span class="s2">, </span><span class="s1">shortempty=</span><span class="s2">True</span><span class="s1">):</span>
+        <span class="s1">self.write = write</span>
+        <span class="s1">self.cache = {}</span>
+        <span class="s1">self.visited = {} </span><span class="s5"># for detection of recursion</span>
+        <span class="s1">self.indent = indent</span>
+        <span class="s1">self.curindent = curindent</span>
+        <span class="s1">self.parents = []</span>
+        <span class="s1">self.shortempty = shortempty  </span><span class="s5"># short empty tags or not</span>
+
+    <span class="s2">def </span><span class="s1">visit(self</span><span class="s2">, </span><span class="s1">node):</span>
+        <span class="s0">&quot;&quot;&quot; dispatcher on node's class/bases name. &quot;&quot;&quot;</span>
+        <span class="s1">cls = node.__class__</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">visitmethod = self.cache[cls]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">for </span><span class="s1">subclass </span><span class="s2">in </span><span class="s1">cls.__mro__:</span>
+                <span class="s1">visitmethod = getattr(self</span><span class="s2">, </span><span class="s1">subclass.__name__</span><span class="s2">, None</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">visitmethod </span><span class="s2">is not None</span><span class="s1">:</span>
+                    <span class="s2">break</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">visitmethod = self.__object</span>
+            <span class="s1">self.cache[cls] = visitmethod</span>
+        <span class="s1">visitmethod(node)</span>
+
+    <span class="s5"># the default fallback handler is marked private</span>
+    <span class="s5"># to avoid clashes with the tag name object</span>
+    <span class="s2">def </span><span class="s1">__object(self</span><span class="s2">, </span><span class="s1">obj):</span>
+        <span class="s5">#self.write(obj)</span>
+        <span class="s1">self.write(escape(unicode(obj)))</span>
+
+    <span class="s2">def </span><span class="s1">raw(self</span><span class="s2">, </span><span class="s1">obj):</span>
+        <span class="s1">self.write(obj.uniobj)</span>
+
+    <span class="s2">def </span><span class="s1">list(self</span><span class="s2">, </span><span class="s1">obj):</span>
+        <span class="s2">assert </span><span class="s1">id(obj) </span><span class="s2">not in </span><span class="s1">self.visited</span>
+        <span class="s1">self.visited[id(obj)] = </span><span class="s3">1</span>
+        <span class="s2">for </span><span class="s1">elem </span><span class="s2">in </span><span class="s1">obj:</span>
+            <span class="s1">self.visit(elem)</span>
+
+    <span class="s2">def </span><span class="s1">Tag(self</span><span class="s2">, </span><span class="s1">tag):</span>
+        <span class="s2">assert </span><span class="s1">id(tag) </span><span class="s2">not in </span><span class="s1">self.visited</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">tag.parent = self.parents[-</span><span class="s3">1</span><span class="s1">]</span>
+        <span class="s2">except </span><span class="s1">IndexError:</span>
+            <span class="s1">tag.parent = </span><span class="s2">None</span>
+        <span class="s1">self.visited[id(tag)] = </span><span class="s3">1</span>
+        <span class="s1">tagname = getattr(tag</span><span class="s2">, </span><span class="s4">'xmlname'</span><span class="s2">, </span><span class="s1">tag.__class__.__name__)</span>
+        <span class="s2">if </span><span class="s1">self.curindent </span><span class="s2">and not </span><span class="s1">self._isinline(tagname):</span>
+            <span class="s1">self.write(</span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&quot; </span><span class="s1">+ u(</span><span class="s4">' '</span><span class="s1">) * self.curindent)</span>
+        <span class="s2">if </span><span class="s1">tag:</span>
+            <span class="s1">self.curindent += self.indent</span>
+            <span class="s1">self.write(u(</span><span class="s4">'&lt;%s%s&gt;'</span><span class="s1">) % (tagname</span><span class="s2">, </span><span class="s1">self.attributes(tag)))</span>
+            <span class="s1">self.parents.append(tag)</span>
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">tag:</span>
+                <span class="s1">self.visit(x)</span>
+            <span class="s1">self.parents.pop()</span>
+            <span class="s1">self.write(u(</span><span class="s4">'&lt;/%s&gt;'</span><span class="s1">) % tagname)</span>
+            <span class="s1">self.curindent -= self.indent</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">nameattr = tagname+self.attributes(tag)</span>
+            <span class="s2">if </span><span class="s1">self._issingleton(tagname):</span>
+                <span class="s1">self.write(u(</span><span class="s4">'&lt;%s/&gt;'</span><span class="s1">) % (nameattr</span><span class="s2">,</span><span class="s1">))</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">self.write(u(</span><span class="s4">'&lt;%s&gt;&lt;/%s&gt;'</span><span class="s1">) % (nameattr</span><span class="s2">, </span><span class="s1">tagname))</span>
+
+    <span class="s2">def </span><span class="s1">attributes(self</span><span class="s2">, </span><span class="s1">tag):</span>
+        <span class="s5"># serialize attributes</span>
+        <span class="s1">attrlist = dir(tag.attr)</span>
+        <span class="s1">attrlist.sort()</span>
+        <span class="s1">l = []</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">attrlist:</span>
+            <span class="s1">res = self.repr_attribute(tag.attr</span><span class="s2">, </span><span class="s1">name)</span>
+            <span class="s2">if </span><span class="s1">res </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">l.append(res)</span>
+        <span class="s1">l.extend(self.getstyle(tag))</span>
+        <span class="s2">return </span><span class="s1">u(</span><span class="s4">&quot;&quot;</span><span class="s1">).join(l)</span>
+
+    <span class="s2">def </span><span class="s1">repr_attribute(self</span><span class="s2">, </span><span class="s1">attrs</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s2">if </span><span class="s1">name[:</span><span class="s3">2</span><span class="s1">] != </span><span class="s4">'__'</span><span class="s1">:</span>
+            <span class="s1">value = getattr(attrs</span><span class="s2">, </span><span class="s1">name)</span>
+            <span class="s2">if </span><span class="s1">name.endswith(</span><span class="s4">'_'</span><span class="s1">):</span>
+                <span class="s1">name = name[:-</span><span class="s3">1</span><span class="s1">]</span>
+            <span class="s2">if </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">raw):</span>
+                <span class="s1">insert = value.uniobj</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">insert = escape(unicode(value))</span>
+            <span class="s2">return </span><span class="s4">' %s=&quot;%s&quot;' </span><span class="s1">% (name</span><span class="s2">, </span><span class="s1">insert)</span>
+
+    <span class="s2">def </span><span class="s1">getstyle(self</span><span class="s2">, </span><span class="s1">tag):</span>
+        <span class="s0">&quot;&quot;&quot; return attribute list suitable for styling. &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">styledict = tag.style.__dict__</span>
+        <span class="s2">except </span><span class="s1">AttributeError:</span>
+            <span class="s2">return </span><span class="s1">[]</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">stylelist = [x+</span><span class="s4">': ' </span><span class="s1">+ y </span><span class="s2">for </span><span class="s1">x</span><span class="s2">,</span><span class="s1">y </span><span class="s2">in </span><span class="s1">styledict.items()]</span>
+            <span class="s2">return </span><span class="s1">[u(</span><span class="s4">' style=&quot;%s&quot;'</span><span class="s1">) % u(</span><span class="s4">'; '</span><span class="s1">).join(stylelist)]</span>
+
+    <span class="s2">def </span><span class="s1">_issingleton(self</span><span class="s2">, </span><span class="s1">tagname):</span>
+        <span class="s0">&quot;&quot;&quot;can (and will) be overridden in subclasses&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.shortempty</span>
+
+    <span class="s2">def </span><span class="s1">_isinline(self</span><span class="s2">, </span><span class="s1">tagname):</span>
+        <span class="s0">&quot;&quot;&quot;can (and will) be overridden in subclasses&quot;&quot;&quot;</span>
+        <span class="s2">return False</span>
+
+<span class="s2">class </span><span class="s1">HtmlVisitor(SimpleUnicodeVisitor):</span>
+
+    <span class="s1">single = dict([(x</span><span class="s2">, </span><span class="s3">1</span><span class="s1">) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in</span>
+                <span class="s1">(</span><span class="s4">'br,img,area,param,col,hr,meta,link,base,'</span>
+                    <span class="s4">'input,frame'</span><span class="s1">).split(</span><span class="s4">','</span><span class="s1">)])</span>
+    <span class="s1">inline = dict([(x</span><span class="s2">, </span><span class="s3">1</span><span class="s1">) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in</span>
+                <span class="s1">(</span><span class="s4">'a abbr acronym b basefont bdo big br cite code dfn em font '</span>
+                 <span class="s4">'i img input kbd label q s samp select small span strike '</span>
+                 <span class="s4">'strong sub sup textarea tt u var'</span><span class="s1">.split(</span><span class="s4">' '</span><span class="s1">))])</span>
+
+    <span class="s2">def </span><span class="s1">repr_attribute(self</span><span class="s2">, </span><span class="s1">attrs</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s2">if </span><span class="s1">name == </span><span class="s4">'class_'</span><span class="s1">:</span>
+            <span class="s1">value = getattr(attrs</span><span class="s2">, </span><span class="s1">name)</span>
+            <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s2">return</span>
+        <span class="s2">return </span><span class="s1">super(HtmlVisitor</span><span class="s2">, </span><span class="s1">self).repr_attribute(attrs</span><span class="s2">, </span><span class="s1">name)</span>
+
+    <span class="s2">def </span><span class="s1">_issingleton(self</span><span class="s2">, </span><span class="s1">tagname):</span>
+        <span class="s2">return </span><span class="s1">tagname </span><span class="s2">in </span><span class="s1">self.single</span>
+
+    <span class="s2">def </span><span class="s1">_isinline(self</span><span class="s2">, </span><span class="s1">tagname):</span>
+        <span class="s2">return </span><span class="s1">tagname </span><span class="s2">in </span><span class="s1">self.inline</span>
+
+
+<span class="s2">class </span><span class="s1">_escape:</span>
+    <span class="s2">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.escape = {</span>
+            <span class="s1">u(</span><span class="s4">'&quot;'</span><span class="s1">) : u(</span><span class="s4">'&amp;quot;'</span><span class="s1">)</span><span class="s2">, </span><span class="s1">u(</span><span class="s4">'&lt;'</span><span class="s1">) : u(</span><span class="s4">'&amp;lt;'</span><span class="s1">)</span><span class="s2">, </span><span class="s1">u(</span><span class="s4">'&gt;'</span><span class="s1">) : u(</span><span class="s4">'&amp;gt;'</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">u(</span><span class="s4">'&amp;'</span><span class="s1">) : u(</span><span class="s4">'&amp;amp;'</span><span class="s1">)</span><span class="s2">, </span><span class="s1">u(</span><span class="s4">&quot;'&quot;</span><span class="s1">) : u(</span><span class="s4">'&amp;apos;'</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">}</span>
+        <span class="s1">self.charef_rex = re.compile(u(</span><span class="s4">&quot;|&quot;</span><span class="s1">).join(self.escape.keys()))</span>
+
+    <span class="s2">def </span><span class="s1">_replacer(self</span><span class="s2">, </span><span class="s1">match):</span>
+        <span class="s2">return </span><span class="s1">self.escape[match.group(</span><span class="s3">0</span><span class="s1">)]</span>
+
+    <span class="s2">def </span><span class="s1">__call__(self</span><span class="s2">, </span><span class="s1">ustring):</span>
+        <span class="s0">&quot;&quot;&quot; xml-escape the given unicode string. &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">ustring = unicode(ustring)</span>
+        <span class="s2">except </span><span class="s1">UnicodeDecodeError:</span>
+            <span class="s1">ustring = unicode(ustring</span><span class="s2">, </span><span class="s4">'utf-8'</span><span class="s2">, </span><span class="s1">errors=</span><span class="s4">'replace'</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">self.charef_rex.sub(self._replacer</span><span class="s2">, </span><span class="s1">ustring)</span>
+
+<span class="s1">escape = _escape()</span>
+</pre>
+</body>
+</html>

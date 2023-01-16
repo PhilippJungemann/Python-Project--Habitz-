@@ -1,0 +1,43 @@
+<html>
+<head>
+<title>xml.pyi</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+xml.pyi</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">ClassVar</span><span class="s0">, </span><span class="s1">Generic</span><span class="s0">, </span><span class="s1">Iterable</span><span class="s0">, </span><span class="s1">Text</span><span class="s0">, </span><span class="s1">Type</span><span class="s0">, </span><span class="s1">Union</span>
+<span class="s0">from </span><span class="s1">typing_extensions </span><span class="s0">import </span><span class="s1">Final</span>
+
+<span class="s0">class </span><span class="s1">raw:</span>
+    <span class="s1">uniobj: Final[Text]</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">uniobj: Text) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+
+<span class="s0">class </span><span class="s1">_NamespaceMetaclass(type):</span>
+    <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">name: str) -&gt; Type[Tag]: ...</span>
+
+<span class="s0">class </span><span class="s1">Namespace(metaclass=_NamespaceMetaclass): ...</span>
+
+<span class="s0">class </span><span class="s1">Tag(list):</span>
+    <span class="s0">class </span><span class="s1">Attr:</span>
+        <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">attr: str) -&gt; Text: ...</span>
+    <span class="s1">attr: Final[Attr]</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*args: Union[Text</span><span class="s0">, </span><span class="s1">raw</span><span class="s0">, </span><span class="s1">Tag</span><span class="s0">, </span><span class="s1">Iterable[Tag]]</span><span class="s0">, </span><span class="s1">**kwargs: Union[Text</span><span class="s0">, </span><span class="s1">raw]) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s0">def </span><span class="s1">unicode(self</span><span class="s0">, </span><span class="s1">indent: int = ...) -&gt; Text: ...</span>
+
+<span class="s0">class </span><span class="s1">html(Namespace):</span>
+    <span class="s0">class </span><span class="s1">Style:</span>
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">**kw: Union[str</span><span class="s0">, </span><span class="s1">Text]) -&gt; </span><span class="s0">None</span><span class="s1">: ...</span>
+    <span class="s1">style: ClassVar[Style]</span>
+
+<span class="s0">def </span><span class="s1">escape(ustring: Union[str</span><span class="s0">, </span><span class="s1">Text]) -&gt; Text: ...</span>
+</pre>
+</body>
+</html>

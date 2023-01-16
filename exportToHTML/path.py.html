@@ -1,0 +1,192 @@
+<html>
+<head>
+<title>path.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+path.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">Any</span><span class="s0">,</span>
+    <span class="s1">Callable</span><span class="s0">,</span>
+    <span class="s1">Iterable</span><span class="s0">,</span>
+    <span class="s1">List</span><span class="s0">,</span>
+    <span class="s1">Optional</span><span class="s0">,</span>
+    <span class="s1">Tuple</span><span class="s0">,</span>
+<span class="s1">)</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit.completion </span><span class="s0">import </span><span class="s1">CompleteEvent</span><span class="s0">, </span><span class="s1">Completion</span><span class="s0">, </span><span class="s1">PathCompleter</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.document </span><span class="s0">import </span><span class="s1">Document</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.key_binding </span><span class="s0">import </span><span class="s1">KeyBindings</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.key_binding.bindings.completion </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">display_completions_like_readline</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.key_binding.key_processor </span><span class="s0">import </span><span class="s1">KeyPressEvent</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.keys </span><span class="s0">import </span><span class="s1">Keys</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.lexers </span><span class="s0">import </span><span class="s1">SimpleLexer</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.shortcuts.prompt </span><span class="s0">import </span><span class="s1">CompleteStyle</span><span class="s0">, </span><span class="s1">PromptSession</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">Style</span><span class="s0">, </span><span class="s1">merge_styles</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">, </span><span class="s1">DEFAULT_STYLE</span>
+<span class="s0">from </span><span class="s1">questionary.prompts.common </span><span class="s0">import </span><span class="s1">build_validator</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">class </span><span class="s1">GreatUXPathCompleter(PathCompleter):</span>
+    <span class="s0">def </span><span class="s1">get_completions(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">document: Document</span><span class="s0">, </span><span class="s1">complete_event: CompleteEvent</span>
+    <span class="s1">) -&gt; Iterable[Completion]:</span>
+        <span class="s2">&quot;&quot;&quot;Get completions. 
+ 
+        Wraps :class:`prompt_toolkit.completion.PathCompleter`. Makes sure completions 
+        for directories end with a path separator. Also make sure the right path 
+        separator is used.&quot;&quot;&quot;</span>
+        <span class="s1">completions = super(GreatUXPathCompleter</span><span class="s0">, </span><span class="s1">self).get_completions(</span>
+            <span class="s1">document</span><span class="s0">, </span><span class="s1">complete_event</span>
+        <span class="s1">)</span>
+
+        <span class="s0">for </span><span class="s1">completion </span><span class="s0">in </span><span class="s1">completions:</span>
+            <span class="s3"># check if the display value ends with a path separator.</span>
+            <span class="s3"># first check if display is properly set</span>
+            <span class="s1">styled_display = completion.display[</span><span class="s4">0</span><span class="s1">]</span>
+            <span class="s3"># styled display is a formatted text (a tuple of the text and its style)</span>
+            <span class="s3"># second tuple entry is the text</span>
+            <span class="s0">if </span><span class="s1">styled_display[</span><span class="s4">1</span><span class="s1">][-</span><span class="s4">1</span><span class="s1">] == </span><span class="s5">&quot;/&quot;</span><span class="s1">:</span>
+                <span class="s3"># replace separator with the OS specific one</span>
+                <span class="s1">display_text = styled_display[</span><span class="s4">1</span><span class="s1">][:-</span><span class="s4">1</span><span class="s1">] + os.path.sep</span>
+                <span class="s3"># update the styled display with the modified text</span>
+                <span class="s1">completion.display[</span><span class="s4">0</span><span class="s1">] = (styled_display[</span><span class="s4">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">display_text)</span>
+                <span class="s3"># append the separator to the text as well - unclear why the normal</span>
+                <span class="s3"># path completer omits it from the text. this improves UX for the</span>
+                <span class="s3"># user, as they don't need to type the separator after auto-completing</span>
+                <span class="s3"># a directory</span>
+                <span class="s1">completion.text += os.path.sep</span>
+            <span class="s0">yield </span><span class="s1">completion</span>
+
+
+<span class="s0">def </span><span class="s1">path(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">default: str = </span><span class="s5">&quot;&quot;</span><span class="s0">,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">validate: Any = </span><span class="s0">None,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">only_directories: bool = </span><span class="s0">False,</span>
+    <span class="s1">file_filter: Optional[Callable[[str]</span><span class="s0">, </span><span class="s1">bool]] = </span><span class="s0">None,</span>
+    <span class="s1">complete_style: CompleteStyle = CompleteStyle.MULTI_COLUMN</span><span class="s0">,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s2">&quot;&quot;&quot;A text input for a file or directory path with autocompletion enabled. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.path(&quot;What's the path to the projects version file?&quot;).ask() 
+        ? What's the path to the projects version file? ./pyproject.toml 
+        './pyproject.toml' 
+ 
+    .. image:: ../images/path.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+    Args: 
+        message: Question text. 
+ 
+        default: Default return value (single value). 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?``. 
+ 
+        complete_style: How autocomplete menu would be shown, it could be ``COLUMN`` 
+                        ``MULTI_COLUMN`` or ``READLINE_LIKE`` from 
+                        :class:`prompt_toolkit.shortcuts.CompleteStyle`. 
+ 
+        validate: Require the entered value to pass a validation. The 
+                  value can not be submitted until the validator accepts 
+                  it (e.g. to check minimum password length). 
+ 
+                  This can either be a function accepting the input and 
+                  returning a boolean, or an class reference to a 
+                  subclass of the prompt toolkit Validator class. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+        only_directories: Only show directories in auto completion 
+ 
+        file_filter: Optional callable to filter suggested paths. Only paths 
+                     where the passed callable evaluates to ``True`` will show up in 
+                     the suggested paths. This does not validate the typed path, e.g. 
+                     it is still possible for the user to enter a path manually, even 
+                     though this filter evaluates to ``False``. If in addition to 
+                     filtering suggestions you also want to validate the result, use 
+                     ``validate`` in combination with the ``file_filter``. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using ``.ask()``). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">merged_style = merge_styles([DEFAULT_STYLE</span><span class="s0">, </span><span class="s1">style])</span>
+
+    <span class="s0">def </span><span class="s1">get_prompt_tokens() -&gt; List[Tuple[str</span><span class="s0">, </span><span class="s1">str]]:</span>
+        <span class="s0">return </span><span class="s1">[(</span><span class="s5">&quot;class:qmark&quot;</span><span class="s0">, </span><span class="s1">qmark)</span><span class="s0">, </span><span class="s1">(</span><span class="s5">&quot;class:question&quot;</span><span class="s0">, </span><span class="s5">&quot; {} &quot;</span><span class="s1">.format(message))]</span>
+
+    <span class="s1">validator = build_validator(validate)</span>
+
+    <span class="s1">bindings = KeyBindings()</span>
+
+    <span class="s1">@bindings.add(Keys.ControlM</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">set_answer(event: KeyPressEvent):</span>
+        <span class="s0">if </span><span class="s1">event.current_buffer.complete_state </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">event.current_buffer.complete_state = </span><span class="s0">None</span>
+        <span class="s0">elif </span><span class="s1">event.app.current_buffer.validate(set_cursor=</span><span class="s0">True</span><span class="s1">):</span>
+            <span class="s3"># When the validation succeeded, accept the input.</span>
+            <span class="s1">result_path = event.app.current_buffer.document.text</span>
+            <span class="s0">if </span><span class="s1">result_path.endswith(os.path.sep):</span>
+                <span class="s1">result_path = result_path[:-</span><span class="s4">1</span><span class="s1">]</span>
+
+            <span class="s1">event.app.exit(result=result_path)</span>
+            <span class="s1">event.app.current_buffer.append_to_history()</span>
+
+    <span class="s1">@bindings.add(os.path.sep</span><span class="s0">, </span><span class="s1">eager=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">next_segment(event: KeyPressEvent):</span>
+        <span class="s1">b = event.app.current_buffer</span>
+
+        <span class="s0">if </span><span class="s1">b.complete_state:</span>
+            <span class="s1">b.complete_state = </span><span class="s0">None</span>
+
+        <span class="s1">current_path = b.document.text</span>
+        <span class="s0">if not </span><span class="s1">current_path.endswith(os.path.sep):</span>
+            <span class="s1">b.insert_text(os.path.sep)</span>
+
+        <span class="s1">b.start_completion(select_first=</span><span class="s0">False</span><span class="s1">)</span>
+
+    <span class="s1">p = PromptSession(</span>
+        <span class="s1">get_prompt_tokens</span><span class="s0">,</span>
+        <span class="s1">lexer=SimpleLexer(</span><span class="s5">&quot;class:answer&quot;</span><span class="s1">)</span><span class="s0">,</span>
+        <span class="s1">style=merged_style</span><span class="s0">,</span>
+        <span class="s1">completer=GreatUXPathCompleter(</span>
+            <span class="s1">only_directories=only_directories</span><span class="s0">, </span><span class="s1">file_filter=file_filter</span><span class="s0">, </span><span class="s1">expanduser=</span><span class="s0">True</span>
+        <span class="s1">)</span><span class="s0">,</span>
+        <span class="s1">validator=validator</span><span class="s0">,</span>
+        <span class="s1">complete_style=complete_style</span><span class="s0">,</span>
+        <span class="s1">key_bindings=bindings</span><span class="s0">,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s1">p.default_buffer.reset(Document(default))</span>
+
+    <span class="s0">return </span><span class="s1">Question(p.app)</span>
+</pre>
+</body>
+</html>

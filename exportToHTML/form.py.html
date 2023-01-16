@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>form.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+form.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Dict</span><span class="s0">, </span><span class="s1">NamedTuple</span><span class="s0">, </span><span class="s1">Sequence</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">DEFAULT_KBI_MESSAGE</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">class </span><span class="s1">FormField(NamedTuple):</span>
+    <span class="s1">key: str</span>
+    <span class="s1">question: Question</span>
+
+
+<span class="s0">def </span><span class="s1">form(**kwargs: Question) -&gt; </span><span class="s2">&quot;Form&quot;</span><span class="s1">:</span>
+    <span class="s3">&quot;&quot;&quot;Create a form with multiple questions. 
+ 
+    The parameter name of a question will be the key for the answer in 
+    the returned dict. 
+ 
+    Args: 
+        kwargs: Questions to ask in the form. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">Form(*(FormField(k</span><span class="s0">, </span><span class="s1">q) </span><span class="s0">for </span><span class="s1">k</span><span class="s0">, </span><span class="s1">q </span><span class="s0">in </span><span class="s1">kwargs.items()))</span>
+
+
+<span class="s0">class </span><span class="s1">Form:</span>
+    <span class="s3">&quot;&quot;&quot;Multi question prompts. Questions are asked one after another. 
+ 
+    All the answers are returned as a dict with one entry per question. 
+ 
+    This class should not be invoked directly, instead use :func:`form`. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">form_fields: Sequence[FormField]</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*form_fields: FormField) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.form_fields = form_fields</span>
+
+    <span class="s0">def </span><span class="s1">unsafe_ask(self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False</span><span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s3">&quot;&quot;&quot;Ask the questions synchronously and return user response. 
+ 
+        Does not catch keyboard interrupts. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+        Returns: 
+            The answers from the form. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">{f.key: f.question.unsafe_ask(patch_stdout) </span><span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">self.form_fields}</span>
+
+    <span class="s0">async def </span><span class="s1">unsafe_ask_async(self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False</span><span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s3">&quot;&quot;&quot;Ask the questions using asyncio and return user response. 
+ 
+        Does not catch keyboard interrupts. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+        Returns: 
+            The answers from the form. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">f.key: </span><span class="s0">await </span><span class="s1">f.question.unsafe_ask_async(patch_stdout)</span>
+            <span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">self.form_fields</span>
+        <span class="s1">}</span>
+
+    <span class="s0">def </span><span class="s1">ask(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False, </span><span class="s1">kbi_msg: str = DEFAULT_KBI_MESSAGE</span>
+    <span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s3">&quot;&quot;&quot;Ask the questions synchronously and return user response. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+            kbi_msg: The message to be printed on a keyboard interrupt. 
+ 
+        Returns: 
+            The answers from the form. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.unsafe_ask(patch_stdout)</span>
+        <span class="s0">except </span><span class="s1">KeyboardInterrupt:</span>
+            <span class="s1">print(</span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s1">print(kbi_msg)</span>
+            <span class="s1">print(</span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">{}</span>
+
+    <span class="s0">async def </span><span class="s1">ask_async(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">patch_stdout: bool = </span><span class="s0">False, </span><span class="s1">kbi_msg: str = DEFAULT_KBI_MESSAGE</span>
+    <span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s3">&quot;&quot;&quot;Ask the questions using asyncio and return user response. 
+ 
+        Args: 
+            patch_stdout: Ensure that the prompt renders correctly if other threads 
+                          are printing to stdout. 
+ 
+            kbi_msg: The message to be printed on a keyboard interrupt. 
+ 
+        Returns: 
+            The answers from the form. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return await </span><span class="s1">self.unsafe_ask_async(patch_stdout)</span>
+        <span class="s0">except </span><span class="s1">KeyboardInterrupt:</span>
+            <span class="s1">print(</span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s1">print(kbi_msg)</span>
+            <span class="s1">print(</span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">{}</span>
+</pre>
+</body>
+</html>
