@@ -1,0 +1,63 @@
+<html>
+<head>
+<title>nose.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+nose.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Run testsuites written for nose.&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">hookimpl</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">getfixturemarker</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Item</span>
+<span class="s2">from </span><span class="s1">_pytest.python </span><span class="s2">import </span><span class="s1">Function</span>
+<span class="s2">from </span><span class="s1">_pytest.unittest </span><span class="s2">import </span><span class="s1">TestCaseFunction</span>
+
+
+<span class="s1">@hookimpl(trylast=</span><span class="s2">True</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">pytest_runtest_setup(item: Item) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">if not </span><span class="s1">isinstance(item</span><span class="s2">, </span><span class="s1">Function):</span>
+        <span class="s2">return</span>
+    <span class="s3"># Don't do nose style setup/teardown on direct unittest style classes.</span>
+    <span class="s2">if </span><span class="s1">isinstance(item</span><span class="s2">, </span><span class="s1">TestCaseFunction):</span>
+        <span class="s2">return</span>
+
+    <span class="s3"># Capture the narrowed type of item for the teardown closure,</span>
+    <span class="s3"># see https://github.com/python/mypy/issues/2608</span>
+    <span class="s1">func = item</span>
+
+    <span class="s1">call_optional(func.obj</span><span class="s2">, </span><span class="s4">&quot;setup&quot;</span><span class="s1">)</span>
+    <span class="s1">func.addfinalizer(</span><span class="s2">lambda</span><span class="s1">: call_optional(func.obj</span><span class="s2">, </span><span class="s4">&quot;teardown&quot;</span><span class="s1">))</span>
+
+    <span class="s3"># NOTE: Module- and class-level fixtures are handled in python.py</span>
+    <span class="s3"># with `pluginmanager.has_plugin(&quot;nose&quot;)` checks.</span>
+    <span class="s3"># It would have been nicer to implement them outside of core, but</span>
+    <span class="s3"># it's not straightforward.</span>
+
+
+<span class="s2">def </span><span class="s1">call_optional(obj: object</span><span class="s2">, </span><span class="s1">name: str) -&gt; bool:</span>
+    <span class="s1">method = getattr(obj</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, None</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">method </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s2">return False</span>
+    <span class="s1">is_fixture = getfixturemarker(method) </span><span class="s2">is not None</span>
+    <span class="s2">if </span><span class="s1">is_fixture:</span>
+        <span class="s2">return False</span>
+    <span class="s2">if not </span><span class="s1">callable(method):</span>
+        <span class="s2">return False</span>
+    <span class="s3"># If there are any problems allow the exception to raise rather than</span>
+    <span class="s3"># silently ignoring it.</span>
+    <span class="s1">method()</span>
+    <span class="s2">return True</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<html>
+<head>
+<title>stepwise.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+stepwise.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">List</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TYPE_CHECKING</span>
+
+<span class="s0">import </span><span class="s1">pytest</span>
+<span class="s0">from </span><span class="s1">_pytest </span><span class="s0">import </span><span class="s1">nodes</span>
+<span class="s0">from </span><span class="s1">_pytest.config </span><span class="s0">import </span><span class="s1">Config</span>
+<span class="s0">from </span><span class="s1">_pytest.config.argparsing </span><span class="s0">import </span><span class="s1">Parser</span>
+<span class="s0">from </span><span class="s1">_pytest.main </span><span class="s0">import </span><span class="s1">Session</span>
+<span class="s0">from </span><span class="s1">_pytest.reports </span><span class="s0">import </span><span class="s1">TestReport</span>
+
+<span class="s0">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s0">from </span><span class="s1">_pytest.cacheprovider </span><span class="s0">import </span><span class="s1">Cache</span>
+
+<span class="s1">STEPWISE_CACHE_DIR = </span><span class="s2">&quot;cache/stepwise&quot;</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s1">group = parser.getgroup(</span><span class="s2">&quot;general&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s2">&quot;--sw&quot;</span><span class="s0">,</span>
+        <span class="s2">&quot;--stepwise&quot;</span><span class="s0">,</span>
+        <span class="s1">action=</span><span class="s2">&quot;store_true&quot;</span><span class="s0">,</span>
+        <span class="s1">default=</span><span class="s0">False,</span>
+        <span class="s1">dest=</span><span class="s2">&quot;stepwise&quot;</span><span class="s0">,</span>
+        <span class="s1">help=</span><span class="s2">&quot;exit on test failure and continue from last failing test next time&quot;</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s2">&quot;--sw-skip&quot;</span><span class="s0">,</span>
+        <span class="s2">&quot;--stepwise-skip&quot;</span><span class="s0">,</span>
+        <span class="s1">action=</span><span class="s2">&quot;store_true&quot;</span><span class="s0">,</span>
+        <span class="s1">default=</span><span class="s0">False,</span>
+        <span class="s1">dest=</span><span class="s2">&quot;stepwise_skip&quot;</span><span class="s0">,</span>
+        <span class="s1">help=</span><span class="s2">&quot;ignore the first failing test but stop on the next failing test.</span><span class="s0">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot;implicitly enables --stepwise.&quot;</span><span class="s0">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s1">@pytest.hookimpl</span>
+<span class="s0">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s0">if </span><span class="s1">config.option.stepwise_skip:</span>
+        <span class="s3"># allow --stepwise-skip to work on it's own merits.</span>
+        <span class="s1">config.option.stepwise = </span><span class="s0">True</span>
+    <span class="s0">if </span><span class="s1">config.getoption(</span><span class="s2">&quot;stepwise&quot;</span><span class="s1">):</span>
+        <span class="s1">config.pluginmanager.register(StepwisePlugin(config)</span><span class="s0">, </span><span class="s2">&quot;stepwiseplugin&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_sessionfinish(session: Session) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s0">if not </span><span class="s1">session.config.getoption(</span><span class="s2">&quot;stepwise&quot;</span><span class="s1">):</span>
+        <span class="s0">assert </span><span class="s1">session.config.cache </span><span class="s0">is not None</span>
+        <span class="s3"># Clear the list of failing tests if the plugin is not active.</span>
+        <span class="s1">session.config.cache.set(STEPWISE_CACHE_DIR</span><span class="s0">, </span><span class="s1">[])</span>
+
+
+<span class="s0">class </span><span class="s1">StepwisePlugin:</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">config: Config) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.config = config</span>
+        <span class="s1">self.session: Optional[Session] = </span><span class="s0">None</span>
+        <span class="s1">self.report_status = </span><span class="s2">&quot;&quot;</span>
+        <span class="s0">assert </span><span class="s1">config.cache </span><span class="s0">is not None</span>
+        <span class="s1">self.cache: Cache = config.cache</span>
+        <span class="s1">self.lastfailed: Optional[str] = self.cache.get(STEPWISE_CACHE_DIR</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s1">self.skip: bool = config.getoption(</span><span class="s2">&quot;stepwise_skip&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">pytest_sessionstart(self</span><span class="s0">, </span><span class="s1">session: Session) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.session = session</span>
+
+    <span class="s0">def </span><span class="s1">pytest_collection_modifyitems(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">config: Config</span><span class="s0">, </span><span class="s1">items: List[nodes.Item]</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">self.lastfailed:</span>
+            <span class="s1">self.report_status = </span><span class="s2">&quot;no previously failed tests, not skipping.&quot;</span>
+            <span class="s0">return</span>
+
+        <span class="s3"># check all item nodes until we find a match on last failed</span>
+        <span class="s1">failed_index = </span><span class="s0">None</span>
+        <span class="s0">for </span><span class="s1">index</span><span class="s0">, </span><span class="s1">item </span><span class="s0">in </span><span class="s1">enumerate(items):</span>
+            <span class="s0">if </span><span class="s1">item.nodeid == self.lastfailed:</span>
+                <span class="s1">failed_index = index</span>
+                <span class="s0">break</span>
+
+        <span class="s3"># If the previously failed test was not found among the test items,</span>
+        <span class="s3"># do not skip any tests.</span>
+        <span class="s0">if </span><span class="s1">failed_index </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">self.report_status = </span><span class="s2">&quot;previously failed test not found, not skipping.&quot;</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">self.report_status = </span><span class="s2">f&quot;skipping </span><span class="s0">{</span><span class="s1">failed_index</span><span class="s0">} </span><span class="s2">already passed items.&quot;</span>
+            <span class="s1">deselected = items[:failed_index]</span>
+            <span class="s0">del </span><span class="s1">items[:failed_index]</span>
+            <span class="s1">config.hook.pytest_deselected(items=deselected)</span>
+
+    <span class="s0">def </span><span class="s1">pytest_runtest_logreport(self</span><span class="s0">, </span><span class="s1">report: TestReport) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">report.failed:</span>
+            <span class="s0">if </span><span class="s1">self.skip:</span>
+                <span class="s3"># Remove test from the failed ones (if it exists) and unset the skip option</span>
+                <span class="s3"># to make sure the following tests will not be skipped.</span>
+                <span class="s0">if </span><span class="s1">report.nodeid == self.lastfailed:</span>
+                    <span class="s1">self.lastfailed = </span><span class="s0">None</span>
+
+                <span class="s1">self.skip = </span><span class="s0">False</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s3"># Mark test as the last failing and interrupt the test session.</span>
+                <span class="s1">self.lastfailed = report.nodeid</span>
+                <span class="s0">assert </span><span class="s1">self.session </span><span class="s0">is not None</span>
+                <span class="s1">self.session.shouldstop = (</span>
+                    <span class="s2">&quot;Test failed, continuing from this test next run.&quot;</span>
+                <span class="s1">)</span>
+
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s3"># If the test was actually run and did pass.</span>
+            <span class="s0">if </span><span class="s1">report.when == </span><span class="s2">&quot;call&quot;</span><span class="s1">:</span>
+                <span class="s3"># Remove test from the failed ones, if exists.</span>
+                <span class="s0">if </span><span class="s1">report.nodeid == self.lastfailed:</span>
+                    <span class="s1">self.lastfailed = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">pytest_report_collectionfinish(self) -&gt; Optional[str]:</span>
+        <span class="s0">if </span><span class="s1">self.config.getoption(</span><span class="s2">&quot;verbose&quot;</span><span class="s1">) &gt;= </span><span class="s4">0 </span><span class="s0">and </span><span class="s1">self.report_status:</span>
+            <span class="s0">return </span><span class="s2">f&quot;stepwise: </span><span class="s0">{</span><span class="s1">self.report_status</span><span class="s0">}</span><span class="s2">&quot;</span>
+        <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">pytest_sessionfinish(self) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.cache.set(STEPWISE_CACHE_DIR</span><span class="s0">, </span><span class="s1">self.lastfailed)</span>
+</pre>
+</body>
+</html>

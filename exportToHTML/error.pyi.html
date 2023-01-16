@@ -1,0 +1,148 @@
+<html>
+<head>
+<title>error.pyi</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+error.pyi</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Callable</span><span class="s0">, </span><span class="s1">TypeVar</span>
+
+<span class="s1">_T = TypeVar(</span><span class="s2">'_T'</span><span class="s1">)</span>
+
+<span class="s0">def </span><span class="s1">checked_call(func: Callable[...</span><span class="s0">, </span><span class="s1">_T]</span><span class="s0">, </span><span class="s1">*args: Any</span><span class="s0">, </span><span class="s1">**kwargs: Any) -&gt; _T: ...</span>
+<span class="s0">class </span><span class="s1">Error(EnvironmentError): ...</span>
+<span class="s0">class </span><span class="s1">EPERM(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOENT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESRCH(Error): ...</span>
+<span class="s0">class </span><span class="s1">EINTR(Error): ...</span>
+<span class="s0">class </span><span class="s1">EIO(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENXIO(Error): ...</span>
+<span class="s0">class </span><span class="s1">E2BIG(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOEXEC(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADF(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECHILD(Error): ...</span>
+<span class="s0">class </span><span class="s1">EAGAIN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOMEM(Error): ...</span>
+<span class="s0">class </span><span class="s1">EACCES(Error): ...</span>
+<span class="s0">class </span><span class="s1">EFAULT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTBLK(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBUSY(Error): ...</span>
+<span class="s0">class </span><span class="s1">EEXIST(Error): ...</span>
+<span class="s0">class </span><span class="s1">EXDEV(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENODEV(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTDIR(Error): ...</span>
+<span class="s0">class </span><span class="s1">EISDIR(Error): ...</span>
+<span class="s0">class </span><span class="s1">EINVAL(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENFILE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EMFILE(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTTY(Error): ...</span>
+<span class="s0">class </span><span class="s1">ETXTBSY(Error): ...</span>
+<span class="s0">class </span><span class="s1">EFBIG(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOSPC(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESPIPE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EROFS(Error): ...</span>
+<span class="s0">class </span><span class="s1">EMLINK(Error): ...</span>
+<span class="s0">class </span><span class="s1">EPIPE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDOM(Error): ...</span>
+<span class="s0">class </span><span class="s1">ERANGE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDEADLCK(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENAMETOOLONG(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOLCK(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOSYS(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTEMPTY(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELOOP(Error): ...</span>
+<span class="s0">class </span><span class="s1">EWOULDBLOCK(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOMSG(Error): ...</span>
+<span class="s0">class </span><span class="s1">EIDRM(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECHRNG(Error): ...</span>
+<span class="s0">class </span><span class="s1">EL2NSYNC(Error): ...</span>
+<span class="s0">class </span><span class="s1">EL3HLT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EL3RST(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELNRNG(Error): ...</span>
+<span class="s0">class </span><span class="s1">EUNATCH(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOCSI(Error): ...</span>
+<span class="s0">class </span><span class="s1">EL2HLT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADR(Error): ...</span>
+<span class="s0">class </span><span class="s1">EXFULL(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOANO(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADRQC(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADSLT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDEADLOCK(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBFONT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOSTR(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENODATA(Error): ...</span>
+<span class="s0">class </span><span class="s1">ETIME(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOSR(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENONET(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOPKG(Error): ...</span>
+<span class="s0">class </span><span class="s1">EREMOTE(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOLINK(Error): ...</span>
+<span class="s0">class </span><span class="s1">EADV(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESRMNT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECOMM(Error): ...</span>
+<span class="s0">class </span><span class="s1">EPROTO(Error): ...</span>
+<span class="s0">class </span><span class="s1">EMULTIHOP(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDOTDOT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADMSG(Error): ...</span>
+<span class="s0">class </span><span class="s1">EOVERFLOW(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTUNIQ(Error): ...</span>
+<span class="s0">class </span><span class="s1">EBADFD(Error): ...</span>
+<span class="s0">class </span><span class="s1">EREMCHG(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELIBACC(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELIBBAD(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELIBSCN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELIBMAX(Error): ...</span>
+<span class="s0">class </span><span class="s1">ELIBEXEC(Error): ...</span>
+<span class="s0">class </span><span class="s1">EILSEQ(Error): ...</span>
+<span class="s0">class </span><span class="s1">ERESTART(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESTRPIPE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EUSERS(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTSOCK(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDESTADDRREQ(Error): ...</span>
+<span class="s0">class </span><span class="s1">EMSGSIZE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EPROTOTYPE(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOPROTOOPT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EPROTONOSUPPORT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESOCKTNOSUPPORT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTSUP(Error): ...</span>
+<span class="s0">class </span><span class="s1">EOPNOTSUPP(Error): ...</span>
+<span class="s0">class </span><span class="s1">EPFNOSUPPORT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EAFNOSUPPORT(Error): ...</span>
+<span class="s0">class </span><span class="s1">EADDRINUSE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EADDRNOTAVAIL(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENETDOWN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENETUNREACH(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENETRESET(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECONNABORTED(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECONNRESET(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOBUFS(Error): ...</span>
+<span class="s0">class </span><span class="s1">EISCONN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTCONN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESHUTDOWN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ETOOMANYREFS(Error): ...</span>
+<span class="s0">class </span><span class="s1">ETIMEDOUT(Error): ...</span>
+<span class="s0">class </span><span class="s1">ECONNREFUSED(Error): ...</span>
+<span class="s0">class </span><span class="s1">EHOSTDOWN(Error): ...</span>
+<span class="s0">class </span><span class="s1">EHOSTUNREACH(Error): ...</span>
+<span class="s0">class </span><span class="s1">EALREADY(Error): ...</span>
+<span class="s0">class </span><span class="s1">EINPROGRESS(Error): ...</span>
+<span class="s0">class </span><span class="s1">ESTALE(Error): ...</span>
+<span class="s0">class </span><span class="s1">EUCLEAN(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENOTNAM(Error): ...</span>
+<span class="s0">class </span><span class="s1">ENAVAIL(Error): ...</span>
+<span class="s0">class </span><span class="s1">EISNAM(Error): ...</span>
+<span class="s0">class </span><span class="s1">EREMOTEIO(Error): ...</span>
+<span class="s0">class </span><span class="s1">EDQUOT(Error): ...</span>
+</pre>
+</body>
+</html>

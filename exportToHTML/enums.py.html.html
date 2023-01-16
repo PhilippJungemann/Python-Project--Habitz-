@@ -1,0 +1,122 @@
+<html>
+<head>
+<title>enums.py.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #e8bf6a;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #bababa;}
+.s3 { color: #a5c261;}
+.s4 { color: #6d9cbe;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+enums.py.html</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;html&gt;</span>
+<span class="s0">&lt;head&gt;</span>
+<span class="s0">&lt;title&gt;</span><span class="s1">enums.py</span><span class="s0">&lt;/title&gt;</span>
+<span class="s0">&lt;meta </span><span class="s2">http-equiv</span><span class="s3">=&quot;Content-Type&quot; </span><span class="s2">content</span><span class="s3">=&quot;text/html; charset=utf-8&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;style </span><span class="s2">type</span><span class="s3">=&quot;text/css&quot;</span><span class="s0">&gt;</span>
+<span class="s1">.s0 { color: #629755; font-style: italic;}</span>
+<span class="s1">.s1 { color: #a9b7c6;}</span>
+<span class="s1">.s2 { color: #cc7832;}</span>
+<span class="s1">.s3 { color: #6897bb;}</span>
+<span class="s0">&lt;/style&gt;</span>
+<span class="s0">&lt;/head&gt;</span>
+<span class="s0">&lt;body </span><span class="s2">bgcolor</span><span class="s3">=&quot;#2b2b2b&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;table </span><span class="s2">CELLSPACING</span><span class="s3">=0 </span><span class="s2">CELLPADDING</span><span class="s3">=5 </span><span class="s2">COLS</span><span class="s3">=1 </span><span class="s2">WIDTH</span><span class="s3">=&quot;100%&quot; </span><span class="s2">BGCOLOR</span><span class="s3">=&quot;#606060&quot; </span><span class="s0">&gt;</span>
+<span class="s0">&lt;tr&gt;&lt;td&gt;&lt;center&gt;</span>
+<span class="s0">&lt;font </span><span class="s2">face</span><span class="s3">=&quot;Arial, Helvetica&quot; </span><span class="s2">color</span><span class="s3">=&quot;#000000&quot;</span><span class="s0">&gt;</span>
+<span class="s1">enums.py</span><span class="s0">&lt;/font&gt;</span>
+<span class="s0">&lt;/center&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</span>
+<span class="s0">&lt;pre&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+<span class="s1">All of the Enums that are used throughout the chardet package. </span>
+ 
+<span class="s1">:author: Dan Blanchard (dan.blanchard@gmail.com) </span>
+<span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">InputState:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the different states a universal detector can be in. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">PURE_ASCII = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">ESC_ASCII = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">1</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">HIGH_BYTE = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">2</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">LanguageFilter:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the different language filters we can apply to a </span>
+    <span class="s1">``UniversalDetector``. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CHINESE_SIMPLIFIED = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x01</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CHINESE_TRADITIONAL = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x02</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">JAPANESE = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x04</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">KOREAN = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x08</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NON_CJK = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x10</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">ALL = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0x1F</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CHINESE = CHINESE_SIMPLIFIED | CHINESE_TRADITIONAL</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CJK = CHINESE | JAPANESE | KOREAN</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">ProbingState:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the different states a prober can be in. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">DETECTING = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">FOUND_IT = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">1</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NOT_ME = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">2</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">MachineState:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the different states a state machine can be in. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">START = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">ERROR = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">1</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">ITS_ME = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">2</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">SequenceLikelihood:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the likelihood of a character following the previous one. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NEGATIVE = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">0</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">UNLIKELY = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">1</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">LIKELY = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">2</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">POSITIVE = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">3</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">@classmethod</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_num_categories(cls):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">:returns: The number of likelihood categories in the enum.</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">4</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CharacterCategory:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">This enum represents the different categories language models for </span>
+    <span class="s1">``SingleByteCharsetProber`` put characters into. </span>
+ 
+    <span class="s1">Anything less than CONTROL is considered a letter. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">UNDEFINED = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">255</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">LINE_BREAK = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">254</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">SYMBOL = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">253</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">DIGIT = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">252</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">CONTROL = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">251</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;/pre&gt;</span>
+<span class="s0">&lt;/body&gt;</span>
+<span class="s0">&lt;/html&gt;</span></pre>
+</body>
+</html>

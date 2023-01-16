@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>pytester_assertions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #cc7832;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pytester_assertions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Helper plugin for pytester; should not be loaded on its own.&quot;&quot;&quot;</span>
+<span class="s2"># This plugin contains assertions used by pytester. pytester cannot</span>
+<span class="s2"># contain them itself, since it is imported by the `pytest` module,</span>
+<span class="s2"># hence cannot be subject to assertion rewriting, which requires a</span>
+<span class="s2"># module to not be already imported.</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Dict</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Optional</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Sequence</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Tuple</span>
+<span class="s3">from </span><span class="s1">typing </span><span class="s3">import </span><span class="s1">Union</span>
+
+<span class="s3">from </span><span class="s1">_pytest.reports </span><span class="s3">import </span><span class="s1">CollectReport</span>
+<span class="s3">from </span><span class="s1">_pytest.reports </span><span class="s3">import </span><span class="s1">TestReport</span>
+
+
+<span class="s3">def </span><span class="s1">assertoutcome(</span>
+    <span class="s1">outcomes: Tuple[</span>
+        <span class="s1">Sequence[TestReport]</span><span class="s3">,</span>
+        <span class="s1">Sequence[Union[CollectReport</span><span class="s3">, </span><span class="s1">TestReport]]</span><span class="s3">,</span>
+        <span class="s1">Sequence[Union[CollectReport</span><span class="s3">, </span><span class="s1">TestReport]]</span><span class="s3">,</span>
+    <span class="s1">]</span><span class="s3">,</span>
+    <span class="s1">passed: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">skipped: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">failed: int = </span><span class="s4">0</span><span class="s3">,</span>
+<span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s3">True</span>
+
+    <span class="s1">realpassed</span><span class="s3">, </span><span class="s1">realskipped</span><span class="s3">, </span><span class="s1">realfailed = outcomes</span>
+    <span class="s1">obtained = {</span>
+        <span class="s5">&quot;passed&quot;</span><span class="s1">: len(realpassed)</span><span class="s3">,</span>
+        <span class="s5">&quot;skipped&quot;</span><span class="s1">: len(realskipped)</span><span class="s3">,</span>
+        <span class="s5">&quot;failed&quot;</span><span class="s1">: len(realfailed)</span><span class="s3">,</span>
+    <span class="s1">}</span>
+    <span class="s1">expected = {</span><span class="s5">&quot;passed&quot;</span><span class="s1">: passed</span><span class="s3">, </span><span class="s5">&quot;skipped&quot;</span><span class="s1">: skipped</span><span class="s3">, </span><span class="s5">&quot;failed&quot;</span><span class="s1">: failed}</span>
+    <span class="s3">assert </span><span class="s1">obtained == expected</span><span class="s3">, </span><span class="s1">outcomes</span>
+
+
+<span class="s3">def </span><span class="s1">assert_outcomes(</span>
+    <span class="s1">outcomes: Dict[str</span><span class="s3">, </span><span class="s1">int]</span><span class="s3">,</span>
+    <span class="s1">passed: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">skipped: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">failed: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">errors: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">xpassed: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">xfailed: int = </span><span class="s4">0</span><span class="s3">,</span>
+    <span class="s1">warnings: Optional[int] = </span><span class="s3">None,</span>
+    <span class="s1">deselected: Optional[int] = </span><span class="s3">None,</span>
+<span class="s1">) -&gt; </span><span class="s3">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Assert that the specified outcomes appear with the respective 
+    numbers (0 means it didn't occur) in the text output from a test run.&quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s3">True</span>
+
+    <span class="s1">obtained = {</span>
+        <span class="s5">&quot;passed&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;passed&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s5">&quot;skipped&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;skipped&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s5">&quot;failed&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;failed&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s5">&quot;errors&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;errors&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s5">&quot;xpassed&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;xpassed&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s5">&quot;xfailed&quot;</span><span class="s1">: outcomes.get(</span><span class="s5">&quot;xfailed&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span><span class="s3">,</span>
+    <span class="s1">}</span>
+    <span class="s1">expected = {</span>
+        <span class="s5">&quot;passed&quot;</span><span class="s1">: passed</span><span class="s3">,</span>
+        <span class="s5">&quot;skipped&quot;</span><span class="s1">: skipped</span><span class="s3">,</span>
+        <span class="s5">&quot;failed&quot;</span><span class="s1">: failed</span><span class="s3">,</span>
+        <span class="s5">&quot;errors&quot;</span><span class="s1">: errors</span><span class="s3">,</span>
+        <span class="s5">&quot;xpassed&quot;</span><span class="s1">: xpassed</span><span class="s3">,</span>
+        <span class="s5">&quot;xfailed&quot;</span><span class="s1">: xfailed</span><span class="s3">,</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">warnings </span><span class="s3">is not None</span><span class="s1">:</span>
+        <span class="s1">obtained[</span><span class="s5">&quot;warnings&quot;</span><span class="s1">] = outcomes.get(</span><span class="s5">&quot;warnings&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span>
+        <span class="s1">expected[</span><span class="s5">&quot;warnings&quot;</span><span class="s1">] = warnings</span>
+    <span class="s3">if </span><span class="s1">deselected </span><span class="s3">is not None</span><span class="s1">:</span>
+        <span class="s1">obtained[</span><span class="s5">&quot;deselected&quot;</span><span class="s1">] = outcomes.get(</span><span class="s5">&quot;deselected&quot;</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span>
+        <span class="s1">expected[</span><span class="s5">&quot;deselected&quot;</span><span class="s1">] = deselected</span>
+    <span class="s3">assert </span><span class="s1">obtained == expected</span>
+</pre>
+</body>
+</html>

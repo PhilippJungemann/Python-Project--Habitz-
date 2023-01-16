@@ -1,0 +1,100 @@
+<html>
+<head>
+<title>warning.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+warning.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">py</span><span class="s0">, </span><span class="s1">sys</span>
+
+<span class="s0">class </span><span class="s1">DeprecationWarning(DeprecationWarning):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">path</span><span class="s0">, </span><span class="s1">lineno):</span>
+        <span class="s1">self.msg = msg</span>
+        <span class="s1">self.path = path</span>
+        <span class="s1">self.lineno = lineno</span>
+    <span class="s0">def </span><span class="s1">__repr__(self):</span>
+        <span class="s0">return </span><span class="s2">&quot;%s:%d: %s&quot; </span><span class="s1">%(self.path</span><span class="s0">, </span><span class="s1">self.lineno+</span><span class="s3">1</span><span class="s0">, </span><span class="s1">self.msg)</span>
+    <span class="s0">def </span><span class="s1">__str__(self):</span>
+        <span class="s0">return </span><span class="s1">self.msg</span>
+
+<span class="s0">def </span><span class="s1">_apiwarn(startversion</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">stacklevel=</span><span class="s3">2</span><span class="s0">, </span><span class="s1">function=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s4"># below is mostly COPIED from python2.4/warnings.py's def warn()</span>
+    <span class="s4"># Get context information</span>
+    <span class="s0">if </span><span class="s1">isinstance(stacklevel</span><span class="s0">, </span><span class="s1">str):</span>
+        <span class="s1">frame = sys._getframe(</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s1">level = </span><span class="s3">1</span>
+        <span class="s1">found = frame.f_code.co_filename.find(stacklevel) != -</span><span class="s3">1</span>
+        <span class="s0">while </span><span class="s1">frame:</span>
+            <span class="s1">co = frame.f_code</span>
+            <span class="s0">if </span><span class="s1">co.co_filename.find(stacklevel) == -</span><span class="s3">1</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">found:</span>
+                    <span class="s1">stacklevel = level</span>
+                    <span class="s0">break</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">found = </span><span class="s0">True</span>
+            <span class="s1">level += </span><span class="s3">1</span>
+            <span class="s1">frame = frame.f_back</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">stacklevel = </span><span class="s3">1</span>
+    <span class="s1">msg = </span><span class="s2">&quot;%s (since version %s)&quot; </span><span class="s1">%(msg</span><span class="s0">, </span><span class="s1">startversion)</span>
+    <span class="s1">warn(msg</span><span class="s0">, </span><span class="s1">stacklevel=stacklevel+</span><span class="s3">1</span><span class="s0">, </span><span class="s1">function=function)</span>
+
+
+<span class="s0">def </span><span class="s1">warn(msg</span><span class="s0">, </span><span class="s1">stacklevel=</span><span class="s3">1</span><span class="s0">, </span><span class="s1">function=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s0">if </span><span class="s1">function </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s0">import </span><span class="s1">inspect</span>
+        <span class="s1">filename = inspect.getfile(function)</span>
+        <span class="s1">lineno = py.code.getrawcode(function).co_firstlineno</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">caller = sys._getframe(stacklevel)</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s1">globals = sys.__dict__</span>
+            <span class="s1">lineno = </span><span class="s3">1</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">globals = caller.f_globals</span>
+            <span class="s1">lineno = caller.f_lineno</span>
+        <span class="s0">if </span><span class="s2">'__name__' </span><span class="s0">in </span><span class="s1">globals:</span>
+            <span class="s1">module = globals[</span><span class="s2">'__name__'</span><span class="s1">]</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">module = </span><span class="s2">&quot;&lt;string&gt;&quot;</span>
+        <span class="s1">filename = globals.get(</span><span class="s2">'__file__'</span><span class="s1">)</span>
+    <span class="s0">if </span><span class="s1">filename:</span>
+        <span class="s1">fnl = filename.lower()</span>
+        <span class="s0">if </span><span class="s1">fnl.endswith(</span><span class="s2">&quot;.pyc&quot;</span><span class="s1">) </span><span class="s0">or </span><span class="s1">fnl.endswith(</span><span class="s2">&quot;.pyo&quot;</span><span class="s1">):</span>
+            <span class="s1">filename = filename[:-</span><span class="s3">1</span><span class="s1">]</span>
+        <span class="s0">elif </span><span class="s1">fnl.endswith(</span><span class="s2">&quot;$py.class&quot;</span><span class="s1">):</span>
+            <span class="s1">filename = filename.replace(</span><span class="s2">'$py.class'</span><span class="s0">, </span><span class="s2">'.py'</span><span class="s1">)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">module == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">filename = sys.argv[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s4"># embedded interpreters don't have sys.argv, see bug #839151</span>
+                <span class="s1">filename = </span><span class="s2">'__main__'</span>
+        <span class="s0">if not </span><span class="s1">filename:</span>
+            <span class="s1">filename = module</span>
+    <span class="s1">path = py.path.local(filename)</span>
+    <span class="s1">warning = DeprecationWarning(msg</span><span class="s0">, </span><span class="s1">path</span><span class="s0">, </span><span class="s1">lineno)</span>
+    <span class="s0">import </span><span class="s1">warnings</span>
+    <span class="s1">warnings.warn_explicit(warning</span><span class="s0">, </span><span class="s1">category=Warning</span><span class="s0">,</span>
+        <span class="s1">filename=str(warning.path)</span><span class="s0">,</span>
+        <span class="s1">lineno=warning.lineno</span><span class="s0">,</span>
+        <span class="s1">registry=warnings.__dict__.setdefault(</span>
+            <span class="s2">&quot;__warningsregistry__&quot;</span><span class="s0">, </span><span class="s1">{})</span>
+    <span class="s1">)</span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,578 @@
+<html>
+<head>
+<title>_assertionold.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_assertionold.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">py</span>
+<span class="s0">import </span><span class="s1">sys</span><span class="s0">, </span><span class="s1">inspect</span>
+<span class="s0">from </span><span class="s1">compiler </span><span class="s0">import </span><span class="s1">parse</span><span class="s0">, </span><span class="s1">ast</span><span class="s0">, </span><span class="s1">pycodegen</span>
+<span class="s0">from </span><span class="s1">py._code.assertion </span><span class="s0">import </span><span class="s1">BuiltinAssertionError</span><span class="s0">, </span><span class="s1">_format_explanation</span>
+<span class="s0">import </span><span class="s1">types</span>
+
+<span class="s1">passthroughex = py.builtin._sysex</span>
+
+<span class="s0">class </span><span class="s1">Failure:</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">node):</span>
+        <span class="s1">self.exc</span><span class="s0">, </span><span class="s1">self.value</span><span class="s0">, </span><span class="s1">self.tb = sys.exc_info()</span>
+        <span class="s1">self.node = node</span>
+
+<span class="s0">class </span><span class="s1">View(object):</span>
+    <span class="s2">&quot;&quot;&quot;View base class. 
+ 
+    If C is a subclass of View, then C(x) creates a proxy object around 
+    the object x.  The actual class of the proxy is not C in general, 
+    but a *subclass* of C determined by the rules below.  To avoid confusion 
+    we call view class the class of the proxy (a subclass of C, so of View) 
+    and object class the class of x. 
+ 
+    Attributes and methods not found in the proxy are automatically read on x. 
+    Other operations like setting attributes are performed on the proxy, as 
+    determined by its view class.  The object x is available from the proxy 
+    as its __obj__ attribute. 
+ 
+    The view class selection is determined by the __view__ tuples and the 
+    optional __viewkey__ method.  By default, the selected view class is the 
+    most specific subclass of C whose __view__ mentions the class of x. 
+    If no such subclass is found, the search proceeds with the parent 
+    object classes.  For example, C(True) will first look for a subclass 
+    of C with __view__ = (..., bool, ...) and only if it doesn't find any 
+    look for one with __view__ = (..., int, ...), and then ..., object,... 
+    If everything fails the class C itself is considered to be the default. 
+ 
+    Alternatively, the view class selection can be driven by another aspect 
+    of the object x, instead of the class of x, by overriding __viewkey__. 
+    See last example at the end of this module. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_viewcache = {}</span>
+    <span class="s1">__view__ = ()</span>
+
+    <span class="s0">def </span><span class="s1">__new__(rootclass</span><span class="s0">, </span><span class="s1">obj</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kwds):</span>
+        <span class="s1">self = object.__new__(rootclass)</span>
+        <span class="s1">self.__obj__ = obj</span>
+        <span class="s1">self.__rootclass__ = rootclass</span>
+        <span class="s1">key = self.__viewkey__()</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self.__class__ = self._viewcache[key]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s1">self.__class__ = self._selectsubclass(key)</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+    <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">attr):</span>
+        <span class="s3"># attributes not found in the normal hierarchy rooted on View</span>
+        <span class="s3"># are looked up in the object's real class</span>
+        <span class="s0">return </span><span class="s1">getattr(self.__obj__</span><span class="s0">, </span><span class="s1">attr)</span>
+
+    <span class="s0">def </span><span class="s1">__viewkey__(self):</span>
+        <span class="s0">return </span><span class="s1">self.__obj__.__class__</span>
+
+    <span class="s0">def </span><span class="s1">__matchkey__(self</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">subclasses):</span>
+        <span class="s0">if </span><span class="s1">inspect.isclass(key):</span>
+            <span class="s1">keys = inspect.getmro(key)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">keys = [key]</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">keys:</span>
+            <span class="s1">result = [C </span><span class="s0">for </span><span class="s1">C </span><span class="s0">in </span><span class="s1">subclasses </span><span class="s0">if </span><span class="s1">key </span><span class="s0">in </span><span class="s1">C.__view__]</span>
+            <span class="s0">if </span><span class="s1">result:</span>
+                <span class="s0">return </span><span class="s1">result</span>
+        <span class="s0">return </span><span class="s1">[]</span>
+
+    <span class="s0">def </span><span class="s1">_selectsubclass(self</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s1">subclasses = list(enumsubclasses(self.__rootclass__))</span>
+        <span class="s0">for </span><span class="s1">C </span><span class="s0">in </span><span class="s1">subclasses:</span>
+            <span class="s0">if not </span><span class="s1">isinstance(C.__view__</span><span class="s0">, </span><span class="s1">tuple):</span>
+                <span class="s1">C.__view__ = (C.__view__</span><span class="s0">,</span><span class="s1">)</span>
+        <span class="s1">choices = self.__matchkey__(key</span><span class="s0">, </span><span class="s1">subclasses)</span>
+        <span class="s0">if not </span><span class="s1">choices:</span>
+            <span class="s0">return </span><span class="s1">self.__rootclass__</span>
+        <span class="s0">elif </span><span class="s1">len(choices) == </span><span class="s4">1</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">choices[</span><span class="s4">0</span><span class="s1">]</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s3"># combine the multiple choices</span>
+            <span class="s0">return </span><span class="s1">type(</span><span class="s5">'?'</span><span class="s0">, </span><span class="s1">tuple(choices)</span><span class="s0">, </span><span class="s1">{})</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self):</span>
+        <span class="s0">return </span><span class="s5">'%s(%r)' </span><span class="s1">% (self.__rootclass__.__name__</span><span class="s0">, </span><span class="s1">self.__obj__)</span>
+
+
+<span class="s0">def </span><span class="s1">enumsubclasses(cls):</span>
+    <span class="s0">for </span><span class="s1">subcls </span><span class="s0">in </span><span class="s1">cls.__subclasses__():</span>
+        <span class="s0">for </span><span class="s1">subsubclass </span><span class="s0">in </span><span class="s1">enumsubclasses(subcls):</span>
+            <span class="s0">yield </span><span class="s1">subsubclass</span>
+    <span class="s0">yield </span><span class="s1">cls</span>
+
+
+<span class="s0">class </span><span class="s1">Interpretable(View):</span>
+    <span class="s2">&quot;&quot;&quot;A parse tree node with a few extra methods.&quot;&quot;&quot;</span>
+    <span class="s1">explanation = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">is_builtin(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s3"># fall-back for unknown expression nodes</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">expr = ast.Expression(self.__obj__)</span>
+            <span class="s1">expr.filename = </span><span class="s5">'&lt;eval&gt;'</span>
+            <span class="s1">self.__obj__.filename = </span><span class="s5">'&lt;eval&gt;'</span>
+            <span class="s1">co = pycodegen.ExpressionCodeGenerator(expr).getCode()</span>
+            <span class="s1">result = frame.eval(co)</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">Failure(self)</span>
+        <span class="s1">self.result = result</span>
+        <span class="s1">self.explanation = self.explanation </span><span class="s0">or </span><span class="s1">frame.repr(self.result)</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s3"># fall-back for unknown statement nodes</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">expr = ast.Module(</span><span class="s0">None, </span><span class="s1">ast.Stmt([self.__obj__]))</span>
+            <span class="s1">expr.filename = </span><span class="s5">'&lt;run&gt;'</span>
+            <span class="s1">co = pycodegen.ModuleCodeGenerator(expr).getCode()</span>
+            <span class="s1">frame.exec_(co)</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">Failure(self)</span>
+
+    <span class="s0">def </span><span class="s1">nice_explanation(self):</span>
+        <span class="s0">return </span><span class="s1">_format_explanation(self.explanation)</span>
+
+
+<span class="s0">class </span><span class="s1">Name(Interpretable):</span>
+    <span class="s1">__view__ = ast.Name</span>
+
+    <span class="s0">def </span><span class="s1">is_local(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">source = </span><span class="s5">'%r in locals() is not globals()' </span><span class="s1">% self.name</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">frame.is_true(frame.eval(source))</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">is_global(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">source = </span><span class="s5">'%r in globals()' </span><span class="s1">% self.name</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">frame.is_true(frame.eval(source))</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">is_builtin(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">source = </span><span class="s5">'%r not in locals() and %r not in globals()' </span><span class="s1">% (</span>
+            <span class="s1">self.name</span><span class="s0">, </span><span class="s1">self.name)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">frame.is_true(frame.eval(source))</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">super(Name</span><span class="s0">, </span><span class="s1">self).eval(frame)</span>
+        <span class="s0">if not </span><span class="s1">self.is_local(frame):</span>
+            <span class="s1">self.explanation = self.name</span>
+
+<span class="s0">class </span><span class="s1">Compare(Interpretable):</span>
+    <span class="s1">__view__ = ast.Compare</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">expr = Interpretable(self.expr)</span>
+        <span class="s1">expr.eval(frame)</span>
+        <span class="s0">for </span><span class="s1">operation</span><span class="s0">, </span><span class="s1">expr2 </span><span class="s0">in </span><span class="s1">self.ops:</span>
+            <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">'result'</span><span class="s1">):</span>
+                <span class="s3"># shortcutting in chained expressions</span>
+                <span class="s0">if not </span><span class="s1">frame.is_true(self.result):</span>
+                    <span class="s0">break</span>
+            <span class="s1">expr2 = Interpretable(expr2)</span>
+            <span class="s1">expr2.eval(frame)</span>
+            <span class="s1">self.explanation = </span><span class="s5">&quot;%s %s %s&quot; </span><span class="s1">% (</span>
+                <span class="s1">expr.explanation</span><span class="s0">, </span><span class="s1">operation</span><span class="s0">, </span><span class="s1">expr2.explanation)</span>
+            <span class="s1">source = </span><span class="s5">&quot;__exprinfo_left %s __exprinfo_right&quot; </span><span class="s1">% operation</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self.result = frame.eval(source</span><span class="s0">,</span>
+                                         <span class="s1">__exprinfo_left=expr.result</span><span class="s0">,</span>
+                                         <span class="s1">__exprinfo_right=expr2.result)</span>
+            <span class="s0">except </span><span class="s1">passthroughex:</span>
+                <span class="s0">raise</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">Failure(self)</span>
+            <span class="s1">expr = expr2</span>
+
+<span class="s0">class </span><span class="s1">And(Interpretable):</span>
+    <span class="s1">__view__ = ast.And</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">explanations = []</span>
+        <span class="s0">for </span><span class="s1">expr </span><span class="s0">in </span><span class="s1">self.nodes:</span>
+            <span class="s1">expr = Interpretable(expr)</span>
+            <span class="s1">expr.eval(frame)</span>
+            <span class="s1">explanations.append(expr.explanation)</span>
+            <span class="s1">self.result = expr.result</span>
+            <span class="s0">if not </span><span class="s1">frame.is_true(expr.result):</span>
+                <span class="s0">break</span>
+        <span class="s1">self.explanation = </span><span class="s5">'(' </span><span class="s1">+ </span><span class="s5">' and '</span><span class="s1">.join(explanations) + </span><span class="s5">')'</span>
+
+<span class="s0">class </span><span class="s1">Or(Interpretable):</span>
+    <span class="s1">__view__ = ast.Or</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">explanations = []</span>
+        <span class="s0">for </span><span class="s1">expr </span><span class="s0">in </span><span class="s1">self.nodes:</span>
+            <span class="s1">expr = Interpretable(expr)</span>
+            <span class="s1">expr.eval(frame)</span>
+            <span class="s1">explanations.append(expr.explanation)</span>
+            <span class="s1">self.result = expr.result</span>
+            <span class="s0">if </span><span class="s1">frame.is_true(expr.result):</span>
+                <span class="s0">break</span>
+        <span class="s1">self.explanation = </span><span class="s5">'(' </span><span class="s1">+ </span><span class="s5">' or '</span><span class="s1">.join(explanations) + </span><span class="s5">')'</span>
+
+
+<span class="s3"># == Unary operations ==</span>
+<span class="s1">keepalive = []</span>
+<span class="s0">for </span><span class="s1">astclass</span><span class="s0">, </span><span class="s1">astpattern </span><span class="s0">in </span><span class="s1">{</span>
+    <span class="s1">ast.Not    : </span><span class="s5">'not __exprinfo_expr'</span><span class="s0">,</span>
+    <span class="s1">ast.Invert : </span><span class="s5">'(~__exprinfo_expr)'</span><span class="s0">,</span>
+    <span class="s1">}.items():</span>
+
+    <span class="s0">class </span><span class="s1">UnaryArith(Interpretable):</span>
+        <span class="s1">__view__ = astclass</span>
+
+        <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame</span><span class="s0">, </span><span class="s1">astpattern=astpattern):</span>
+            <span class="s1">expr = Interpretable(self.expr)</span>
+            <span class="s1">expr.eval(frame)</span>
+            <span class="s1">self.explanation = astpattern.replace(</span><span class="s5">'__exprinfo_expr'</span><span class="s0">,</span>
+                                                  <span class="s1">expr.explanation)</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self.result = frame.eval(astpattern</span><span class="s0">,</span>
+                                         <span class="s1">__exprinfo_expr=expr.result)</span>
+            <span class="s0">except </span><span class="s1">passthroughex:</span>
+                <span class="s0">raise</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">Failure(self)</span>
+
+    <span class="s1">keepalive.append(UnaryArith)</span>
+
+<span class="s3"># == Binary operations ==</span>
+<span class="s0">for </span><span class="s1">astclass</span><span class="s0">, </span><span class="s1">astpattern </span><span class="s0">in </span><span class="s1">{</span>
+    <span class="s1">ast.Add    : </span><span class="s5">'(__exprinfo_left + __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">ast.Sub    : </span><span class="s5">'(__exprinfo_left - __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">ast.Mul    : </span><span class="s5">'(__exprinfo_left * __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">ast.Div    : </span><span class="s5">'(__exprinfo_left / __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">ast.Mod    : </span><span class="s5">'(__exprinfo_left % __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">ast.Power  : </span><span class="s5">'(__exprinfo_left ** __exprinfo_right)'</span><span class="s0">,</span>
+    <span class="s1">}.items():</span>
+
+    <span class="s0">class </span><span class="s1">BinaryArith(Interpretable):</span>
+        <span class="s1">__view__ = astclass</span>
+
+        <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame</span><span class="s0">, </span><span class="s1">astpattern=astpattern):</span>
+            <span class="s1">left = Interpretable(self.left)</span>
+            <span class="s1">left.eval(frame)</span>
+            <span class="s1">right = Interpretable(self.right)</span>
+            <span class="s1">right.eval(frame)</span>
+            <span class="s1">self.explanation = (astpattern</span>
+                                <span class="s1">.replace(</span><span class="s5">'__exprinfo_left'</span><span class="s0">,  </span><span class="s1">left .explanation)</span>
+                                <span class="s1">.replace(</span><span class="s5">'__exprinfo_right'</span><span class="s0">, </span><span class="s1">right.explanation))</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">self.result = frame.eval(astpattern</span><span class="s0">,</span>
+                                         <span class="s1">__exprinfo_left=left.result</span><span class="s0">,</span>
+                                         <span class="s1">__exprinfo_right=right.result)</span>
+            <span class="s0">except </span><span class="s1">passthroughex:</span>
+                <span class="s0">raise</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">Failure(self)</span>
+
+    <span class="s1">keepalive.append(BinaryArith)</span>
+
+
+<span class="s0">class </span><span class="s1">CallFunc(Interpretable):</span>
+    <span class="s1">__view__ = ast.CallFunc</span>
+
+    <span class="s0">def </span><span class="s1">is_bool(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">source = </span><span class="s5">'isinstance(__exprinfo_value, bool)'</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">frame.is_true(frame.eval(source</span><span class="s0">,</span>
+                                            <span class="s1">__exprinfo_value=self.result))</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">node = Interpretable(self.node)</span>
+        <span class="s1">node.eval(frame)</span>
+        <span class="s1">explanations = []</span>
+        <span class="s1">vars = {</span><span class="s5">'__exprinfo_fn'</span><span class="s1">: node.result}</span>
+        <span class="s1">source = </span><span class="s5">'__exprinfo_fn('</span>
+        <span class="s0">for </span><span class="s1">a </span><span class="s0">in </span><span class="s1">self.args:</span>
+            <span class="s0">if </span><span class="s1">isinstance(a</span><span class="s0">, </span><span class="s1">ast.Keyword):</span>
+                <span class="s1">keyword = a.name</span>
+                <span class="s1">a = a.expr</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">keyword = </span><span class="s0">None</span>
+            <span class="s1">a = Interpretable(a)</span>
+            <span class="s1">a.eval(frame)</span>
+            <span class="s1">argname = </span><span class="s5">'__exprinfo_%d' </span><span class="s1">% len(vars)</span>
+            <span class="s1">vars[argname] = a.result</span>
+            <span class="s0">if </span><span class="s1">keyword </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s1">source += argname + </span><span class="s5">','</span>
+                <span class="s1">explanations.append(a.explanation)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">source += </span><span class="s5">'%s=%s,' </span><span class="s1">% (keyword</span><span class="s0">, </span><span class="s1">argname)</span>
+                <span class="s1">explanations.append(</span><span class="s5">'%s=%s' </span><span class="s1">% (keyword</span><span class="s0">, </span><span class="s1">a.explanation))</span>
+        <span class="s0">if </span><span class="s1">self.star_args:</span>
+            <span class="s1">star_args = Interpretable(self.star_args)</span>
+            <span class="s1">star_args.eval(frame)</span>
+            <span class="s1">argname = </span><span class="s5">'__exprinfo_star'</span>
+            <span class="s1">vars[argname] = star_args.result</span>
+            <span class="s1">source += </span><span class="s5">'*' </span><span class="s1">+ argname + </span><span class="s5">','</span>
+            <span class="s1">explanations.append(</span><span class="s5">'*' </span><span class="s1">+ star_args.explanation)</span>
+        <span class="s0">if </span><span class="s1">self.dstar_args:</span>
+            <span class="s1">dstar_args = Interpretable(self.dstar_args)</span>
+            <span class="s1">dstar_args.eval(frame)</span>
+            <span class="s1">argname = </span><span class="s5">'__exprinfo_kwds'</span>
+            <span class="s1">vars[argname] = dstar_args.result</span>
+            <span class="s1">source += </span><span class="s5">'**' </span><span class="s1">+ argname + </span><span class="s5">','</span>
+            <span class="s1">explanations.append(</span><span class="s5">'**' </span><span class="s1">+ dstar_args.explanation)</span>
+        <span class="s1">self.explanation = </span><span class="s5">&quot;%s(%s)&quot; </span><span class="s1">% (</span>
+            <span class="s1">node.explanation</span><span class="s0">, </span><span class="s5">', '</span><span class="s1">.join(explanations))</span>
+        <span class="s0">if </span><span class="s1">source.endswith(</span><span class="s5">','</span><span class="s1">):</span>
+            <span class="s1">source = source[:-</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s1">source += </span><span class="s5">')'</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self.result = frame.eval(source</span><span class="s0">, </span><span class="s1">**vars)</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">Failure(self)</span>
+        <span class="s0">if not </span><span class="s1">node.is_builtin(frame) </span><span class="s0">or not </span><span class="s1">self.is_bool(frame):</span>
+            <span class="s1">r = frame.repr(self.result)</span>
+            <span class="s1">self.explanation = </span><span class="s5">'%s</span><span class="s0">\n</span><span class="s5">{%s = %s</span><span class="s0">\n</span><span class="s5">}' </span><span class="s1">% (r</span><span class="s0">, </span><span class="s1">r</span><span class="s0">, </span><span class="s1">self.explanation)</span>
+
+<span class="s0">class </span><span class="s1">Getattr(Interpretable):</span>
+    <span class="s1">__view__ = ast.Getattr</span>
+
+    <span class="s0">def </span><span class="s1">eval(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">expr = Interpretable(self.expr)</span>
+        <span class="s1">expr.eval(frame)</span>
+        <span class="s1">source = </span><span class="s5">'__exprinfo_expr.%s' </span><span class="s1">% self.attrname</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self.result = frame.eval(source</span><span class="s0">, </span><span class="s1">__exprinfo_expr=expr.result)</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">Failure(self)</span>
+        <span class="s1">self.explanation = </span><span class="s5">'%s.%s' </span><span class="s1">% (expr.explanation</span><span class="s0">, </span><span class="s1">self.attrname)</span>
+        <span class="s3"># if the attribute comes from the instance, its value is interesting</span>
+        <span class="s1">source = (</span><span class="s5">'hasattr(__exprinfo_expr, &quot;__dict__&quot;) and '</span>
+                  <span class="s5">'%r in __exprinfo_expr.__dict__' </span><span class="s1">% self.attrname)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">from_instance = frame.is_true(</span>
+                <span class="s1">frame.eval(source</span><span class="s0">, </span><span class="s1">__exprinfo_expr=expr.result))</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s1">from_instance = </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">from_instance:</span>
+            <span class="s1">r = frame.repr(self.result)</span>
+            <span class="s1">self.explanation = </span><span class="s5">'%s</span><span class="s0">\n</span><span class="s5">{%s = %s</span><span class="s0">\n</span><span class="s5">}' </span><span class="s1">% (r</span><span class="s0">, </span><span class="s1">r</span><span class="s0">, </span><span class="s1">self.explanation)</span>
+
+<span class="s3"># == Re-interpretation of full statements ==</span>
+
+<span class="s0">class </span><span class="s1">Assert(Interpretable):</span>
+    <span class="s1">__view__ = ast.Assert</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">test = Interpretable(self.test)</span>
+        <span class="s1">test.eval(frame)</span>
+        <span class="s3"># simplify 'assert False where False = ...'</span>
+        <span class="s0">if </span><span class="s1">(test.explanation.startswith(</span><span class="s5">'False</span><span class="s0">\n</span><span class="s5">{False = '</span><span class="s1">) </span><span class="s0">and</span>
+            <span class="s1">test.explanation.endswith(</span><span class="s5">'</span><span class="s0">\n</span><span class="s5">}'</span><span class="s1">)):</span>
+            <span class="s1">test.explanation = test.explanation[</span><span class="s4">15</span><span class="s1">:-</span><span class="s4">2</span><span class="s1">]</span>
+        <span class="s3"># print the result as  'assert &lt;explanation&gt;'</span>
+        <span class="s1">self.result = test.result</span>
+        <span class="s1">self.explanation = </span><span class="s5">'assert ' </span><span class="s1">+ test.explanation</span>
+        <span class="s0">if not </span><span class="s1">frame.is_true(test.result):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">BuiltinAssertionError</span>
+            <span class="s0">except </span><span class="s1">passthroughex:</span>
+                <span class="s0">raise</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">Failure(self)</span>
+
+<span class="s0">class </span><span class="s1">Assign(Interpretable):</span>
+    <span class="s1">__view__ = ast.Assign</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">expr = Interpretable(self.expr)</span>
+        <span class="s1">expr.eval(frame)</span>
+        <span class="s1">self.result = expr.result</span>
+        <span class="s1">self.explanation = </span><span class="s5">'... = ' </span><span class="s1">+ expr.explanation</span>
+        <span class="s3"># fall-back-run the rest of the assignment</span>
+        <span class="s1">ass = ast.Assign(self.nodes</span><span class="s0">, </span><span class="s1">ast.Name(</span><span class="s5">'__exprinfo_expr'</span><span class="s1">))</span>
+        <span class="s1">mod = ast.Module(</span><span class="s0">None, </span><span class="s1">ast.Stmt([ass]))</span>
+        <span class="s1">mod.filename = </span><span class="s5">'&lt;run&gt;'</span>
+        <span class="s1">co = pycodegen.ModuleCodeGenerator(mod).getCode()</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">frame.exec_(co</span><span class="s0">, </span><span class="s1">__exprinfo_expr=expr.result)</span>
+        <span class="s0">except </span><span class="s1">passthroughex:</span>
+            <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">Failure(self)</span>
+
+<span class="s0">class </span><span class="s1">Discard(Interpretable):</span>
+    <span class="s1">__view__ = ast.Discard</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s1">expr = Interpretable(self.expr)</span>
+        <span class="s1">expr.eval(frame)</span>
+        <span class="s1">self.result = expr.result</span>
+        <span class="s1">self.explanation = expr.explanation</span>
+
+<span class="s0">class </span><span class="s1">Stmt(Interpretable):</span>
+    <span class="s1">__view__ = ast.Stmt</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">frame):</span>
+        <span class="s0">for </span><span class="s1">stmt </span><span class="s0">in </span><span class="s1">self.nodes:</span>
+            <span class="s1">stmt = Interpretable(stmt)</span>
+            <span class="s1">stmt.run(frame)</span>
+
+
+<span class="s0">def </span><span class="s1">report_failure(e):</span>
+    <span class="s1">explanation = e.node.nice_explanation()</span>
+    <span class="s0">if </span><span class="s1">explanation:</span>
+        <span class="s1">explanation = </span><span class="s5">&quot;, in: &quot; </span><span class="s1">+ explanation</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">explanation = </span><span class="s5">&quot;&quot;</span>
+    <span class="s1">sys.stdout.write(</span><span class="s5">&quot;%s: %s%s</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s1">% (e.exc.__name__</span><span class="s0">, </span><span class="s1">e.value</span><span class="s0">, </span><span class="s1">explanation))</span>
+
+<span class="s0">def </span><span class="s1">check(s</span><span class="s0">, </span><span class="s1">frame=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s0">if </span><span class="s1">frame </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">frame = sys._getframe(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">frame = py.code.Frame(frame)</span>
+    <span class="s1">expr = parse(s</span><span class="s0">, </span><span class="s5">'eval'</span><span class="s1">)</span>
+    <span class="s0">assert </span><span class="s1">isinstance(expr</span><span class="s0">, </span><span class="s1">ast.Expression)</span>
+    <span class="s1">node = Interpretable(expr.node)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">node.eval(frame)</span>
+    <span class="s0">except </span><span class="s1">passthroughex:</span>
+        <span class="s0">raise</span>
+    <span class="s0">except </span><span class="s1">Failure:</span>
+        <span class="s1">e = sys.exc_info()[</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s1">report_failure(e)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">frame.is_true(node.result):</span>
+            <span class="s1">sys.stderr.write(</span><span class="s5">&quot;assertion failed: %s</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s1">% node.nice_explanation())</span>
+
+
+<span class="s3">###########################################################</span>
+<span class="s3"># API / Entry points</span>
+<span class="s3"># #########################################################</span>
+
+<span class="s0">def </span><span class="s1">interpret(source</span><span class="s0">, </span><span class="s1">frame</span><span class="s0">, </span><span class="s1">should_fail=</span><span class="s0">False</span><span class="s1">):</span>
+    <span class="s1">module = Interpretable(parse(source</span><span class="s0">, </span><span class="s5">'exec'</span><span class="s1">).node)</span>
+    <span class="s3">#print &quot;got module&quot;, module</span>
+    <span class="s0">if </span><span class="s1">isinstance(frame</span><span class="s0">, </span><span class="s1">types.FrameType):</span>
+        <span class="s1">frame = py.code.Frame(frame)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">module.run(frame)</span>
+    <span class="s0">except </span><span class="s1">Failure:</span>
+        <span class="s1">e = sys.exc_info()[</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s0">return </span><span class="s1">getfailure(e)</span>
+    <span class="s0">except </span><span class="s1">passthroughex:</span>
+        <span class="s0">raise</span>
+    <span class="s0">except</span><span class="s1">:</span>
+        <span class="s0">import </span><span class="s1">traceback</span>
+        <span class="s1">traceback.print_exc()</span>
+    <span class="s0">if </span><span class="s1">should_fail:</span>
+        <span class="s0">return </span><span class="s1">(</span><span class="s5">&quot;(assertion failed, but when it was re-run for &quot;</span>
+                <span class="s5">&quot;printing intermediate values, it did not fail.  Suggestions: &quot;</span>
+                <span class="s5">&quot;compute assert expression before the assert or use --nomagic)&quot;</span><span class="s1">)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">return None</span>
+
+<span class="s0">def </span><span class="s1">getmsg(excinfo):</span>
+    <span class="s0">if </span><span class="s1">isinstance(excinfo</span><span class="s0">, </span><span class="s1">tuple):</span>
+        <span class="s1">excinfo = py.code.ExceptionInfo(excinfo)</span>
+    <span class="s3">#frame, line = gettbline(tb)</span>
+    <span class="s3">#frame = py.code.Frame(frame)</span>
+    <span class="s3">#return interpret(line, frame)</span>
+
+    <span class="s1">tb = excinfo.traceback[-</span><span class="s4">1</span><span class="s1">]</span>
+    <span class="s1">source = str(tb.statement).strip()</span>
+    <span class="s1">x = interpret(source</span><span class="s0">, </span><span class="s1">tb.frame</span><span class="s0">, </span><span class="s1">should_fail=</span><span class="s0">True</span><span class="s1">)</span>
+    <span class="s0">if not </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">str):</span>
+        <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s5">&quot;interpret returned non-string %r&quot; </span><span class="s1">% (x</span><span class="s0">,</span><span class="s1">))</span>
+    <span class="s0">return </span><span class="s1">x</span>
+
+<span class="s0">def </span><span class="s1">getfailure(e):</span>
+    <span class="s1">explanation = e.node.nice_explanation()</span>
+    <span class="s0">if </span><span class="s1">str(e.value):</span>
+        <span class="s1">lines = explanation.split(</span><span class="s5">'</span><span class="s0">\n</span><span class="s5">'</span><span class="s1">)</span>
+        <span class="s1">lines[</span><span class="s4">0</span><span class="s1">] += </span><span class="s5">&quot;  &lt;&lt; %s&quot; </span><span class="s1">% (e.value</span><span class="s0">,</span><span class="s1">)</span>
+        <span class="s1">explanation = </span><span class="s5">'</span><span class="s0">\n</span><span class="s5">'</span><span class="s1">.join(lines)</span>
+    <span class="s1">text = </span><span class="s5">&quot;%s: %s&quot; </span><span class="s1">% (e.exc.__name__</span><span class="s0">, </span><span class="s1">explanation)</span>
+    <span class="s0">if </span><span class="s1">text.startswith(</span><span class="s5">'AssertionError: assert '</span><span class="s1">):</span>
+        <span class="s1">text = text[</span><span class="s4">16</span><span class="s1">:]</span>
+    <span class="s0">return </span><span class="s1">text</span>
+
+<span class="s0">def </span><span class="s1">run(s</span><span class="s0">, </span><span class="s1">frame=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s0">if </span><span class="s1">frame </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">frame = sys._getframe(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">frame = py.code.Frame(frame)</span>
+    <span class="s1">module = Interpretable(parse(s</span><span class="s0">, </span><span class="s5">'exec'</span><span class="s1">).node)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">module.run(frame)</span>
+    <span class="s0">except </span><span class="s1">Failure:</span>
+        <span class="s1">e = sys.exc_info()[</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s1">report_failure(e)</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s5">'__main__'</span><span class="s1">:</span>
+    <span class="s3"># example:</span>
+    <span class="s0">def </span><span class="s1">f():</span>
+        <span class="s0">return </span><span class="s4">5</span>
+    <span class="s0">def </span><span class="s1">g():</span>
+        <span class="s0">return </span><span class="s4">3</span>
+    <span class="s0">def </span><span class="s1">h(x):</span>
+        <span class="s0">return </span><span class="s5">'never'</span>
+    <span class="s1">check(</span><span class="s5">&quot;f() * g() == 5&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;not f()&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;not (f() and g() or 0)&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;f() == g()&quot;</span><span class="s1">)</span>
+    <span class="s1">i = </span><span class="s4">4</span>
+    <span class="s1">check(</span><span class="s5">&quot;i == f()&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;len(f()) == 0&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;isinstance(2+3+4, float)&quot;</span><span class="s1">)</span>
+
+    <span class="s1">run(</span><span class="s5">&quot;x = i&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;x == 5&quot;</span><span class="s1">)</span>
+
+    <span class="s1">run(</span><span class="s5">&quot;assert not f(), 'oops'&quot;</span><span class="s1">)</span>
+    <span class="s1">run(</span><span class="s5">&quot;a, b, c = 1, 2&quot;</span><span class="s1">)</span>
+    <span class="s1">run(</span><span class="s5">&quot;a, b, c = f()&quot;</span><span class="s1">)</span>
+
+    <span class="s1">check(</span><span class="s5">&quot;max([f(),g()]) == 4&quot;</span><span class="s1">)</span>
+    <span class="s1">check(</span><span class="s5">&quot;'hello'[g()] == 'h'&quot;</span><span class="s1">)</span>
+    <span class="s1">run(</span><span class="s5">&quot;'guk%d' % h(f())&quot;</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

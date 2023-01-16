@@ -1,0 +1,1772 @@
+<html>
+<head>
+<title>pytester.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pytester.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;(Disabled by default) support for testing pytest and pytest plugins. 
+ 
+PYTEST_DONT_REWRITE 
+&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">collections.abc</span>
+<span class="s2">import </span><span class="s1">contextlib</span>
+<span class="s2">import </span><span class="s1">gc</span>
+<span class="s2">import </span><span class="s1">importlib</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">platform</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">shutil</span>
+<span class="s2">import </span><span class="s1">subprocess</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">traceback</span>
+<span class="s2">from </span><span class="s1">fnmatch </span><span class="s2">import </span><span class="s1">fnmatch</span>
+<span class="s2">from </span><span class="s1">io </span><span class="s2">import </span><span class="s1">StringIO</span>
+<span class="s2">from </span><span class="s1">pathlib </span><span class="s2">import </span><span class="s1">Path</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Any</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Callable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Dict</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Generator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">IO</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Iterable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">overload</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Sequence</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TextIO</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Tuple</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Type</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TYPE_CHECKING</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+<span class="s2">from </span><span class="s1">weakref </span><span class="s2">import </span><span class="s1">WeakKeyDictionary</span>
+
+<span class="s2">from </span><span class="s1">iniconfig </span><span class="s2">import </span><span class="s1">IniConfig</span>
+<span class="s2">from </span><span class="s1">iniconfig </span><span class="s2">import </span><span class="s1">SectionWrapper</span>
+
+<span class="s2">from </span><span class="s1">_pytest </span><span class="s2">import </span><span class="s1">timing</span>
+<span class="s2">from </span><span class="s1">_pytest._code </span><span class="s2">import </span><span class="s1">Source</span>
+<span class="s2">from </span><span class="s1">_pytest.capture </span><span class="s2">import </span><span class="s1">_get_multicapture</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">final</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">NOTSET</span>
+<span class="s2">from </span><span class="s1">_pytest.compat </span><span class="s2">import </span><span class="s1">NotSetType</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">_PluggyPlugin</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">Config</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">ExitCode</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">hookimpl</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">main</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">PytestPluginManager</span>
+<span class="s2">from </span><span class="s1">_pytest.config.argparsing </span><span class="s2">import </span><span class="s1">Parser</span>
+<span class="s2">from </span><span class="s1">_pytest.deprecated </span><span class="s2">import </span><span class="s1">check_ispytest</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">fixture</span>
+<span class="s2">from </span><span class="s1">_pytest.fixtures </span><span class="s2">import </span><span class="s1">FixtureRequest</span>
+<span class="s2">from </span><span class="s1">_pytest.main </span><span class="s2">import </span><span class="s1">Session</span>
+<span class="s2">from </span><span class="s1">_pytest.monkeypatch </span><span class="s2">import </span><span class="s1">MonkeyPatch</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Collector</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Item</span>
+<span class="s2">from </span><span class="s1">_pytest.outcomes </span><span class="s2">import </span><span class="s1">fail</span>
+<span class="s2">from </span><span class="s1">_pytest.outcomes </span><span class="s2">import </span><span class="s1">importorskip</span>
+<span class="s2">from </span><span class="s1">_pytest.outcomes </span><span class="s2">import </span><span class="s1">skip</span>
+<span class="s2">from </span><span class="s1">_pytest.pathlib </span><span class="s2">import </span><span class="s1">bestrelpath</span>
+<span class="s2">from </span><span class="s1">_pytest.pathlib </span><span class="s2">import </span><span class="s1">copytree</span>
+<span class="s2">from </span><span class="s1">_pytest.pathlib </span><span class="s2">import </span><span class="s1">make_numbered_dir</span>
+<span class="s2">from </span><span class="s1">_pytest.reports </span><span class="s2">import </span><span class="s1">CollectReport</span>
+<span class="s2">from </span><span class="s1">_pytest.reports </span><span class="s2">import </span><span class="s1">TestReport</span>
+<span class="s2">from </span><span class="s1">_pytest.tmpdir </span><span class="s2">import </span><span class="s1">TempPathFactory</span>
+<span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestWarning</span>
+
+
+<span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s2">from </span><span class="s1">typing_extensions </span><span class="s2">import </span><span class="s1">Final</span>
+    <span class="s2">from </span><span class="s1">typing_extensions </span><span class="s2">import </span><span class="s1">Literal</span>
+
+    <span class="s2">import </span><span class="s1">pexpect</span>
+
+
+<span class="s1">pytest_plugins = [</span><span class="s3">&quot;pytester_assertions&quot;</span><span class="s1">]</span>
+
+
+<span class="s1">IGNORE_PAM = [  </span><span class="s4"># filenames added when obtaining details about the current user</span>
+    <span class="s3">&quot;/var/lib/sss/mc/passwd&quot;</span>
+<span class="s1">]</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s1">parser.addoption(</span>
+        <span class="s3">&quot;--lsof&quot;</span><span class="s2">,</span>
+        <span class="s1">action=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s3">&quot;lsof&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s2">False,</span>
+        <span class="s1">help=</span><span class="s3">&quot;run FD checks if lsof is available&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+    <span class="s1">parser.addoption(</span>
+        <span class="s3">&quot;--runpytest&quot;</span><span class="s2">,</span>
+        <span class="s1">default=</span><span class="s3">&quot;inprocess&quot;</span><span class="s2">,</span>
+        <span class="s1">dest=</span><span class="s3">&quot;runpytest&quot;</span><span class="s2">,</span>
+        <span class="s1">choices=(</span><span class="s3">&quot;inprocess&quot;</span><span class="s2">, </span><span class="s3">&quot;subprocess&quot;</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">help=(</span>
+            <span class="s3">&quot;run pytest sub runs in tests using an 'inprocess' &quot;</span>
+            <span class="s3">&quot;or 'subprocess' (python -m main) method&quot;</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+    <span class="s1">parser.addini(</span>
+        <span class="s3">&quot;pytester_example_dir&quot;</span><span class="s2">, </span><span class="s1">help=</span><span class="s3">&quot;directory to take the pytester example files from&quot;</span>
+    <span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">if </span><span class="s1">config.getvalue(</span><span class="s3">&quot;lsof&quot;</span><span class="s1">):</span>
+        <span class="s1">checker = LsofFdLeakChecker()</span>
+        <span class="s2">if </span><span class="s1">checker.matching_platform():</span>
+            <span class="s1">config.pluginmanager.register(checker)</span>
+
+    <span class="s1">config.addinivalue_line(</span>
+        <span class="s3">&quot;markers&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;pytester_example_path(*path_segments): join the given path &quot;</span>
+        <span class="s3">&quot;segments to `pytester_example_dir` for this test.&quot;</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s2">class </span><span class="s1">LsofFdLeakChecker:</span>
+    <span class="s2">def </span><span class="s1">get_open_files(self) -&gt; List[Tuple[str</span><span class="s2">, </span><span class="s1">str]]:</span>
+        <span class="s1">out = subprocess.run(</span>
+            <span class="s1">(</span><span class="s3">&quot;lsof&quot;</span><span class="s2">, </span><span class="s3">&quot;-Ffn0&quot;</span><span class="s2">, </span><span class="s3">&quot;-p&quot;</span><span class="s2">, </span><span class="s1">str(os.getpid()))</span><span class="s2">,</span>
+            <span class="s1">stdout=subprocess.PIPE</span><span class="s2">,</span>
+            <span class="s1">stderr=subprocess.DEVNULL</span><span class="s2">,</span>
+            <span class="s1">check=</span><span class="s2">True,</span>
+            <span class="s1">text=</span><span class="s2">True,</span>
+        <span class="s1">).stdout</span>
+
+        <span class="s2">def </span><span class="s1">isopen(line: str) -&gt; bool:</span>
+            <span class="s2">return </span><span class="s1">line.startswith(</span><span class="s3">&quot;f&quot;</span><span class="s1">) </span><span class="s2">and </span><span class="s1">(</span>
+                <span class="s3">&quot;deleted&quot; </span><span class="s2">not in </span><span class="s1">line</span>
+                <span class="s2">and </span><span class="s3">&quot;mem&quot; </span><span class="s2">not in </span><span class="s1">line</span>
+                <span class="s2">and </span><span class="s3">&quot;txt&quot; </span><span class="s2">not in </span><span class="s1">line</span>
+                <span class="s2">and </span><span class="s3">&quot;cwd&quot; </span><span class="s2">not in </span><span class="s1">line</span>
+            <span class="s1">)</span>
+
+        <span class="s1">open_files = []</span>
+
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">out.split(</span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">):</span>
+            <span class="s2">if </span><span class="s1">isopen(line):</span>
+                <span class="s1">fields = line.split(</span><span class="s3">&quot;</span><span class="s2">\0</span><span class="s3">&quot;</span><span class="s1">)</span>
+                <span class="s1">fd = fields[</span><span class="s5">0</span><span class="s1">][</span><span class="s5">1</span><span class="s1">:]</span>
+                <span class="s1">filename = fields[</span><span class="s5">1</span><span class="s1">][</span><span class="s5">1</span><span class="s1">:]</span>
+                <span class="s2">if </span><span class="s1">filename </span><span class="s2">in </span><span class="s1">IGNORE_PAM:</span>
+                    <span class="s2">continue</span>
+                <span class="s2">if </span><span class="s1">filename.startswith(</span><span class="s3">&quot;/&quot;</span><span class="s1">):</span>
+                    <span class="s1">open_files.append((fd</span><span class="s2">, </span><span class="s1">filename))</span>
+
+        <span class="s2">return </span><span class="s1">open_files</span>
+
+    <span class="s2">def </span><span class="s1">matching_platform(self) -&gt; bool:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">subprocess.run((</span><span class="s3">&quot;lsof&quot;</span><span class="s2">, </span><span class="s3">&quot;-v&quot;</span><span class="s1">)</span><span class="s2">, </span><span class="s1">check=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">(OSError</span><span class="s2">, </span><span class="s1">subprocess.CalledProcessError):</span>
+            <span class="s2">return False</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">return True</span>
+
+    <span class="s1">@hookimpl(hookwrapper=</span><span class="s2">True, </span><span class="s1">tryfirst=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">def </span><span class="s1">pytest_runtest_protocol(self</span><span class="s2">, </span><span class="s1">item: Item) -&gt; Generator[</span><span class="s2">None, None, None</span><span class="s1">]:</span>
+        <span class="s1">lines1 = self.get_open_files()</span>
+        <span class="s2">yield</span>
+        <span class="s2">if </span><span class="s1">hasattr(sys</span><span class="s2">, </span><span class="s3">&quot;pypy_version_info&quot;</span><span class="s1">):</span>
+            <span class="s1">gc.collect()</span>
+        <span class="s1">lines2 = self.get_open_files()</span>
+
+        <span class="s1">new_fds = {t[</span><span class="s5">0</span><span class="s1">] </span><span class="s2">for </span><span class="s1">t </span><span class="s2">in </span><span class="s1">lines2} - {t[</span><span class="s5">0</span><span class="s1">] </span><span class="s2">for </span><span class="s1">t </span><span class="s2">in </span><span class="s1">lines1}</span>
+        <span class="s1">leaked_files = [t </span><span class="s2">for </span><span class="s1">t </span><span class="s2">in </span><span class="s1">lines2 </span><span class="s2">if </span><span class="s1">t[</span><span class="s5">0</span><span class="s1">] </span><span class="s2">in </span><span class="s1">new_fds]</span>
+        <span class="s2">if </span><span class="s1">leaked_files:</span>
+            <span class="s1">error = [</span>
+                <span class="s3">&quot;***** %s FD leakage detected&quot; </span><span class="s1">% len(leaked_files)</span><span class="s2">,</span>
+                <span class="s1">*(str(f) </span><span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">leaked_files)</span><span class="s2">,</span>
+                <span class="s3">&quot;*** Before:&quot;</span><span class="s2">,</span>
+                <span class="s1">*(str(f) </span><span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">lines1)</span><span class="s2">,</span>
+                <span class="s3">&quot;*** After:&quot;</span><span class="s2">,</span>
+                <span class="s1">*(str(f) </span><span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">lines2)</span><span class="s2">,</span>
+                <span class="s3">&quot;***** %s FD leakage detected&quot; </span><span class="s1">% len(leaked_files)</span><span class="s2">,</span>
+                <span class="s3">&quot;*** function %s:%s: %s &quot; </span><span class="s1">% item.location</span><span class="s2">,</span>
+                <span class="s3">&quot;See issue #2366&quot;</span><span class="s2">,</span>
+            <span class="s1">]</span>
+            <span class="s1">item.warn(PytestWarning(</span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(error)))</span>
+
+
+<span class="s4"># used at least by pytest-xdist plugin</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">_pytest(request: FixtureRequest) -&gt; </span><span class="s3">&quot;PytestArg&quot;</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Return a helper which offers a gethookrecorder(hook) method which 
+    returns a HookRecorder instance which helps to make assertions about called 
+    hooks.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">PytestArg(request)</span>
+
+
+<span class="s2">class </span><span class="s1">PytestArg:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">request: FixtureRequest) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self._request = request</span>
+
+    <span class="s2">def </span><span class="s1">gethookrecorder(self</span><span class="s2">, </span><span class="s1">hook) -&gt; </span><span class="s3">&quot;HookRecorder&quot;</span><span class="s1">:</span>
+        <span class="s1">hookrecorder = HookRecorder(hook._pm)</span>
+        <span class="s1">self._request.addfinalizer(hookrecorder.finish_recording)</span>
+        <span class="s2">return </span><span class="s1">hookrecorder</span>
+
+
+<span class="s2">def </span><span class="s1">get_public_names(values: Iterable[str]) -&gt; List[str]:</span>
+    <span class="s0">&quot;&quot;&quot;Only return names from iterator values without a leading underscore.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">[x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">values </span><span class="s2">if </span><span class="s1">x[</span><span class="s5">0</span><span class="s1">] != </span><span class="s3">&quot;_&quot;</span><span class="s1">]</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">RecordedHookCall:</span>
+    <span class="s0">&quot;&quot;&quot;A recorded call to a hook. 
+ 
+    The arguments to the hook call are set as attributes. 
+    For example: 
+ 
+    .. code-block:: python 
+ 
+        calls = hook_recorder.getcalls(&quot;pytest_runtest_setup&quot;) 
+        # Suppose pytest_runtest_setup was called once with `item=an_item`. 
+        assert calls[0].item is an_item 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">kwargs) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.__dict__.update(kwargs)</span>
+        <span class="s1">self._name = name</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s1">d = self.__dict__.copy()</span>
+        <span class="s2">del </span><span class="s1">d[</span><span class="s3">&quot;_name&quot;</span><span class="s1">]</span>
+        <span class="s2">return </span><span class="s3">f&quot;&lt;RecordedHookCall </span><span class="s2">{</span><span class="s1">self._name</span><span class="s2">!r}</span><span class="s3">(**</span><span class="s2">{</span><span class="s1">d</span><span class="s2">!r}</span><span class="s3">)&gt;&quot;</span>
+
+    <span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+        <span class="s4"># The class has undetermined attributes, this tells mypy about it.</span>
+        <span class="s2">def </span><span class="s1">__getattr__(self</span><span class="s2">, </span><span class="s1">key: str):</span>
+            <span class="s1">...</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">HookRecorder:</span>
+    <span class="s0">&quot;&quot;&quot;Record all hooks called in a plugin manager. 
+ 
+    Hook recorders are created by :class:`Pytester`. 
+ 
+    This wraps all the hook calls in the plugin manager, recording each call 
+    before propagating the normal calls. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">pluginmanager: PytestPluginManager</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">_ispytest: bool = </span><span class="s2">False</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+
+        <span class="s1">self._pluginmanager = pluginmanager</span>
+        <span class="s1">self.calls: List[RecordedHookCall] = []</span>
+        <span class="s1">self.ret: Optional[Union[int</span><span class="s2">, </span><span class="s1">ExitCode]] = </span><span class="s2">None</span>
+
+        <span class="s2">def </span><span class="s1">before(hook_name: str</span><span class="s2">, </span><span class="s1">hook_impls</span><span class="s2">, </span><span class="s1">kwargs) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+            <span class="s1">self.calls.append(RecordedHookCall(hook_name</span><span class="s2">, </span><span class="s1">kwargs))</span>
+
+        <span class="s2">def </span><span class="s1">after(outcome</span><span class="s2">, </span><span class="s1">hook_name: str</span><span class="s2">, </span><span class="s1">hook_impls</span><span class="s2">, </span><span class="s1">kwargs) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+            <span class="s2">pass</span>
+
+        <span class="s1">self._undo_wrapping = pluginmanager.add_hookcall_monitoring(before</span><span class="s2">, </span><span class="s1">after)</span>
+
+    <span class="s2">def </span><span class="s1">finish_recording(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self._undo_wrapping()</span>
+
+    <span class="s2">def </span><span class="s1">getcalls(self</span><span class="s2">, </span><span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]]) -&gt; List[RecordedHookCall]:</span>
+        <span class="s0">&quot;&quot;&quot;Get all recorded calls to hooks with the given names (or name).&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance(names</span><span class="s2">, </span><span class="s1">str):</span>
+            <span class="s1">names = names.split()</span>
+        <span class="s2">return </span><span class="s1">[call </span><span class="s2">for </span><span class="s1">call </span><span class="s2">in </span><span class="s1">self.calls </span><span class="s2">if </span><span class="s1">call._name </span><span class="s2">in </span><span class="s1">names]</span>
+
+    <span class="s2">def </span><span class="s1">assert_contains(self</span><span class="s2">, </span><span class="s1">entries: Sequence[Tuple[str</span><span class="s2">, </span><span class="s1">str]]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">i = </span><span class="s5">0</span>
+        <span class="s1">entries = list(entries)</span>
+        <span class="s1">backlocals = sys._getframe(</span><span class="s5">1</span><span class="s1">).f_locals</span>
+        <span class="s2">while </span><span class="s1">entries:</span>
+            <span class="s1">name</span><span class="s2">, </span><span class="s1">check = entries.pop(</span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s2">for </span><span class="s1">ind</span><span class="s2">, </span><span class="s1">call </span><span class="s2">in </span><span class="s1">enumerate(self.calls[i:]):</span>
+                <span class="s2">if </span><span class="s1">call._name == name:</span>
+                    <span class="s1">print(</span><span class="s3">&quot;NAMEMATCH&quot;</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">call)</span>
+                    <span class="s2">if </span><span class="s1">eval(check</span><span class="s2">, </span><span class="s1">backlocals</span><span class="s2">, </span><span class="s1">call.__dict__):</span>
+                        <span class="s1">print(</span><span class="s3">&quot;CHECKERMATCH&quot;</span><span class="s2">, </span><span class="s1">repr(check)</span><span class="s2">, </span><span class="s3">&quot;-&gt;&quot;</span><span class="s2">, </span><span class="s1">call)</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s1">print(</span><span class="s3">&quot;NOCHECKERMATCH&quot;</span><span class="s2">, </span><span class="s1">repr(check)</span><span class="s2">, </span><span class="s3">&quot;-&quot;</span><span class="s2">, </span><span class="s1">call)</span>
+                        <span class="s2">continue</span>
+                    <span class="s1">i += ind + </span><span class="s5">1</span>
+                    <span class="s2">break</span>
+                <span class="s1">print(</span><span class="s3">&quot;NONAMEMATCH&quot;</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s3">&quot;with&quot;</span><span class="s2">, </span><span class="s1">call)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">fail(</span><span class="s3">f&quot;could not find </span><span class="s2">{</span><span class="s1">name</span><span class="s2">!r} </span><span class="s3">check </span><span class="s2">{</span><span class="s1">check</span><span class="s2">!r}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">popcall(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; RecordedHookCall:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">call </span><span class="s2">in </span><span class="s1">enumerate(self.calls):</span>
+            <span class="s2">if </span><span class="s1">call._name == name:</span>
+                <span class="s2">del </span><span class="s1">self.calls[i]</span>
+                <span class="s2">return </span><span class="s1">call</span>
+        <span class="s1">lines = [</span><span class="s3">f&quot;could not find call </span><span class="s2">{</span><span class="s1">name</span><span class="s2">!r}</span><span class="s3">, in:&quot;</span><span class="s1">]</span>
+        <span class="s1">lines.extend([</span><span class="s3">&quot;  %s&quot; </span><span class="s1">% x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.calls])</span>
+        <span class="s1">fail(</span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(lines))</span>
+
+    <span class="s2">def </span><span class="s1">getcall(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; RecordedHookCall:</span>
+        <span class="s1">values = self.getcalls(name)</span>
+        <span class="s2">assert </span><span class="s1">len(values) == </span><span class="s5">1</span><span class="s2">, </span><span class="s1">(name</span><span class="s2">, </span><span class="s1">values)</span>
+        <span class="s2">return </span><span class="s1">values[</span><span class="s5">0</span><span class="s1">]</span>
+
+    <span class="s4"># functionality for test reports</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getreports(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: </span><span class="s3">&quot;Literal['pytest_collectreport']&quot;</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[CollectReport]:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getreports(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: </span><span class="s3">&quot;Literal['pytest_runtest_logreport']&quot;</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[TestReport]:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getreports(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]] = (</span>
+            <span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]:</span>
+        <span class="s1">...</span>
+
+    <span class="s2">def </span><span class="s1">getreports(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]] = (</span>
+            <span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]:</span>
+        <span class="s2">return </span><span class="s1">[x.report </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.getcalls(names)]</span>
+
+    <span class="s2">def </span><span class="s1">matchreport(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">inamepart: str = </span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+        <span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]] = (</span>
+            <span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">when: Optional[str] = </span><span class="s2">None,</span>
+    <span class="s1">) -&gt; Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]:</span>
+        <span class="s0">&quot;&quot;&quot;Return a testreport whose dotted import path matches.&quot;&quot;&quot;</span>
+        <span class="s1">values = []</span>
+        <span class="s2">for </span><span class="s1">rep </span><span class="s2">in </span><span class="s1">self.getreports(names=names):</span>
+            <span class="s2">if not </span><span class="s1">when </span><span class="s2">and </span><span class="s1">rep.when != </span><span class="s3">&quot;call&quot; </span><span class="s2">and </span><span class="s1">rep.passed:</span>
+                <span class="s4"># setup/teardown passing reports - let's ignore those</span>
+                <span class="s2">continue</span>
+            <span class="s2">if </span><span class="s1">when </span><span class="s2">and </span><span class="s1">rep.when != when:</span>
+                <span class="s2">continue</span>
+            <span class="s2">if not </span><span class="s1">inamepart </span><span class="s2">or </span><span class="s1">inamepart </span><span class="s2">in </span><span class="s1">rep.nodeid.split(</span><span class="s3">&quot;::&quot;</span><span class="s1">):</span>
+                <span class="s1">values.append(rep)</span>
+        <span class="s2">if not </span><span class="s1">values:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span>
+                <span class="s3">&quot;could not find test report matching %r: &quot;</span>
+                <span class="s3">&quot;no test reports at all!&quot; </span><span class="s1">% (inamepart</span><span class="s2">,</span><span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">len(values) &gt; </span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span>
+                <span class="s3">&quot;found 2 or more testreports matching {!r}: {}&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">inamepart</span><span class="s2">, </span><span class="s1">values</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">values[</span><span class="s5">0</span><span class="s1">]</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getfailures(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: </span><span class="s3">&quot;Literal['pytest_collectreport']&quot;</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[CollectReport]:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getfailures(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: </span><span class="s3">&quot;Literal['pytest_runtest_logreport']&quot;</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[TestReport]:</span>
+        <span class="s1">...</span>
+
+    <span class="s1">@overload</span>
+    <span class="s2">def </span><span class="s1">getfailures(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]] = (</span>
+            <span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]:</span>
+        <span class="s1">...</span>
+
+    <span class="s2">def </span><span class="s1">getfailures(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">names: Union[str</span><span class="s2">, </span><span class="s1">Iterable[str]] = (</span>
+            <span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s2">,</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]:</span>
+        <span class="s2">return </span><span class="s1">[rep </span><span class="s2">for </span><span class="s1">rep </span><span class="s2">in </span><span class="s1">self.getreports(names) </span><span class="s2">if </span><span class="s1">rep.failed]</span>
+
+    <span class="s2">def </span><span class="s1">getfailedcollections(self) -&gt; Sequence[CollectReport]:</span>
+        <span class="s2">return </span><span class="s1">self.getfailures(</span><span class="s3">&quot;pytest_collectreport&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">listoutcomes(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Tuple[</span>
+        <span class="s1">Sequence[TestReport]</span><span class="s2">,</span>
+        <span class="s1">Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]</span><span class="s2">,</span>
+        <span class="s1">Sequence[Union[CollectReport</span><span class="s2">, </span><span class="s1">TestReport]]</span><span class="s2">,</span>
+    <span class="s1">]:</span>
+        <span class="s1">passed = []</span>
+        <span class="s1">skipped = []</span>
+        <span class="s1">failed = []</span>
+        <span class="s2">for </span><span class="s1">rep </span><span class="s2">in </span><span class="s1">self.getreports(</span>
+            <span class="s1">(</span><span class="s3">&quot;pytest_collectreport&quot;</span><span class="s2">, </span><span class="s3">&quot;pytest_runtest_logreport&quot;</span><span class="s1">)</span>
+        <span class="s1">):</span>
+            <span class="s2">if </span><span class="s1">rep.passed:</span>
+                <span class="s2">if </span><span class="s1">rep.when == </span><span class="s3">&quot;call&quot;</span><span class="s1">:</span>
+                    <span class="s2">assert </span><span class="s1">isinstance(rep</span><span class="s2">, </span><span class="s1">TestReport)</span>
+                    <span class="s1">passed.append(rep)</span>
+            <span class="s2">elif </span><span class="s1">rep.skipped:</span>
+                <span class="s1">skipped.append(rep)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">assert </span><span class="s1">rep.failed</span><span class="s2">, </span><span class="s3">f&quot;Unexpected outcome: </span><span class="s2">{</span><span class="s1">rep</span><span class="s2">!r}</span><span class="s3">&quot;</span>
+                <span class="s1">failed.append(rep)</span>
+        <span class="s2">return </span><span class="s1">passed</span><span class="s2">, </span><span class="s1">skipped</span><span class="s2">, </span><span class="s1">failed</span>
+
+    <span class="s2">def </span><span class="s1">countoutcomes(self) -&gt; List[int]:</span>
+        <span class="s2">return </span><span class="s1">[len(x) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.listoutcomes()]</span>
+
+    <span class="s2">def </span><span class="s1">assertoutcome(self</span><span class="s2">, </span><span class="s1">passed: int = </span><span class="s5">0</span><span class="s2">, </span><span class="s1">skipped: int = </span><span class="s5">0</span><span class="s2">, </span><span class="s1">failed: int = </span><span class="s5">0</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">from </span><span class="s1">_pytest.pytester_assertions </span><span class="s2">import </span><span class="s1">assertoutcome</span>
+
+        <span class="s1">outcomes = self.listoutcomes()</span>
+        <span class="s1">assertoutcome(</span>
+            <span class="s1">outcomes</span><span class="s2">,</span>
+            <span class="s1">passed=passed</span><span class="s2">,</span>
+            <span class="s1">skipped=skipped</span><span class="s2">,</span>
+            <span class="s1">failed=failed</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">clear(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.calls[:] = []</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">linecomp() -&gt; </span><span class="s3">&quot;LineComp&quot;</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;A :class: `LineComp` instance for checking that an input linearly 
+    contains a sequence of strings.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">LineComp()</span>
+
+
+<span class="s1">@fixture(name=</span><span class="s3">&quot;LineMatcher&quot;</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">LineMatcher_fixture(request: FixtureRequest) -&gt; Type[</span><span class="s3">&quot;LineMatcher&quot;</span><span class="s1">]:</span>
+    <span class="s0">&quot;&quot;&quot;A reference to the :class: `LineMatcher`. 
+ 
+    This is instantiable with a list of lines (without their trailing newlines). 
+    This is useful for testing large texts, such as the output of commands. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">LineMatcher</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">pytester(</span>
+    <span class="s1">request: FixtureRequest</span><span class="s2">, </span><span class="s1">tmp_path_factory: TempPathFactory</span><span class="s2">, </span><span class="s1">monkeypatch: MonkeyPatch</span>
+<span class="s1">) -&gt; </span><span class="s3">&quot;Pytester&quot;</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Facilities to write tests/configuration files, execute pytest in isolation, and match 
+    against expected output, perfect for black-box testing of pytest plugins. 
+ 
+    It attempts to isolate the test run from external factors as much as possible, modifying 
+    the current working directory to ``path`` and environment variables during initialization. 
+ 
+    It is particularly useful for testing plugins. It is similar to the :fixture:`tmp_path` 
+    fixture but provides methods which aid in testing pytest itself. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">Pytester(request</span><span class="s2">, </span><span class="s1">tmp_path_factory</span><span class="s2">, </span><span class="s1">monkeypatch</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">_sys_snapshot() -&gt; Generator[</span><span class="s2">None, None, None</span><span class="s1">]:</span>
+    <span class="s1">snappaths = SysPathsSnapshot()</span>
+    <span class="s1">snapmods = SysModulesSnapshot()</span>
+    <span class="s2">yield</span>
+    <span class="s1">snapmods.restore()</span>
+    <span class="s1">snappaths.restore()</span>
+
+
+<span class="s1">@fixture</span>
+<span class="s2">def </span><span class="s1">_config_for_test() -&gt; Generator[Config</span><span class="s2">, None, None</span><span class="s1">]:</span>
+    <span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">get_config</span>
+
+    <span class="s1">config = get_config()</span>
+    <span class="s2">yield </span><span class="s1">config</span>
+    <span class="s1">config._ensure_unconfigure()  </span><span class="s4"># cleanup, e.g. capman closing tmpfiles.</span>
+
+
+<span class="s4"># Regex to match the session duration string in the summary: &quot;74.34s&quot;.</span>
+<span class="s1">rex_session_duration = re.compile(</span><span class="s3">r&quot;\d+\.\d\ds&quot;</span><span class="s1">)</span>
+<span class="s4"># Regex to match all the counts and phrases in the summary line: &quot;34 passed, 111 skipped&quot;.</span>
+<span class="s1">rex_outcome = re.compile(</span><span class="s3">r&quot;(\d+) (\w+)&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">RunResult:</span>
+    <span class="s0">&quot;&quot;&quot;The result of running a command from :class:`~pytest.Pytester`.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">ret: Union[int</span><span class="s2">, </span><span class="s1">ExitCode]</span><span class="s2">,</span>
+        <span class="s1">outlines: List[str]</span><span class="s2">,</span>
+        <span class="s1">errlines: List[str]</span><span class="s2">,</span>
+        <span class="s1">duration: float</span><span class="s2">,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.ret: Union[int</span><span class="s2">, </span><span class="s1">ExitCode] = ExitCode(ret)</span>
+            <span class="s3">&quot;&quot;&quot;The return value.&quot;&quot;&quot;</span>
+        <span class="s2">except </span><span class="s1">ValueError:</span>
+            <span class="s1">self.ret = ret</span>
+        <span class="s1">self.outlines = outlines</span>
+        <span class="s3">&quot;&quot;&quot;List of lines captured from stdout.&quot;&quot;&quot;</span>
+        <span class="s1">self.errlines = errlines</span>
+        <span class="s3">&quot;&quot;&quot;List of lines captured from stderr.&quot;&quot;&quot;</span>
+        <span class="s1">self.stdout = LineMatcher(outlines)</span>
+        <span class="s3">&quot;&quot;&quot;:class:`~pytest.LineMatcher` of stdout. 
+ 
+        Use e.g. :func:`str(stdout) &lt;pytest.LineMatcher.__str__()&gt;` to reconstruct stdout, or the commonly used 
+        :func:`stdout.fnmatch_lines() &lt;pytest.LineMatcher.fnmatch_lines()&gt;` method. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self.stderr = LineMatcher(errlines)</span>
+        <span class="s3">&quot;&quot;&quot;:class:`~pytest.LineMatcher` of stderr.&quot;&quot;&quot;</span>
+        <span class="s1">self.duration = duration</span>
+        <span class="s3">&quot;&quot;&quot;Duration in seconds.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s1">(</span>
+            <span class="s3">&quot;&lt;RunResult ret=%s len(stdout.lines)=%d len(stderr.lines)=%d duration=%.2fs&gt;&quot;</span>
+            <span class="s1">% (self.ret</span><span class="s2">, </span><span class="s1">len(self.stdout.lines)</span><span class="s2">, </span><span class="s1">len(self.stderr.lines)</span><span class="s2">, </span><span class="s1">self.duration)</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">parseoutcomes(self) -&gt; Dict[str</span><span class="s2">, </span><span class="s1">int]:</span>
+        <span class="s0">&quot;&quot;&quot;Return a dictionary of outcome noun -&gt; count from parsing the terminal 
+        output that the test process produced. 
+ 
+        The returned nouns will always be in plural form:: 
+ 
+            ======= 1 failed, 1 passed, 1 warning, 1 error in 0.13s ==== 
+ 
+        Will return ``{&quot;failed&quot;: 1, &quot;passed&quot;: 1, &quot;warnings&quot;: 1, &quot;errors&quot;: 1}``. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.parse_summary_nouns(self.outlines)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">parse_summary_nouns(cls</span><span class="s2">, </span><span class="s1">lines) -&gt; Dict[str</span><span class="s2">, </span><span class="s1">int]:</span>
+        <span class="s0">&quot;&quot;&quot;Extract the nouns from a pytest terminal summary line. 
+ 
+        It always returns the plural noun for consistency:: 
+ 
+            ======= 1 failed, 1 passed, 1 warning, 1 error in 0.13s ==== 
+ 
+        Will return ``{&quot;failed&quot;: 1, &quot;passed&quot;: 1, &quot;warnings&quot;: 1, &quot;errors&quot;: 1}``. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">reversed(lines):</span>
+            <span class="s2">if </span><span class="s1">rex_session_duration.search(line):</span>
+                <span class="s1">outcomes = rex_outcome.findall(line)</span>
+                <span class="s1">ret = {noun: int(count) </span><span class="s2">for </span><span class="s1">(count</span><span class="s2">, </span><span class="s1">noun) </span><span class="s2">in </span><span class="s1">outcomes}</span>
+                <span class="s2">break</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">&quot;Pytest terminal summary report not found&quot;</span><span class="s1">)</span>
+
+        <span class="s1">to_plural = {</span>
+            <span class="s3">&quot;warning&quot;</span><span class="s1">: </span><span class="s3">&quot;warnings&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;error&quot;</span><span class="s1">: </span><span class="s3">&quot;errors&quot;</span><span class="s2">,</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{to_plural.get(k</span><span class="s2">, </span><span class="s1">k): v </span><span class="s2">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">ret.items()}</span>
+
+    <span class="s2">def </span><span class="s1">assert_outcomes(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">passed: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">skipped: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">failed: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">errors: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">xpassed: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">xfailed: int = </span><span class="s5">0</span><span class="s2">,</span>
+        <span class="s1">warnings: Optional[int] = </span><span class="s2">None,</span>
+        <span class="s1">deselected: Optional[int] = </span><span class="s2">None,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Assert that the specified outcomes appear with the respective 
+        numbers (0 means it didn't occur) in the text output from a test run. 
+ 
+        ``warnings`` and ``deselected`` are only checked if not None. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s2">from </span><span class="s1">_pytest.pytester_assertions </span><span class="s2">import </span><span class="s1">assert_outcomes</span>
+
+        <span class="s1">outcomes = self.parseoutcomes()</span>
+        <span class="s1">assert_outcomes(</span>
+            <span class="s1">outcomes</span><span class="s2">,</span>
+            <span class="s1">passed=passed</span><span class="s2">,</span>
+            <span class="s1">skipped=skipped</span><span class="s2">,</span>
+            <span class="s1">failed=failed</span><span class="s2">,</span>
+            <span class="s1">errors=errors</span><span class="s2">,</span>
+            <span class="s1">xpassed=xpassed</span><span class="s2">,</span>
+            <span class="s1">xfailed=xfailed</span><span class="s2">,</span>
+            <span class="s1">warnings=warnings</span><span class="s2">,</span>
+            <span class="s1">deselected=deselected</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+
+<span class="s2">class </span><span class="s1">CwdSnapshot:</span>
+    <span class="s2">def </span><span class="s1">__init__(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.__saved = os.getcwd()</span>
+
+    <span class="s2">def </span><span class="s1">restore(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">os.chdir(self.__saved)</span>
+
+
+<span class="s2">class </span><span class="s1">SysModulesSnapshot:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">preserve: Optional[Callable[[str]</span><span class="s2">, </span><span class="s1">bool]] = </span><span class="s2">None</span><span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.__preserve = preserve</span>
+        <span class="s1">self.__saved = dict(sys.modules)</span>
+
+    <span class="s2">def </span><span class="s1">restore(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">self.__preserve:</span>
+            <span class="s1">self.__saved.update(</span>
+                <span class="s1">(k</span><span class="s2">, </span><span class="s1">m) </span><span class="s2">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">m </span><span class="s2">in </span><span class="s1">sys.modules.items() </span><span class="s2">if </span><span class="s1">self.__preserve(k)</span>
+            <span class="s1">)</span>
+        <span class="s1">sys.modules.clear()</span>
+        <span class="s1">sys.modules.update(self.__saved)</span>
+
+
+<span class="s2">class </span><span class="s1">SysPathsSnapshot:</span>
+    <span class="s2">def </span><span class="s1">__init__(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.__saved = list(sys.path)</span><span class="s2">, </span><span class="s1">list(sys.meta_path)</span>
+
+    <span class="s2">def </span><span class="s1">restore(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">sys.path[:]</span><span class="s2">, </span><span class="s1">sys.meta_path[:] = self.__saved</span>
+
+
+<span class="s1">@final</span>
+<span class="s2">class </span><span class="s1">Pytester:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Facilities to write tests/configuration files, execute pytest in isolation, and match 
+    against expected output, perfect for black-box testing of pytest plugins. 
+ 
+    It attempts to isolate the test run from external factors as much as possible, modifying 
+    the current working directory to ``path`` and environment variables during initialization. 
+ 
+    Attributes: 
+ 
+    :ivar Path path: temporary directory path used to create files/run tests from, etc. 
+ 
+    :ivar plugins: 
+       A list of plugins to use with :py:meth:`parseconfig` and 
+       :py:meth:`runpytest`.  Initially this is an empty list but plugins can 
+       be added to the list.  The type of items to add to the list depends on 
+       the method using them so refer to them for details. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__test__ = </span><span class="s2">False</span>
+
+    <span class="s1">CLOSE_STDIN: </span><span class="s3">&quot;Final&quot; </span><span class="s1">= NOTSET</span>
+
+    <span class="s2">class </span><span class="s1">TimeoutExpired(Exception):</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">request: FixtureRequest</span><span class="s2">,</span>
+        <span class="s1">tmp_path_factory: TempPathFactory</span><span class="s2">,</span>
+        <span class="s1">monkeypatch: MonkeyPatch</span><span class="s2">,</span>
+        <span class="s1">*</span><span class="s2">,</span>
+        <span class="s1">_ispytest: bool = </span><span class="s2">False,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">check_ispytest(_ispytest)</span>
+        <span class="s1">self._request = request</span>
+        <span class="s1">self._mod_collections: WeakKeyDictionary[</span>
+            <span class="s1">Collector</span><span class="s2">, </span><span class="s1">List[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]</span>
+        <span class="s1">] = WeakKeyDictionary()</span>
+        <span class="s2">if </span><span class="s1">request.function:</span>
+            <span class="s1">name: str = request.function.__name__</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">name = request.node.name</span>
+        <span class="s1">self._name = name</span>
+        <span class="s1">self._path: Path = tmp_path_factory.mktemp(name</span><span class="s2">, </span><span class="s1">numbered=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s1">self.plugins: List[Union[str</span><span class="s2">, </span><span class="s1">_PluggyPlugin]] = []</span>
+        <span class="s1">self._cwd_snapshot = CwdSnapshot()</span>
+        <span class="s1">self._sys_path_snapshot = SysPathsSnapshot()</span>
+        <span class="s1">self._sys_modules_snapshot = self.__take_sys_modules_snapshot()</span>
+        <span class="s1">self.chdir()</span>
+        <span class="s1">self._request.addfinalizer(self._finalize)</span>
+        <span class="s1">self._method = self._request.config.getoption(</span><span class="s3">&quot;--runpytest&quot;</span><span class="s1">)</span>
+        <span class="s1">self._test_tmproot = tmp_path_factory.mktemp(</span><span class="s3">f&quot;tmp-</span><span class="s2">{</span><span class="s1">name</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s2">, </span><span class="s1">numbered=</span><span class="s2">True</span><span class="s1">)</span>
+
+        <span class="s1">self._monkeypatch = mp = monkeypatch</span>
+        <span class="s1">mp.setenv(</span><span class="s3">&quot;PYTEST_DEBUG_TEMPROOT&quot;</span><span class="s2">, </span><span class="s1">str(self._test_tmproot))</span>
+        <span class="s4"># Ensure no unexpected caching via tox.</span>
+        <span class="s1">mp.delenv(</span><span class="s3">&quot;TOX_ENV_DIR&quot;</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+        <span class="s4"># Discard outer pytest options.</span>
+        <span class="s1">mp.delenv(</span><span class="s3">&quot;PYTEST_ADDOPTS&quot;</span><span class="s2">, </span><span class="s1">raising=</span><span class="s2">False</span><span class="s1">)</span>
+        <span class="s4"># Ensure no user config is used.</span>
+        <span class="s1">tmphome = str(self.path)</span>
+        <span class="s1">mp.setenv(</span><span class="s3">&quot;HOME&quot;</span><span class="s2">, </span><span class="s1">tmphome)</span>
+        <span class="s1">mp.setenv(</span><span class="s3">&quot;USERPROFILE&quot;</span><span class="s2">, </span><span class="s1">tmphome)</span>
+        <span class="s4"># Do not use colors for inner runs by default.</span>
+        <span class="s1">mp.setenv(</span><span class="s3">&quot;PY_COLORS&quot;</span><span class="s2">, </span><span class="s3">&quot;0&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">path(self) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Temporary directory where files are created and pytest is executed.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._path</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">f&quot;&lt;Pytester </span><span class="s2">{</span><span class="s1">self.path</span><span class="s2">!r}</span><span class="s3">&gt;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">_finalize(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Clean up global state artifacts. 
+ 
+        Some methods modify the global interpreter state and this tries to 
+        clean this up. It does not remove the temporary directory however so 
+        it can be looked at after the test run has finished. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self._sys_modules_snapshot.restore()</span>
+        <span class="s1">self._sys_path_snapshot.restore()</span>
+        <span class="s1">self._cwd_snapshot.restore()</span>
+
+    <span class="s2">def </span><span class="s1">__take_sys_modules_snapshot(self) -&gt; SysModulesSnapshot:</span>
+        <span class="s4"># Some zope modules used by twisted-related tests keep internal state</span>
+        <span class="s4"># and can't be deleted; we had some trouble in the past with</span>
+        <span class="s4"># `zope.interface` for example.</span>
+        <span class="s4">#</span>
+        <span class="s4"># Preserve readline due to https://bugs.python.org/issue41033.</span>
+        <span class="s4"># pexpect issues a SIGWINCH.</span>
+        <span class="s2">def </span><span class="s1">preserve_module(name):</span>
+            <span class="s2">return </span><span class="s1">name.startswith((</span><span class="s3">&quot;zope&quot;</span><span class="s2">, </span><span class="s3">&quot;readline&quot;</span><span class="s1">))</span>
+
+        <span class="s2">return </span><span class="s1">SysModulesSnapshot(preserve=preserve_module)</span>
+
+    <span class="s2">def </span><span class="s1">make_hook_recorder(self</span><span class="s2">, </span><span class="s1">pluginmanager: PytestPluginManager) -&gt; HookRecorder:</span>
+        <span class="s0">&quot;&quot;&quot;Create a new :py:class:`HookRecorder` for a PluginManager.&quot;&quot;&quot;</span>
+        <span class="s1">pluginmanager.reprec = reprec = HookRecorder(pluginmanager</span><span class="s2">, </span><span class="s1">_ispytest=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s1">self._request.addfinalizer(reprec.finish_recording)</span>
+        <span class="s2">return </span><span class="s1">reprec</span>
+
+    <span class="s2">def </span><span class="s1">chdir(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Cd into the temporary directory. 
+ 
+        This is done automatically upon instantiation. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">os.chdir(self.path)</span>
+
+    <span class="s2">def </span><span class="s1">_makefile(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">ext: str</span><span class="s2">,</span>
+        <span class="s1">lines: Sequence[Union[Any</span><span class="s2">, </span><span class="s1">bytes]]</span><span class="s2">,</span>
+        <span class="s1">files: Dict[str</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">,</span>
+        <span class="s1">encoding: str = </span><span class="s3">&quot;utf-8&quot;</span><span class="s2">,</span>
+    <span class="s1">) -&gt; Path:</span>
+        <span class="s1">items = list(files.items())</span>
+
+        <span class="s2">if </span><span class="s1">ext </span><span class="s2">and not </span><span class="s1">ext.startswith(</span><span class="s3">&quot;.&quot;</span><span class="s1">):</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span>
+                <span class="s3">f&quot;pytester.makefile expects a file extension, try .</span><span class="s2">{</span><span class="s1">ext</span><span class="s2">} </span><span class="s3">instead of </span><span class="s2">{</span><span class="s1">ext</span><span class="s2">}</span><span class="s3">&quot;</span>
+            <span class="s1">)</span>
+
+        <span class="s2">def </span><span class="s1">to_text(s: Union[Any</span><span class="s2">, </span><span class="s1">bytes]) -&gt; str:</span>
+            <span class="s2">return </span><span class="s1">s.decode(encoding) </span><span class="s2">if </span><span class="s1">isinstance(s</span><span class="s2">, </span><span class="s1">bytes) </span><span class="s2">else </span><span class="s1">str(s)</span>
+
+        <span class="s2">if </span><span class="s1">lines:</span>
+            <span class="s1">source = </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(to_text(x) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">lines)</span>
+            <span class="s1">basename = self._name</span>
+            <span class="s1">items.insert(</span><span class="s5">0</span><span class="s2">, </span><span class="s1">(basename</span><span class="s2">, </span><span class="s1">source))</span>
+
+        <span class="s1">ret = </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">basename</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">items:</span>
+            <span class="s1">p = self.path.joinpath(basename).with_suffix(ext)</span>
+            <span class="s1">p.parent.mkdir(parents=</span><span class="s2">True, </span><span class="s1">exist_ok=</span><span class="s2">True</span><span class="s1">)</span>
+            <span class="s1">source_ = Source(value)</span>
+            <span class="s1">source = </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(to_text(line) </span><span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">source_.lines)</span>
+            <span class="s1">p.write_text(source.strip()</span><span class="s2">, </span><span class="s1">encoding=encoding)</span>
+            <span class="s2">if </span><span class="s1">ret </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s1">ret = p</span>
+        <span class="s2">assert </span><span class="s1">ret </span><span class="s2">is not None</span>
+        <span class="s2">return </span><span class="s1">ret</span>
+
+    <span class="s2">def </span><span class="s1">makefile(self</span><span class="s2">, </span><span class="s1">ext: str</span><span class="s2">, </span><span class="s1">*args: str</span><span class="s2">, </span><span class="s1">**kwargs: str) -&gt; Path:</span>
+        <span class="s0">r&quot;&quot;&quot;Create new text file(s) in the test directory. 
+ 
+        :param str ext: 
+            The extension the file(s) should use, including the dot, e.g. `.py`. 
+        :param args: 
+            All args are treated as strings and joined using newlines. 
+            The result is written as contents to the file.  The name of the 
+            file is based on the test function requesting this fixture. 
+        :param kwargs: 
+            Each keyword is the name of a file, while the value of it will 
+            be written as contents of the file. 
+ 
+        Examples: 
+ 
+        .. code-block:: python 
+ 
+            pytester.makefile(&quot;.txt&quot;, &quot;line1&quot;, &quot;line2&quot;) 
+ 
+            pytester.makefile(&quot;.ini&quot;, pytest=&quot;[pytest]\naddopts=-rs\n&quot;) 
+ 
+        To create binary files, use :meth:`pathlib.Path.write_bytes` directly: 
+ 
+        .. code-block:: python 
+ 
+            filename = pytester.path.joinpath(&quot;foo.bin&quot;) 
+            filename.write_bytes(b&quot;...&quot;) 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._makefile(ext</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">makeconftest(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Write a contest.py file with 'source' as contents.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.makepyfile(conftest=source)</span>
+
+    <span class="s2">def </span><span class="s1">makeini(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Write a tox.ini file with 'source' as contents.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.makefile(</span><span class="s3">&quot;.ini&quot;</span><span class="s2">, </span><span class="s1">tox=source)</span>
+
+    <span class="s2">def </span><span class="s1">getinicfg(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; SectionWrapper:</span>
+        <span class="s0">&quot;&quot;&quot;Return the pytest section from the tox.ini config file.&quot;&quot;&quot;</span>
+        <span class="s1">p = self.makeini(source)</span>
+        <span class="s2">return </span><span class="s1">IniConfig(str(p))[</span><span class="s3">&quot;pytest&quot;</span><span class="s1">]</span>
+
+    <span class="s2">def </span><span class="s1">makepyprojecttoml(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Write a pyproject.toml file with 'source' as contents. 
+ 
+        .. versionadded:: 6.0 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.makefile(</span><span class="s3">&quot;.toml&quot;</span><span class="s2">, </span><span class="s1">pyproject=source)</span>
+
+    <span class="s2">def </span><span class="s1">makepyfile(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; Path:</span>
+        <span class="s0">r&quot;&quot;&quot;Shortcut for .makefile() with a .py extension. 
+ 
+        Defaults to the test name with a '.py' extension, e.g test_foobar.py, overwriting 
+        existing files. 
+ 
+        Examples: 
+ 
+        .. code-block:: python 
+ 
+            def test_something(pytester): 
+                # Initial file is created test_something.py. 
+                pytester.makepyfile(&quot;foobar&quot;) 
+                # To create multiple files, pass kwargs accordingly. 
+                pytester.makepyfile(custom=&quot;foobar&quot;) 
+                # At this point, both 'test_something.py' &amp; 'custom.py' exist in the test directory. 
+ 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._makefile(</span><span class="s3">&quot;.py&quot;</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">maketxtfile(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs) -&gt; Path:</span>
+        <span class="s0">r&quot;&quot;&quot;Shortcut for .makefile() with a .txt extension. 
+ 
+        Defaults to the test name with a '.txt' extension, e.g test_foobar.txt, overwriting 
+        existing files. 
+ 
+        Examples: 
+ 
+        .. code-block:: python 
+ 
+            def test_something(pytester): 
+                # Initial file is created test_something.txt. 
+                pytester.maketxtfile(&quot;foobar&quot;) 
+                # To create multiple files, pass kwargs accordingly. 
+                pytester.maketxtfile(custom=&quot;foobar&quot;) 
+                # At this point, both 'test_something.txt' &amp; 'custom.txt' exist in the test directory. 
+ 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self._makefile(</span><span class="s3">&quot;.txt&quot;</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs)</span>
+
+    <span class="s2">def </span><span class="s1">syspathinsert(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">path: Optional[Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]] = </span><span class="s2">None</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Prepend a directory to sys.path, defaults to :attr:`path`. 
+ 
+        This is undone automatically when this object dies at the end of each 
+        test. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">path </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">path = self.path</span>
+
+        <span class="s1">self._monkeypatch.syspath_prepend(str(path))</span>
+
+    <span class="s2">def </span><span class="s1">mkdir(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Create a new (sub)directory.&quot;&quot;&quot;</span>
+        <span class="s1">p = self.path / name</span>
+        <span class="s1">p.mkdir()</span>
+        <span class="s2">return </span><span class="s1">p</span>
+
+    <span class="s2">def </span><span class="s1">mkpydir(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Create a new python package. 
+ 
+        This creates a (sub)directory with an empty ``__init__.py`` file so it 
+        gets recognised as a Python package. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">p = self.path / name</span>
+        <span class="s1">p.mkdir()</span>
+        <span class="s1">p.joinpath(</span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">).touch()</span>
+        <span class="s2">return </span><span class="s1">p</span>
+
+    <span class="s2">def </span><span class="s1">copy_example(self</span><span class="s2">, </span><span class="s1">name: Optional[str] = </span><span class="s2">None</span><span class="s1">) -&gt; Path:</span>
+        <span class="s0">&quot;&quot;&quot;Copy file from project's directory into the testdir. 
+ 
+        :param str name: The name of the file to copy. 
+        :return: path to the copied directory (inside ``self.path``). 
+ 
+        &quot;&quot;&quot;</span>
+        <span class="s1">example_dir = self._request.config.getini(</span><span class="s3">&quot;pytester_example_dir&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">example_dir </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">&quot;pytester_example_dir is unset, can't copy examples&quot;</span><span class="s1">)</span>
+        <span class="s1">example_dir = self._request.config.rootpath / example_dir</span>
+
+        <span class="s2">for </span><span class="s1">extra_element </span><span class="s2">in </span><span class="s1">self._request.node.iter_markers(</span><span class="s3">&quot;pytester_example_path&quot;</span><span class="s1">):</span>
+            <span class="s2">assert </span><span class="s1">extra_element.args</span>
+            <span class="s1">example_dir = example_dir.joinpath(*extra_element.args)</span>
+
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">func_name = self._name</span>
+            <span class="s1">maybe_dir = example_dir / func_name</span>
+            <span class="s1">maybe_file = example_dir / (func_name + </span><span class="s3">&quot;.py&quot;</span><span class="s1">)</span>
+
+            <span class="s2">if </span><span class="s1">maybe_dir.is_dir():</span>
+                <span class="s1">example_path = maybe_dir</span>
+            <span class="s2">elif </span><span class="s1">maybe_file.is_file():</span>
+                <span class="s1">example_path = maybe_file</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">LookupError(</span>
+                    <span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">func_name</span><span class="s2">} </span><span class="s3">can't be found as module or package in </span><span class="s2">{</span><span class="s1">example_dir</span><span class="s2">}</span><span class="s3">&quot;</span>
+                <span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">example_path = example_dir.joinpath(name)</span>
+
+        <span class="s2">if </span><span class="s1">example_path.is_dir() </span><span class="s2">and not </span><span class="s1">example_path.joinpath(</span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">).is_file():</span>
+            <span class="s1">copytree(example_path</span><span class="s2">, </span><span class="s1">self.path)</span>
+            <span class="s2">return </span><span class="s1">self.path</span>
+        <span class="s2">elif </span><span class="s1">example_path.is_file():</span>
+            <span class="s1">result = self.path.joinpath(example_path.name)</span>
+            <span class="s1">shutil.copy(example_path</span><span class="s2">, </span><span class="s1">result)</span>
+            <span class="s2">return </span><span class="s1">result</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">LookupError(</span>
+                <span class="s3">f'example &quot;</span><span class="s2">{</span><span class="s1">example_path</span><span class="s2">}</span><span class="s3">&quot; is not found as a file or directory'</span>
+            <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">getnode(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">config: Config</span><span class="s2">, </span><span class="s1">arg: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span>
+    <span class="s1">) -&gt; Optional[Union[Collector</span><span class="s2">, </span><span class="s1">Item]]:</span>
+        <span class="s0">&quot;&quot;&quot;Return the collection node of a file. 
+ 
+        :param pytest.Config config: 
+           A pytest config. 
+           See :py:meth:`parseconfig` and :py:meth:`parseconfigure` for creating it. 
+        :param os.PathLike[str] arg: 
+            Path to the file. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">session = Session.from_config(config)</span>
+        <span class="s2">assert </span><span class="s3">&quot;::&quot; </span><span class="s2">not in </span><span class="s1">str(arg)</span>
+        <span class="s1">p = Path(os.path.abspath(arg))</span>
+        <span class="s1">config.hook.pytest_sessionstart(session=session)</span>
+        <span class="s1">res = session.perform_collect([str(p)]</span><span class="s2">, </span><span class="s1">genitems=</span><span class="s2">False</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">config.hook.pytest_sessionfinish(session=session</span><span class="s2">, </span><span class="s1">exitstatus=ExitCode.OK)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">getpathnode(self</span><span class="s2">, </span><span class="s1">path: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]):</span>
+        <span class="s0">&quot;&quot;&quot;Return the collection node of a file. 
+ 
+        This is like :py:meth:`getnode` but uses :py:meth:`parseconfigure` to 
+        create the (configured) pytest Config instance. 
+ 
+        :param os.PathLike[str] path: Path to the file. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">path = Path(path)</span>
+        <span class="s1">config = self.parseconfigure(path)</span>
+        <span class="s1">session = Session.from_config(config)</span>
+        <span class="s1">x = bestrelpath(session.path</span><span class="s2">, </span><span class="s1">path)</span>
+        <span class="s1">config.hook.pytest_sessionstart(session=session)</span>
+        <span class="s1">res = session.perform_collect([x]</span><span class="s2">, </span><span class="s1">genitems=</span><span class="s2">False</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">config.hook.pytest_sessionfinish(session=session</span><span class="s2">, </span><span class="s1">exitstatus=ExitCode.OK)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">genitems(self</span><span class="s2">, </span><span class="s1">colitems: Sequence[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]) -&gt; List[Item]:</span>
+        <span class="s0">&quot;&quot;&quot;Generate all test items from a collection node. 
+ 
+        This recurses into the collection node and returns a list of all the 
+        test items contained within. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">session = colitems[</span><span class="s5">0</span><span class="s1">].session</span>
+        <span class="s1">result: List[Item] = []</span>
+        <span class="s2">for </span><span class="s1">colitem </span><span class="s2">in </span><span class="s1">colitems:</span>
+            <span class="s1">result.extend(session.genitems(colitem))</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">runitem(self</span><span class="s2">, </span><span class="s1">source: str) -&gt; Any:</span>
+        <span class="s0">&quot;&quot;&quot;Run the &quot;test_func&quot; Item. 
+ 
+        The calling test instance (class containing the test method) must 
+        provide a ``.getrunner()`` method which should return a runner which 
+        can run the test protocol for a single item, e.g. 
+        :py:func:`_pytest.runner.runtestprotocol`. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># used from runner functional tests</span>
+        <span class="s1">item = self.getitem(source)</span>
+        <span class="s4"># the test class where we are called from wants to provide the runner</span>
+        <span class="s1">testclassinstance = self._request.instance</span>
+        <span class="s1">runner = testclassinstance.getrunner()</span>
+        <span class="s2">return </span><span class="s1">runner(item)</span>
+
+    <span class="s2">def </span><span class="s1">inline_runsource(self</span><span class="s2">, </span><span class="s1">source: str</span><span class="s2">, </span><span class="s1">*cmdlineargs) -&gt; HookRecorder:</span>
+        <span class="s0">&quot;&quot;&quot;Run a test module in process using ``pytest.main()``. 
+ 
+        This run writes &quot;source&quot; into a temporary file and runs 
+        ``pytest.main()`` on it, returning a :py:class:`HookRecorder` instance 
+        for the result. 
+ 
+        :param source: The source code of the test module. 
+        :param cmdlineargs: Any extra command line arguments to use. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">p = self.makepyfile(source)</span>
+        <span class="s1">values = list(cmdlineargs) + [p]</span>
+        <span class="s2">return </span><span class="s1">self.inline_run(*values)</span>
+
+    <span class="s2">def </span><span class="s1">inline_genitems(self</span><span class="s2">, </span><span class="s1">*args) -&gt; Tuple[List[Item]</span><span class="s2">, </span><span class="s1">HookRecorder]:</span>
+        <span class="s0">&quot;&quot;&quot;Run ``pytest.main(['--collectonly'])`` in-process. 
+ 
+        Runs the :py:func:`pytest.main` function to run all of pytest inside 
+        the test process itself like :py:meth:`inline_run`, but returns a 
+        tuple of the collected items and a :py:class:`HookRecorder` instance. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">rec = self.inline_run(</span><span class="s3">&quot;--collect-only&quot;</span><span class="s2">, </span><span class="s1">*args)</span>
+        <span class="s1">items = [x.item </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">rec.getcalls(</span><span class="s3">&quot;pytest_itemcollected&quot;</span><span class="s1">)]</span>
+        <span class="s2">return </span><span class="s1">items</span><span class="s2">, </span><span class="s1">rec</span>
+
+    <span class="s2">def </span><span class="s1">inline_run(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">plugins=()</span><span class="s2">,</span>
+        <span class="s1">no_reraise_ctrlc: bool = </span><span class="s2">False,</span>
+    <span class="s1">) -&gt; HookRecorder:</span>
+        <span class="s0">&quot;&quot;&quot;Run ``pytest.main()`` in-process, returning a HookRecorder. 
+ 
+        Runs the :py:func:`pytest.main` function to run all of pytest inside 
+        the test process itself.  This means it can return a 
+        :py:class:`HookRecorder` instance which gives more detailed results 
+        from that run than can be done by matching stdout/stderr from 
+        :py:meth:`runpytest`. 
+ 
+        :param args: 
+            Command line arguments to pass to :py:func:`pytest.main`. 
+        :param plugins: 
+            Extra plugin instances the ``pytest.main()`` instance should use. 
+        :param no_reraise_ctrlc: 
+            Typically we reraise keyboard interrupts from the child run. If 
+            True, the KeyboardInterrupt exception is captured. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># (maybe a cpython bug?) the importlib cache sometimes isn't updated</span>
+        <span class="s4"># properly between file creation and inline_run (especially if imports</span>
+        <span class="s4"># are interspersed with file creation)</span>
+        <span class="s1">importlib.invalidate_caches()</span>
+
+        <span class="s1">plugins = list(plugins)</span>
+        <span class="s1">finalizers = []</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s4"># Any sys.module or sys.path changes done while running pytest</span>
+            <span class="s4"># inline should be reverted after the test run completes to avoid</span>
+            <span class="s4"># clashing with later inline tests run within the same pytest test,</span>
+            <span class="s4"># e.g. just because they use matching test module names.</span>
+            <span class="s1">finalizers.append(self.__take_sys_modules_snapshot().restore)</span>
+            <span class="s1">finalizers.append(SysPathsSnapshot().restore)</span>
+
+            <span class="s4"># Important note:</span>
+            <span class="s4"># - our tests should not leave any other references/registrations</span>
+            <span class="s4">#   laying around other than possibly loaded test modules</span>
+            <span class="s4">#   referenced from sys.modules, as nothing will clean those up</span>
+            <span class="s4">#   automatically</span>
+
+            <span class="s1">rec = []</span>
+
+            <span class="s2">class </span><span class="s1">Collect:</span>
+                <span class="s2">def </span><span class="s1">pytest_configure(x</span><span class="s2">, </span><span class="s1">config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+                    <span class="s1">rec.append(self.make_hook_recorder(config.pluginmanager))</span>
+
+            <span class="s1">plugins.append(Collect())</span>
+            <span class="s1">ret = main([str(x) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">args]</span><span class="s2">, </span><span class="s1">plugins=plugins)</span>
+            <span class="s2">if </span><span class="s1">len(rec) == </span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s1">reprec = rec.pop()</span>
+            <span class="s2">else</span><span class="s1">:</span>
+
+                <span class="s2">class </span><span class="s1">reprec:  </span><span class="s4"># type: ignore</span>
+                    <span class="s2">pass</span>
+
+            <span class="s1">reprec.ret = ret</span>
+
+            <span class="s4"># Typically we reraise keyboard interrupts from the child run</span>
+            <span class="s4"># because it's our user requesting interruption of the testing.</span>
+            <span class="s2">if </span><span class="s1">ret == ExitCode.INTERRUPTED </span><span class="s2">and not </span><span class="s1">no_reraise_ctrlc:</span>
+                <span class="s1">calls = reprec.getcalls(</span><span class="s3">&quot;pytest_keyboard_interrupt&quot;</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">calls </span><span class="s2">and </span><span class="s1">calls[-</span><span class="s5">1</span><span class="s1">].excinfo.type == KeyboardInterrupt:</span>
+                    <span class="s2">raise </span><span class="s1">KeyboardInterrupt()</span>
+            <span class="s2">return </span><span class="s1">reprec</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s2">for </span><span class="s1">finalizer </span><span class="s2">in </span><span class="s1">finalizers:</span>
+                <span class="s1">finalizer()</span>
+
+    <span class="s2">def </span><span class="s1">runpytest_inprocess(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">**kwargs: Any</span>
+    <span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Return result of running pytest in-process, providing a similar 
+        interface to what self.runpytest() provides.&quot;&quot;&quot;</span>
+        <span class="s1">syspathinsert = kwargs.pop(</span><span class="s3">&quot;syspathinsert&quot;</span><span class="s2">, False</span><span class="s1">)</span>
+
+        <span class="s2">if </span><span class="s1">syspathinsert:</span>
+            <span class="s1">self.syspathinsert()</span>
+        <span class="s1">now = timing.time()</span>
+        <span class="s1">capture = _get_multicapture(</span><span class="s3">&quot;sys&quot;</span><span class="s1">)</span>
+        <span class="s1">capture.start_capturing()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">reprec = self.inline_run(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+            <span class="s2">except </span><span class="s1">SystemExit </span><span class="s2">as </span><span class="s1">e:</span>
+                <span class="s1">ret = e.args[</span><span class="s5">0</span><span class="s1">]</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">ret = ExitCode(e.args[</span><span class="s5">0</span><span class="s1">])</span>
+                <span class="s2">except </span><span class="s1">ValueError:</span>
+                    <span class="s2">pass</span>
+
+                <span class="s2">class </span><span class="s1">reprec:  </span><span class="s4"># type: ignore</span>
+                    <span class="s1">ret = ret</span>
+
+            <span class="s2">except </span><span class="s1">Exception:</span>
+                <span class="s1">traceback.print_exc()</span>
+
+                <span class="s2">class </span><span class="s1">reprec:  </span><span class="s4"># type: ignore</span>
+                    <span class="s1">ret = ExitCode(</span><span class="s5">3</span><span class="s1">)</span>
+
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">out</span><span class="s2">, </span><span class="s1">err = capture.readouterr()</span>
+            <span class="s1">capture.stop_capturing()</span>
+            <span class="s1">sys.stdout.write(out)</span>
+            <span class="s1">sys.stderr.write(err)</span>
+
+        <span class="s2">assert </span><span class="s1">reprec.ret </span><span class="s2">is not None</span>
+        <span class="s1">res = RunResult(</span>
+            <span class="s1">reprec.ret</span><span class="s2">, </span><span class="s1">out.splitlines()</span><span class="s2">, </span><span class="s1">err.splitlines()</span><span class="s2">, </span><span class="s1">timing.time() - now</span>
+        <span class="s1">)</span>
+        <span class="s1">res.reprec = reprec  </span><span class="s4"># type: ignore</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">runpytest(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">**kwargs: Any</span>
+    <span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Run pytest inline or in a subprocess, depending on the command line 
+        option &quot;--runpytest&quot; and return a :py:class:`~pytest.RunResult`.&quot;&quot;&quot;</span>
+        <span class="s1">new_args = self._ensure_basetemp(args)</span>
+        <span class="s2">if </span><span class="s1">self._method == </span><span class="s3">&quot;inprocess&quot;</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">self.runpytest_inprocess(*new_args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+        <span class="s2">elif </span><span class="s1">self._method == </span><span class="s3">&quot;subprocess&quot;</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">self.runpytest_subprocess(*new_args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+        <span class="s2">raise </span><span class="s1">RuntimeError(</span><span class="s3">f&quot;Unrecognized runpytest option: </span><span class="s2">{</span><span class="s1">self._method</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_ensure_basetemp(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">args: Sequence[Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span>
+    <span class="s1">) -&gt; List[Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]]:</span>
+        <span class="s1">new_args = list(args)</span>
+        <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">new_args:</span>
+            <span class="s2">if </span><span class="s1">str(x).startswith(</span><span class="s3">&quot;--basetemp&quot;</span><span class="s1">):</span>
+                <span class="s2">break</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">new_args.append(</span><span class="s3">&quot;--basetemp=%s&quot; </span><span class="s1">% self.path.parent.joinpath(</span><span class="s3">&quot;basetemp&quot;</span><span class="s1">))</span>
+        <span class="s2">return </span><span class="s1">new_args</span>
+
+    <span class="s2">def </span><span class="s1">parseconfig(self</span><span class="s2">, </span><span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]) -&gt; Config:</span>
+        <span class="s0">&quot;&quot;&quot;Return a new pytest Config instance from given commandline args. 
+ 
+        This invokes the pytest bootstrapping code in _pytest.config to create 
+        a new :py:class:`_pytest.core.PluginManager` and call the 
+        pytest_cmdline_parse hook to create a new 
+        :py:class:`pytest.Config` instance. 
+ 
+        If :py:attr:`plugins` has been populated they should be plugin modules 
+        to be registered with the PluginManager. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">import </span><span class="s1">_pytest.config</span>
+
+        <span class="s1">new_args = self._ensure_basetemp(args)</span>
+        <span class="s1">new_args = [str(x) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">new_args]</span>
+
+        <span class="s1">config = _pytest.config._prepareconfig(new_args</span><span class="s2">, </span><span class="s1">self.plugins)  </span><span class="s4"># type: ignore[arg-type]</span>
+        <span class="s4"># we don't know what the test will do with this half-setup config</span>
+        <span class="s4"># object and thus we make sure it gets unconfigured properly in any</span>
+        <span class="s4"># case (otherwise capturing could still be active, for example)</span>
+        <span class="s1">self._request.addfinalizer(config._ensure_unconfigure)</span>
+        <span class="s2">return </span><span class="s1">config</span>
+
+    <span class="s2">def </span><span class="s1">parseconfigure(self</span><span class="s2">, </span><span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]) -&gt; Config:</span>
+        <span class="s0">&quot;&quot;&quot;Return a new pytest configured Config instance. 
+ 
+        Returns a new :py:class:`pytest.Config` instance like 
+        :py:meth:`parseconfig`, but also calls the pytest_configure hook. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">config = self.parseconfig(*args)</span>
+        <span class="s1">config._do_configure()</span>
+        <span class="s2">return </span><span class="s1">config</span>
+
+    <span class="s2">def </span><span class="s1">getitem(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">source: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">funcname: str = </span><span class="s3">&quot;test_func&quot;</span>
+    <span class="s1">) -&gt; Item:</span>
+        <span class="s0">&quot;&quot;&quot;Return the test item for a test function. 
+ 
+        Writes the source to a python file and runs pytest's collection on 
+        the resulting module, returning the test item for the requested 
+        function name. 
+ 
+        :param source: 
+            The module source. 
+        :param funcname: 
+            The name of the test function for which to return a test item. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">items = self.getitems(source)</span>
+        <span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">items:</span>
+            <span class="s2">if </span><span class="s1">item.name == funcname:</span>
+                <span class="s2">return </span><span class="s1">item</span>
+        <span class="s2">assert </span><span class="s5">0</span><span class="s2">, </span><span class="s3">&quot;{!r} item not found in module:</span><span class="s2">\n</span><span class="s3">{}</span><span class="s2">\n</span><span class="s3">items: {}&quot;</span><span class="s1">.format(</span>
+            <span class="s1">funcname</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">items</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">getitems(self</span><span class="s2">, </span><span class="s1">source: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]) -&gt; List[Item]:</span>
+        <span class="s0">&quot;&quot;&quot;Return all test items collected from the module. 
+ 
+        Writes the source to a Python file and runs pytest's collection on 
+        the resulting module, returning all test items contained within. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">modcol = self.getmodulecol(source)</span>
+        <span class="s2">return </span><span class="s1">self.genitems([modcol])</span>
+
+    <span class="s2">def </span><span class="s1">getmodulecol(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">source: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">configargs=()</span><span class="s2">,</span>
+        <span class="s1">*</span><span class="s2">,</span>
+        <span class="s1">withinit: bool = </span><span class="s2">False,</span>
+    <span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;Return the module collection node for ``source``. 
+ 
+        Writes ``source`` to a file using :py:meth:`makepyfile` and then 
+        runs the pytest collection on it, returning the collection node for the 
+        test module. 
+ 
+        :param source: 
+            The source code of the module to collect. 
+ 
+        :param configargs: 
+            Any extra arguments to pass to :py:meth:`parseconfigure`. 
+ 
+        :param withinit: 
+            Whether to also write an ``__init__.py`` file to the same 
+            directory to ensure it is a package. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance(source</span><span class="s2">, </span><span class="s1">os.PathLike):</span>
+            <span class="s1">path = self.path.joinpath(source)</span>
+            <span class="s2">assert not </span><span class="s1">withinit</span><span class="s2">, </span><span class="s3">&quot;not supported for paths&quot;</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">kw = {self._name: str(source)}</span>
+            <span class="s1">path = self.makepyfile(**kw)</span>
+        <span class="s2">if </span><span class="s1">withinit:</span>
+            <span class="s1">self.makepyfile(__init__=</span><span class="s3">&quot;#&quot;</span><span class="s1">)</span>
+        <span class="s1">self.config = config = self.parseconfigure(path</span><span class="s2">, </span><span class="s1">*configargs)</span>
+        <span class="s2">return </span><span class="s1">self.getnode(config</span><span class="s2">, </span><span class="s1">path)</span>
+
+    <span class="s2">def </span><span class="s1">collect_by_name(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">modcol: Collector</span><span class="s2">, </span><span class="s1">name: str</span>
+    <span class="s1">) -&gt; Optional[Union[Item</span><span class="s2">, </span><span class="s1">Collector]]:</span>
+        <span class="s0">&quot;&quot;&quot;Return the collection node for name from the module collection. 
+ 
+        Searches a module collection node for a collection node matching the 
+        given name. 
+ 
+        :param modcol: A module collection node; see :py:meth:`getmodulecol`. 
+        :param name: The name of the node to return. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">modcol </span><span class="s2">not in </span><span class="s1">self._mod_collections:</span>
+            <span class="s1">self._mod_collections[modcol] = list(modcol.collect())</span>
+        <span class="s2">for </span><span class="s1">colitem </span><span class="s2">in </span><span class="s1">self._mod_collections[modcol]:</span>
+            <span class="s2">if </span><span class="s1">colitem.name == name:</span>
+                <span class="s2">return </span><span class="s1">colitem</span>
+        <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">popen(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">cmdargs: Sequence[Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]]</span><span class="s2">,</span>
+        <span class="s1">stdout: Union[int</span><span class="s2">, </span><span class="s1">TextIO] = subprocess.PIPE</span><span class="s2">,</span>
+        <span class="s1">stderr: Union[int</span><span class="s2">, </span><span class="s1">TextIO] = subprocess.PIPE</span><span class="s2">,</span>
+        <span class="s1">stdin: Union[NotSetType</span><span class="s2">, </span><span class="s1">bytes</span><span class="s2">, </span><span class="s1">IO[Any]</span><span class="s2">, </span><span class="s1">int] = CLOSE_STDIN</span><span class="s2">,</span>
+        <span class="s1">**kw</span><span class="s2">,</span>
+    <span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;Invoke :py:class:`subprocess.Popen`. 
+ 
+        Calls :py:class:`subprocess.Popen` making sure the current working 
+        directory is in ``PYTHONPATH``. 
+ 
+        You probably want to use :py:meth:`run` instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">env = os.environ.copy()</span>
+        <span class="s1">env[</span><span class="s3">&quot;PYTHONPATH&quot;</span><span class="s1">] = os.pathsep.join(</span>
+            <span class="s1">filter(</span><span class="s2">None, </span><span class="s1">[os.getcwd()</span><span class="s2">, </span><span class="s1">env.get(</span><span class="s3">&quot;PYTHONPATH&quot;</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s1">)])</span>
+        <span class="s1">)</span>
+        <span class="s1">kw[</span><span class="s3">&quot;env&quot;</span><span class="s1">] = env</span>
+
+        <span class="s2">if </span><span class="s1">stdin </span><span class="s2">is </span><span class="s1">self.CLOSE_STDIN:</span>
+            <span class="s1">kw[</span><span class="s3">&quot;stdin&quot;</span><span class="s1">] = subprocess.PIPE</span>
+        <span class="s2">elif </span><span class="s1">isinstance(stdin</span><span class="s2">, </span><span class="s1">bytes):</span>
+            <span class="s1">kw[</span><span class="s3">&quot;stdin&quot;</span><span class="s1">] = subprocess.PIPE</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">kw[</span><span class="s3">&quot;stdin&quot;</span><span class="s1">] = stdin</span>
+
+        <span class="s1">popen = subprocess.Popen(cmdargs</span><span class="s2">, </span><span class="s1">stdout=stdout</span><span class="s2">, </span><span class="s1">stderr=stderr</span><span class="s2">, </span><span class="s1">**kw)</span>
+        <span class="s2">if </span><span class="s1">stdin </span><span class="s2">is </span><span class="s1">self.CLOSE_STDIN:</span>
+            <span class="s2">assert </span><span class="s1">popen.stdin </span><span class="s2">is not None</span>
+            <span class="s1">popen.stdin.close()</span>
+        <span class="s2">elif </span><span class="s1">isinstance(stdin</span><span class="s2">, </span><span class="s1">bytes):</span>
+            <span class="s2">assert </span><span class="s1">popen.stdin </span><span class="s2">is not None</span>
+            <span class="s1">popen.stdin.write(stdin)</span>
+
+        <span class="s2">return </span><span class="s1">popen</span>
+
+    <span class="s2">def </span><span class="s1">run(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">*cmdargs: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">timeout: Optional[float] = </span><span class="s2">None,</span>
+        <span class="s1">stdin: Union[NotSetType</span><span class="s2">, </span><span class="s1">bytes</span><span class="s2">, </span><span class="s1">IO[Any]</span><span class="s2">, </span><span class="s1">int] = CLOSE_STDIN</span><span class="s2">,</span>
+    <span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Run a command with arguments. 
+ 
+        Run a process using :py:class:`subprocess.Popen` saving the stdout and 
+        stderr. 
+ 
+        :param cmdargs: 
+            The sequence of arguments to pass to :py:class:`subprocess.Popen`, 
+            with path-like objects being converted to :py:class:`str` 
+            automatically. 
+        :param timeout: 
+            The period in seconds after which to timeout and raise 
+            :py:class:`Pytester.TimeoutExpired`. 
+        :param stdin: 
+            Optional standard input. 
+ 
+            - If it is :py:attr:`CLOSE_STDIN` (Default), then this method calls 
+              :py:class:`subprocess.Popen` with ``stdin=subprocess.PIPE``, and 
+              the standard input is closed immediately after the new command is 
+              started. 
+ 
+            - If it is of type :py:class:`bytes`, these bytes are sent to the 
+              standard input of the command. 
+ 
+            - Otherwise, it is passed through to :py:class:`subprocess.Popen`. 
+              For further information in this case, consult the document of the 
+              ``stdin`` parameter in :py:class:`subprocess.Popen`. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+
+        <span class="s1">cmdargs = tuple(os.fspath(arg) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">cmdargs)</span>
+        <span class="s1">p1 = self.path.joinpath(</span><span class="s3">&quot;stdout&quot;</span><span class="s1">)</span>
+        <span class="s1">p2 = self.path.joinpath(</span><span class="s3">&quot;stderr&quot;</span><span class="s1">)</span>
+        <span class="s1">print(</span><span class="s3">&quot;running:&quot;</span><span class="s2">, </span><span class="s1">*cmdargs)</span>
+        <span class="s1">print(</span><span class="s3">&quot;     in:&quot;</span><span class="s2">, </span><span class="s1">Path.cwd())</span>
+
+        <span class="s2">with </span><span class="s1">p1.open(</span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding=</span><span class="s3">&quot;utf8&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f1</span><span class="s2">, </span><span class="s1">p2.open(</span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding=</span><span class="s3">&quot;utf8&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f2:</span>
+            <span class="s1">now = timing.time()</span>
+            <span class="s1">popen = self.popen(</span>
+                <span class="s1">cmdargs</span><span class="s2">,</span>
+                <span class="s1">stdin=stdin</span><span class="s2">,</span>
+                <span class="s1">stdout=f1</span><span class="s2">,</span>
+                <span class="s1">stderr=f2</span><span class="s2">,</span>
+                <span class="s1">close_fds=(sys.platform != </span><span class="s3">&quot;win32&quot;</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">popen.stdin </span><span class="s2">is not None</span><span class="s1">:</span>
+                <span class="s1">popen.stdin.close()</span>
+
+            <span class="s2">def </span><span class="s1">handle_timeout() -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+                <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+
+                <span class="s1">timeout_message = (</span>
+                    <span class="s3">&quot;{seconds} second timeout expired running:&quot;</span>
+                    <span class="s3">&quot; {command}&quot;</span><span class="s1">.format(seconds=timeout</span><span class="s2">, </span><span class="s1">command=cmdargs)</span>
+                <span class="s1">)</span>
+
+                <span class="s1">popen.kill()</span>
+                <span class="s1">popen.wait()</span>
+                <span class="s2">raise </span><span class="s1">self.TimeoutExpired(timeout_message)</span>
+
+            <span class="s2">if </span><span class="s1">timeout </span><span class="s2">is None</span><span class="s1">:</span>
+                <span class="s1">ret = popen.wait()</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">ret = popen.wait(timeout)</span>
+                <span class="s2">except </span><span class="s1">subprocess.TimeoutExpired:</span>
+                    <span class="s1">handle_timeout()</span>
+
+        <span class="s2">with </span><span class="s1">p1.open(encoding=</span><span class="s3">&quot;utf8&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f1</span><span class="s2">, </span><span class="s1">p2.open(encoding=</span><span class="s3">&quot;utf8&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f2:</span>
+            <span class="s1">out = f1.read().splitlines()</span>
+            <span class="s1">err = f2.read().splitlines()</span>
+
+        <span class="s1">self._dump_lines(out</span><span class="s2">, </span><span class="s1">sys.stdout)</span>
+        <span class="s1">self._dump_lines(err</span><span class="s2">, </span><span class="s1">sys.stderr)</span>
+
+        <span class="s2">with </span><span class="s1">contextlib.suppress(ValueError):</span>
+            <span class="s1">ret = ExitCode(ret)</span>
+        <span class="s2">return </span><span class="s1">RunResult(ret</span><span class="s2">, </span><span class="s1">out</span><span class="s2">, </span><span class="s1">err</span><span class="s2">, </span><span class="s1">timing.time() - now)</span>
+
+    <span class="s2">def </span><span class="s1">_dump_lines(self</span><span class="s2">, </span><span class="s1">lines</span><span class="s2">, </span><span class="s1">fp):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">lines:</span>
+                <span class="s1">print(line</span><span class="s2">, </span><span class="s1">file=fp)</span>
+        <span class="s2">except </span><span class="s1">UnicodeEncodeError:</span>
+            <span class="s1">print(</span><span class="s3">f&quot;couldn't print to </span><span class="s2">{</span><span class="s1">fp</span><span class="s2">} </span><span class="s3">because of encoding&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_getpytestargs(self) -&gt; Tuple[str</span><span class="s2">, </span><span class="s1">...]:</span>
+        <span class="s2">return </span><span class="s1">sys.executable</span><span class="s2">, </span><span class="s3">&quot;-mpytest&quot;</span>
+
+    <span class="s2">def </span><span class="s1">runpython(self</span><span class="s2">, </span><span class="s1">script: </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Run a python script using sys.executable as interpreter.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.run(sys.executable</span><span class="s2">, </span><span class="s1">script)</span>
+
+    <span class="s2">def </span><span class="s1">runpython_c(self</span><span class="s2">, </span><span class="s1">command: str) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Run ``python -c &quot;command&quot;``.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.run(sys.executable</span><span class="s2">, </span><span class="s3">&quot;-c&quot;</span><span class="s2">, </span><span class="s1">command)</span>
+
+    <span class="s2">def </span><span class="s1">runpytest_subprocess(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">*args: Union[str</span><span class="s2">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">timeout: Optional[float] = </span><span class="s2">None</span>
+    <span class="s1">) -&gt; RunResult:</span>
+        <span class="s0">&quot;&quot;&quot;Run pytest as a subprocess with given arguments. 
+ 
+        Any plugins added to the :py:attr:`plugins` list will be added using the 
+        ``-p`` command line option.  Additionally ``--basetemp`` is used to put 
+        any temporary files and directories in a numbered directory prefixed 
+        with &quot;runpytest-&quot; to not conflict with the normal numbered pytest 
+        location for temporary files and directories. 
+ 
+        :param args: 
+            The sequence of arguments to pass to the pytest subprocess. 
+        :param timeout: 
+            The period in seconds after which to timeout and raise 
+            :py:class:`Pytester.TimeoutExpired`. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">p = make_numbered_dir(root=self.path</span><span class="s2">, </span><span class="s1">prefix=</span><span class="s3">&quot;runpytest-&quot;</span><span class="s2">, </span><span class="s1">mode=</span><span class="s5">0o700</span><span class="s1">)</span>
+        <span class="s1">args = (</span><span class="s3">&quot;--basetemp=%s&quot; </span><span class="s1">% p</span><span class="s2">,</span><span class="s1">) + args</span>
+        <span class="s1">plugins = [x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.plugins </span><span class="s2">if </span><span class="s1">isinstance(x</span><span class="s2">, </span><span class="s1">str)]</span>
+        <span class="s2">if </span><span class="s1">plugins:</span>
+            <span class="s1">args = (</span><span class="s3">&quot;-p&quot;</span><span class="s2">, </span><span class="s1">plugins[</span><span class="s5">0</span><span class="s1">]) + args</span>
+        <span class="s1">args = self._getpytestargs() + args</span>
+        <span class="s2">return </span><span class="s1">self.run(*args</span><span class="s2">, </span><span class="s1">timeout=timeout)</span>
+
+    <span class="s2">def </span><span class="s1">spawn_pytest(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">string: str</span><span class="s2">, </span><span class="s1">expect_timeout: float = </span><span class="s5">10.0</span>
+    <span class="s1">) -&gt; </span><span class="s3">&quot;pexpect.spawn&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Run pytest using pexpect. 
+ 
+        This makes sure to use the right pytest and sets up the temporary 
+        directory locations. 
+ 
+        The pexpect child is returned. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">basetemp = self.path / </span><span class="s3">&quot;temp-pexpect&quot;</span>
+        <span class="s1">basetemp.mkdir(mode=</span><span class="s5">0o700</span><span class="s1">)</span>
+        <span class="s1">invoke = </span><span class="s3">&quot; &quot;</span><span class="s1">.join(map(str</span><span class="s2">, </span><span class="s1">self._getpytestargs()))</span>
+        <span class="s1">cmd = </span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">invoke</span><span class="s2">} </span><span class="s3">--basetemp=</span><span class="s2">{</span><span class="s1">basetemp</span><span class="s2">} {</span><span class="s1">string</span><span class="s2">}</span><span class="s3">&quot;</span>
+        <span class="s2">return </span><span class="s1">self.spawn(cmd</span><span class="s2">, </span><span class="s1">expect_timeout=expect_timeout)</span>
+
+    <span class="s2">def </span><span class="s1">spawn(self</span><span class="s2">, </span><span class="s1">cmd: str</span><span class="s2">, </span><span class="s1">expect_timeout: float = </span><span class="s5">10.0</span><span class="s1">) -&gt; </span><span class="s3">&quot;pexpect.spawn&quot;</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Run a command using pexpect. 
+ 
+        The pexpect child is returned. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">pexpect = importorskip(</span><span class="s3">&quot;pexpect&quot;</span><span class="s2">, </span><span class="s3">&quot;3.0&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">hasattr(sys</span><span class="s2">, </span><span class="s3">&quot;pypy_version_info&quot;</span><span class="s1">) </span><span class="s2">and </span><span class="s3">&quot;64&quot; </span><span class="s2">in </span><span class="s1">platform.machine():</span>
+            <span class="s1">skip(</span><span class="s3">&quot;pypy-64 bit not supported&quot;</span><span class="s1">)</span>
+        <span class="s2">if not </span><span class="s1">hasattr(pexpect</span><span class="s2">, </span><span class="s3">&quot;spawn&quot;</span><span class="s1">):</span>
+            <span class="s1">skip(</span><span class="s3">&quot;pexpect.spawn not available&quot;</span><span class="s1">)</span>
+        <span class="s1">logfile = self.path.joinpath(</span><span class="s3">&quot;spawn.out&quot;</span><span class="s1">).open(</span><span class="s3">&quot;wb&quot;</span><span class="s1">)</span>
+
+        <span class="s1">child = pexpect.spawn(cmd</span><span class="s2">, </span><span class="s1">logfile=logfile</span><span class="s2">, </span><span class="s1">timeout=expect_timeout)</span>
+        <span class="s1">self._request.addfinalizer(logfile.close)</span>
+        <span class="s2">return </span><span class="s1">child</span>
+
+
+<span class="s2">class </span><span class="s1">LineComp:</span>
+    <span class="s2">def </span><span class="s1">__init__(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.stringio = StringIO()</span>
+        <span class="s3">&quot;&quot;&quot;:class:`python:io.StringIO()` instance used for input.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">assert_contains_lines(self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Assert that ``lines2`` are contained (linearly) in :attr:`stringio`'s value. 
+ 
+        Lines are matched using :func:`LineMatcher.fnmatch_lines &lt;pytest.LineMatcher.fnmatch_lines&gt;`. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">val = self.stringio.getvalue()</span>
+        <span class="s1">self.stringio.truncate(</span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.stringio.seek(</span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">lines1 = val.split(</span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s1">LineMatcher(lines1).fnmatch_lines(lines2)</span>
+
+
+<span class="s2">class </span><span class="s1">LineMatcher:</span>
+    <span class="s0">&quot;&quot;&quot;Flexible matching of text. 
+ 
+    This is a convenience class to test large texts like the output of 
+    commands. 
+ 
+    The constructor takes a list of lines without their trailing newlines, i.e. 
+    ``text.splitlines()``. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">lines: List[str]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.lines = lines</span>
+        <span class="s1">self._log_output: List[str] = []</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self) -&gt; str:</span>
+        <span class="s0">&quot;&quot;&quot;Return the entire original text. 
+ 
+        .. versionadded:: 6.2 
+            You can use :meth:`str` in older versions. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(self.lines)</span>
+
+    <span class="s2">def </span><span class="s1">_getlines(self</span><span class="s2">, </span><span class="s1">lines2: Union[str</span><span class="s2">, </span><span class="s1">Sequence[str]</span><span class="s2">, </span><span class="s1">Source]) -&gt; Sequence[str]:</span>
+        <span class="s2">if </span><span class="s1">isinstance(lines2</span><span class="s2">, </span><span class="s1">str):</span>
+            <span class="s1">lines2 = Source(lines2)</span>
+        <span class="s2">if </span><span class="s1">isinstance(lines2</span><span class="s2">, </span><span class="s1">Source):</span>
+            <span class="s1">lines2 = lines2.strip().lines</span>
+        <span class="s2">return </span><span class="s1">lines2</span>
+
+    <span class="s2">def </span><span class="s1">fnmatch_lines_random(self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Check lines exist in the output in any order (using :func:`python:fnmatch.fnmatch`).&quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._match_lines_random(lines2</span><span class="s2">, </span><span class="s1">fnmatch)</span>
+
+    <span class="s2">def </span><span class="s1">re_match_lines_random(self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Check lines exist in the output in any order (using :func:`python:re.match`).&quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._match_lines_random(lines2</span><span class="s2">, lambda </span><span class="s1">name</span><span class="s2">, </span><span class="s1">pat: bool(re.match(pat</span><span class="s2">, </span><span class="s1">name)))</span>
+
+    <span class="s2">def </span><span class="s1">_match_lines_random(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]</span><span class="s2">, </span><span class="s1">match_func: Callable[[str</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">, </span><span class="s1">bool]</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">lines2 = self._getlines(lines2)</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">lines2:</span>
+            <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">self.lines:</span>
+                <span class="s2">if </span><span class="s1">line == x </span><span class="s2">or </span><span class="s1">match_func(x</span><span class="s2">, </span><span class="s1">line):</span>
+                    <span class="s1">self._log(</span><span class="s3">&quot;matched: &quot;</span><span class="s2">, </span><span class="s1">repr(line))</span>
+                    <span class="s2">break</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">msg = </span><span class="s3">&quot;line %r not found in output&quot; </span><span class="s1">% line</span>
+                <span class="s1">self._log(msg)</span>
+                <span class="s1">self._fail(msg)</span>
+
+    <span class="s2">def </span><span class="s1">get_lines_after(self</span><span class="s2">, </span><span class="s1">fnline: str) -&gt; Sequence[str]:</span>
+        <span class="s0">&quot;&quot;&quot;Return all lines following the given line in the text. 
+ 
+        The given line can contain glob wildcards. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">line </span><span class="s2">in </span><span class="s1">enumerate(self.lines):</span>
+            <span class="s2">if </span><span class="s1">fnline == line </span><span class="s2">or </span><span class="s1">fnmatch(line</span><span class="s2">, </span><span class="s1">fnline):</span>
+                <span class="s2">return </span><span class="s1">self.lines[i + </span><span class="s5">1 </span><span class="s1">:]</span>
+        <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s3">&quot;line %r not found in output&quot; </span><span class="s1">% fnline)</span>
+
+    <span class="s2">def </span><span class="s1">_log(self</span><span class="s2">, </span><span class="s1">*args) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self._log_output.append(</span><span class="s3">&quot; &quot;</span><span class="s1">.join(str(x) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">args))</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">_log_text(self) -&gt; str:</span>
+        <span class="s2">return </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(self._log_output)</span>
+
+    <span class="s2">def </span><span class="s1">fnmatch_lines(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">consecutive: bool = </span><span class="s2">False</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Check lines exist in the output (using :func:`python:fnmatch.fnmatch`). 
+ 
+        The argument is a list of lines which have to match and can use glob 
+        wildcards.  If they do not match a pytest.fail() is called.  The 
+        matches and non-matches are also shown as part of the error message. 
+ 
+        :param lines2: String patterns to match. 
+        :param consecutive: Match lines consecutively? 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._match_lines(lines2</span><span class="s2">, </span><span class="s1">fnmatch</span><span class="s2">, </span><span class="s3">&quot;fnmatch&quot;</span><span class="s2">, </span><span class="s1">consecutive=consecutive)</span>
+
+    <span class="s2">def </span><span class="s1">re_match_lines(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">lines2: Sequence[str]</span><span class="s2">, </span><span class="s1">*</span><span class="s2">, </span><span class="s1">consecutive: bool = </span><span class="s2">False</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Check lines exist in the output (using :func:`python:re.match`). 
+ 
+        The argument is a list of lines which have to match using ``re.match``. 
+        If they do not match a pytest.fail() is called. 
+ 
+        The matches and non-matches are also shown as part of the error message. 
+ 
+        :param lines2: string patterns to match. 
+        :param consecutive: match lines consecutively? 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._match_lines(</span>
+            <span class="s1">lines2</span><span class="s2">,</span>
+            <span class="s2">lambda </span><span class="s1">name</span><span class="s2">, </span><span class="s1">pat: bool(re.match(pat</span><span class="s2">, </span><span class="s1">name))</span><span class="s2">,</span>
+            <span class="s3">&quot;re.match&quot;</span><span class="s2">,</span>
+            <span class="s1">consecutive=consecutive</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_match_lines(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">lines2: Sequence[str]</span><span class="s2">,</span>
+        <span class="s1">match_func: Callable[[str</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">, </span><span class="s1">bool]</span><span class="s2">,</span>
+        <span class="s1">match_nickname: str</span><span class="s2">,</span>
+        <span class="s1">*</span><span class="s2">,</span>
+        <span class="s1">consecutive: bool = </span><span class="s2">False,</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Underlying implementation of ``fnmatch_lines`` and ``re_match_lines``. 
+ 
+        :param Sequence[str] lines2: 
+            List of string patterns to match. The actual format depends on 
+            ``match_func``. 
+        :param match_func: 
+            A callable ``match_func(line, pattern)`` where line is the 
+            captured line from stdout/stderr and pattern is the matching 
+            pattern. 
+        :param str match_nickname: 
+            The nickname for the match function that will be logged to stdout 
+            when a match occurs. 
+        :param consecutive: 
+            Match lines consecutively? 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">isinstance(lines2</span><span class="s2">, </span><span class="s1">collections.abc.Sequence):</span>
+            <span class="s2">raise </span><span class="s1">TypeError(</span><span class="s3">f&quot;invalid type for lines2: </span><span class="s2">{</span><span class="s1">type(lines2).__name__</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s1">lines2 = self._getlines(lines2)</span>
+        <span class="s1">lines1 = self.lines[:]</span>
+        <span class="s1">extralines = []</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">wnick = len(match_nickname) + </span><span class="s5">1</span>
+        <span class="s1">started = </span><span class="s2">False</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">lines2:</span>
+            <span class="s1">nomatchprinted = </span><span class="s2">False</span>
+            <span class="s2">while </span><span class="s1">lines1:</span>
+                <span class="s1">nextline = lines1.pop(</span><span class="s5">0</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">line == nextline:</span>
+                    <span class="s1">self._log(</span><span class="s3">&quot;exact match:&quot;</span><span class="s2">, </span><span class="s1">repr(line))</span>
+                    <span class="s1">started = </span><span class="s2">True</span>
+                    <span class="s2">break</span>
+                <span class="s2">elif </span><span class="s1">match_func(nextline</span><span class="s2">, </span><span class="s1">line):</span>
+                    <span class="s1">self._log(</span><span class="s3">&quot;%s:&quot; </span><span class="s1">% match_nickname</span><span class="s2">, </span><span class="s1">repr(line))</span>
+                    <span class="s1">self._log(</span>
+                        <span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;with:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(nextline)</span>
+                    <span class="s1">)</span>
+                    <span class="s1">started = </span><span class="s2">True</span>
+                    <span class="s2">break</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s2">if </span><span class="s1">consecutive </span><span class="s2">and </span><span class="s1">started:</span>
+                        <span class="s1">msg = </span><span class="s3">f&quot;no consecutive match: </span><span class="s2">{</span><span class="s1">line</span><span class="s2">!r}</span><span class="s3">&quot;</span>
+                        <span class="s1">self._log(msg)</span>
+                        <span class="s1">self._log(</span>
+                            <span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;with:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(nextline)</span>
+                        <span class="s1">)</span>
+                        <span class="s1">self._fail(msg)</span>
+                    <span class="s2">if not </span><span class="s1">nomatchprinted:</span>
+                        <span class="s1">self._log(</span>
+                            <span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;nomatch:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(line)</span>
+                        <span class="s1">)</span>
+                        <span class="s1">nomatchprinted = </span><span class="s2">True</span>
+                    <span class="s1">self._log(</span><span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;and:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(nextline))</span>
+                <span class="s1">extralines.append(nextline)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">msg = </span><span class="s3">f&quot;remains unmatched: </span><span class="s2">{</span><span class="s1">line</span><span class="s2">!r}</span><span class="s3">&quot;</span>
+                <span class="s1">self._log(msg)</span>
+                <span class="s1">self._fail(msg)</span>
+        <span class="s1">self._log_output = []</span>
+
+    <span class="s2">def </span><span class="s1">no_fnmatch_line(self</span><span class="s2">, </span><span class="s1">pat: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Ensure captured lines do not match the given pattern, using ``fnmatch.fnmatch``. 
+ 
+        :param str pat: The pattern to match lines. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._no_match_line(pat</span><span class="s2">, </span><span class="s1">fnmatch</span><span class="s2">, </span><span class="s3">&quot;fnmatch&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">no_re_match_line(self</span><span class="s2">, </span><span class="s1">pat: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Ensure captured lines do not match the given pattern, using ``re.match``. 
+ 
+        :param str pat: The regular expression to match lines. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">self._no_match_line(</span>
+            <span class="s1">pat</span><span class="s2">, lambda </span><span class="s1">name</span><span class="s2">, </span><span class="s1">pat: bool(re.match(pat</span><span class="s2">, </span><span class="s1">name))</span><span class="s2">, </span><span class="s3">&quot;re.match&quot;</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_no_match_line(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">pat: str</span><span class="s2">, </span><span class="s1">match_func: Callable[[str</span><span class="s2">, </span><span class="s1">str]</span><span class="s2">, </span><span class="s1">bool]</span><span class="s2">, </span><span class="s1">match_nickname: str</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Ensure captured lines does not have a the given pattern, using ``fnmatch.fnmatch``. 
+ 
+        :param str pat: The pattern to match lines. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">nomatch_printed = </span><span class="s2">False</span>
+        <span class="s1">wnick = len(match_nickname) + </span><span class="s5">1</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">self.lines:</span>
+            <span class="s2">if </span><span class="s1">match_func(line</span><span class="s2">, </span><span class="s1">pat):</span>
+                <span class="s1">msg = </span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s1">match_nickname</span><span class="s2">}</span><span class="s3">: </span><span class="s2">{</span><span class="s1">pat</span><span class="s2">!r}</span><span class="s3">&quot;</span>
+                <span class="s1">self._log(msg)</span>
+                <span class="s1">self._log(</span><span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;with:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(line))</span>
+                <span class="s1">self._fail(msg)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">if not </span><span class="s1">nomatch_printed:</span>
+                    <span class="s1">self._log(</span><span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;nomatch:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(pat))</span>
+                    <span class="s1">nomatch_printed = </span><span class="s2">True</span>
+                <span class="s1">self._log(</span><span class="s3">&quot;{:&gt;{width}}&quot;</span><span class="s1">.format(</span><span class="s3">&quot;and:&quot;</span><span class="s2">, </span><span class="s1">width=wnick)</span><span class="s2">, </span><span class="s1">repr(line))</span>
+        <span class="s1">self._log_output = []</span>
+
+    <span class="s2">def </span><span class="s1">_fail(self</span><span class="s2">, </span><span class="s1">msg: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s2">True</span>
+        <span class="s1">log_text = self._log_text</span>
+        <span class="s1">self._log_output = []</span>
+        <span class="s1">fail(log_text)</span>
+
+    <span class="s2">def </span><span class="s1">str(self) -&gt; str:</span>
+        <span class="s0">&quot;&quot;&quot;Return the entire original text.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">str(self)</span>
+</pre>
+</body>
+</html>

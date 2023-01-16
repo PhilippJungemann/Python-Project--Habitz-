@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>_collections.py.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #e8bf6a;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #bababa;}
+.s3 { color: #a5c261;}
+.s4 { color: #6d9cbe;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_collections.py.html</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;html&gt;</span>
+<span class="s0">&lt;head&gt;</span>
+<span class="s0">&lt;title&gt;</span><span class="s1">_collections.py</span><span class="s0">&lt;/title&gt;</span>
+<span class="s0">&lt;meta </span><span class="s2">http-equiv</span><span class="s3">=&quot;Content-Type&quot; </span><span class="s2">content</span><span class="s3">=&quot;text/html; charset=utf-8&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;style </span><span class="s2">type</span><span class="s3">=&quot;text/css&quot;</span><span class="s0">&gt;</span>
+<span class="s1">.s0 { color: #cc7832;}</span>
+<span class="s1">.s1 { color: #a9b7c6;}</span>
+<span class="s1">.s2 { color: #808080;}</span>
+<span class="s1">.s3 { color: #629755; font-style: italic;}</span>
+<span class="s0">&lt;/style&gt;</span>
+<span class="s0">&lt;/head&gt;</span>
+<span class="s0">&lt;body </span><span class="s2">bgcolor</span><span class="s3">=&quot;#2b2b2b&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;table </span><span class="s2">CELLSPACING</span><span class="s3">=0 </span><span class="s2">CELLPADDING</span><span class="s3">=5 </span><span class="s2">COLS</span><span class="s3">=1 </span><span class="s2">WIDTH</span><span class="s3">=&quot;100%&quot; </span><span class="s2">BGCOLOR</span><span class="s3">=&quot;#606060&quot; </span><span class="s0">&gt;</span>
+<span class="s0">&lt;tr&gt;&lt;td&gt;&lt;center&gt;</span>
+<span class="s0">&lt;font </span><span class="s2">face</span><span class="s3">=&quot;Arial, Helvetica&quot; </span><span class="s2">color</span><span class="s3">=&quot;#000000&quot;</span><span class="s0">&gt;</span>
+<span class="s1">_collections.py</span><span class="s0">&lt;/font&gt;</span>
+<span class="s0">&lt;/center&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</span>
+<span class="s0">&lt;pre&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">collections</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">itertools</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1"># from jaraco.collections 3.5.1</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">DictStack(list</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">collections.abc.Mapping):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">A stack of dictionaries that behaves as a view on those dictionaries, </span>
+    <span class="s1">giving preference to the last. </span>
+ 
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack = DictStack([dict(a=1, c=2), dict(b=2, a=2)]) </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['a'] </span>
+    <span class="s1">2 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['b'] </span>
+    <span class="s1">2 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['c'] </span>
+    <span class="s1">2 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">len(stack) </span>
+    <span class="s1">3 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack.push(dict(a=3)) </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['a'] </span>
+    <span class="s1">3 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">set(stack.keys()) == set(['a', 'b', 'c']) </span>
+    <span class="s1">True </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">set(stack.items()) == set([('a', 3), ('b', 2), ('c', 2)]) </span>
+    <span class="s1">True </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">dict(**stack) == dict(stack) == dict(a=3, c=2, b=2) </span>
+    <span class="s1">True </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">d = stack.pop() </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['a'] </span>
+    <span class="s1">2 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">d = stack.pop() </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack['a'] </span>
+    <span class="s1">1 </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">stack.get('b', None) </span>
+    <span class="s4">&amp;gt;&amp;gt;&amp;gt; </span><span class="s1">'c' in stack </span>
+    <span class="s1">True </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__iter__(self):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">dicts = list.__iter__(self)</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">iter(set(itertools.chain.from_iterable(c.keys() </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">for </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">c </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">in </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">dicts)))</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__getitem__(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">key):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">for </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">scope </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">in </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">reversed(tuple(list.__iter__(self))):</span><span class="s0">&lt;/span&gt;</span>
+            <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">if </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">key </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">in </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">scope:</span><span class="s0">&lt;/span&gt;</span>
+                <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">scope[key]</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">KeyError(key)</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">push = list.append</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__contains__(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">other):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">collections.abc.Mapping.__contains__(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">other)</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__len__(self):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">len(list(iter(self)))</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;/pre&gt;</span>
+<span class="s0">&lt;/body&gt;</span>
+<span class="s0">&lt;/html&gt;</span></pre>
+</body>
+</html>

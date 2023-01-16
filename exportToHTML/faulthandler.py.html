@@ -1,0 +1,119 @@
+<html>
+<head>
+<title>faulthandler.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+faulthandler.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">io</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Generator</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TextIO</span>
+
+<span class="s0">import </span><span class="s1">pytest</span>
+<span class="s0">from </span><span class="s1">_pytest.config </span><span class="s0">import </span><span class="s1">Config</span>
+<span class="s0">from </span><span class="s1">_pytest.config.argparsing </span><span class="s0">import </span><span class="s1">Parser</span>
+<span class="s0">from </span><span class="s1">_pytest.nodes </span><span class="s0">import </span><span class="s1">Item</span>
+<span class="s0">from </span><span class="s1">_pytest.stash </span><span class="s0">import </span><span class="s1">StashKey</span>
+
+
+<span class="s1">fault_handler_stderr_key = StashKey[TextIO]()</span>
+<span class="s1">fault_handler_originally_enabled_key = StashKey[bool]()</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s1">help = (</span>
+        <span class="s2">&quot;Dump the traceback of all threads if a test takes &quot;</span>
+        <span class="s2">&quot;more than TIMEOUT seconds to finish.&quot;</span>
+    <span class="s1">)</span>
+    <span class="s1">parser.addini(</span><span class="s2">&quot;faulthandler_timeout&quot;</span><span class="s0">, </span><span class="s1">help</span><span class="s0">, </span><span class="s1">default=</span><span class="s3">0.0</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_configure(config: Config) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">faulthandler</span>
+
+    <span class="s1">stderr_fd_copy = os.dup(get_stderr_fileno())</span>
+    <span class="s1">config.stash[fault_handler_stderr_key] = open(stderr_fd_copy</span><span class="s0">, </span><span class="s2">&quot;w&quot;</span><span class="s1">)</span>
+    <span class="s1">config.stash[fault_handler_originally_enabled_key] = faulthandler.is_enabled()</span>
+    <span class="s1">faulthandler.enable(file=config.stash[fault_handler_stderr_key])</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_unconfigure(config: Config) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">faulthandler</span>
+
+    <span class="s1">faulthandler.disable()</span>
+    <span class="s4"># Close the dup file installed during pytest_configure.</span>
+    <span class="s0">if </span><span class="s1">fault_handler_stderr_key </span><span class="s0">in </span><span class="s1">config.stash:</span>
+        <span class="s1">config.stash[fault_handler_stderr_key].close()</span>
+        <span class="s0">del </span><span class="s1">config.stash[fault_handler_stderr_key]</span>
+    <span class="s0">if </span><span class="s1">config.stash.get(fault_handler_originally_enabled_key</span><span class="s0">, False</span><span class="s1">):</span>
+        <span class="s4"># Re-enable the faulthandler if it was originally enabled.</span>
+        <span class="s1">faulthandler.enable(file=get_stderr_fileno())</span>
+
+
+<span class="s0">def </span><span class="s1">get_stderr_fileno() -&gt; int:</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">fileno = sys.stderr.fileno()</span>
+        <span class="s4"># The Twisted Logger will return an invalid file descriptor since it is not backed</span>
+        <span class="s4"># by an FD. So, let's also forward this to the same code path as with pytest-xdist.</span>
+        <span class="s0">if </span><span class="s1">fileno == -</span><span class="s3">1</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">AttributeError()</span>
+        <span class="s0">return </span><span class="s1">fileno</span>
+    <span class="s0">except </span><span class="s1">(AttributeError</span><span class="s0">, </span><span class="s1">io.UnsupportedOperation):</span>
+        <span class="s4"># pytest-xdist monkeypatches sys.stderr with an object that is not an actual file.</span>
+        <span class="s4"># https://docs.python.org/3/library/faulthandler.html#issue-with-file-descriptors</span>
+        <span class="s4"># This is potentially dangerous, but the best we can do.</span>
+        <span class="s0">return </span><span class="s1">sys.__stderr__.fileno()</span>
+
+
+<span class="s0">def </span><span class="s1">get_timeout_config_value(config: Config) -&gt; float:</span>
+    <span class="s0">return </span><span class="s1">float(config.getini(</span><span class="s2">&quot;faulthandler_timeout&quot;</span><span class="s1">) </span><span class="s0">or </span><span class="s3">0.0</span><span class="s1">)</span>
+
+
+<span class="s1">@pytest.hookimpl(hookwrapper=</span><span class="s0">True, </span><span class="s1">trylast=</span><span class="s0">True</span><span class="s1">)</span>
+<span class="s0">def </span><span class="s1">pytest_runtest_protocol(item: Item) -&gt; Generator[</span><span class="s0">None, None, None</span><span class="s1">]:</span>
+    <span class="s1">timeout = get_timeout_config_value(item.config)</span>
+    <span class="s1">stderr = item.config.stash[fault_handler_stderr_key]</span>
+    <span class="s0">if </span><span class="s1">timeout &gt; </span><span class="s3">0 </span><span class="s0">and </span><span class="s1">stderr </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s0">import </span><span class="s1">faulthandler</span>
+
+        <span class="s1">faulthandler.dump_traceback_later(timeout</span><span class="s0">, </span><span class="s1">file=stderr)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">yield</span>
+        <span class="s0">finally</span><span class="s1">:</span>
+            <span class="s1">faulthandler.cancel_dump_traceback_later()</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">yield</span>
+
+
+<span class="s1">@pytest.hookimpl(tryfirst=</span><span class="s0">True</span><span class="s1">)</span>
+<span class="s0">def </span><span class="s1">pytest_enter_pdb() -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Cancel any traceback dumping due to timeout before entering pdb.&quot;&quot;&quot;</span>
+    <span class="s0">import </span><span class="s1">faulthandler</span>
+
+    <span class="s1">faulthandler.cancel_dump_traceback_later()</span>
+
+
+<span class="s1">@pytest.hookimpl(tryfirst=</span><span class="s0">True</span><span class="s1">)</span>
+<span class="s0">def </span><span class="s1">pytest_exception_interact() -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Cancel any traceback dumping due to an interactive exception being 
+    raised.&quot;&quot;&quot;</span>
+    <span class="s0">import </span><span class="s1">faulthandler</span>
+
+    <span class="s1">faulthandler.cancel_dump_traceback_later()</span>
+</pre>
+</body>
+</html>

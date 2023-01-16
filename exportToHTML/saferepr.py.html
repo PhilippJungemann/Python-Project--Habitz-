@@ -1,0 +1,175 @@
+<html>
+<head>
+<title>saferepr.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+saferepr.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">pprint</span>
+<span class="s0">import </span><span class="s1">reprlib</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Dict</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">IO</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+
+
+<span class="s0">def </span><span class="s1">_try_repr_or_str(obj: object) -&gt; str:</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">repr(obj)</span>
+    <span class="s0">except </span><span class="s1">(KeyboardInterrupt</span><span class="s0">, </span><span class="s1">SystemExit):</span>
+        <span class="s0">raise</span>
+    <span class="s0">except </span><span class="s1">BaseException:</span>
+        <span class="s0">return </span><span class="s2">f'</span><span class="s0">{</span><span class="s1">type(obj).__name__</span><span class="s0">}</span><span class="s2">(&quot;</span><span class="s0">{</span><span class="s1">obj</span><span class="s0">}</span><span class="s2">&quot;)'</span>
+
+
+<span class="s0">def </span><span class="s1">_format_repr_exception(exc: BaseException</span><span class="s0">, </span><span class="s1">obj: object) -&gt; str:</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">exc_info = _try_repr_or_str(exc)</span>
+    <span class="s0">except </span><span class="s1">(KeyboardInterrupt</span><span class="s0">, </span><span class="s1">SystemExit):</span>
+        <span class="s0">raise</span>
+    <span class="s0">except </span><span class="s1">BaseException </span><span class="s0">as </span><span class="s1">exc:</span>
+        <span class="s1">exc_info = </span><span class="s2">f&quot;unpresentable exception (</span><span class="s0">{</span><span class="s1">_try_repr_or_str(exc)</span><span class="s0">}</span><span class="s2">)&quot;</span>
+    <span class="s0">return </span><span class="s2">&quot;&lt;[{} raised in repr()] {} object at 0x{:x}&gt;&quot;</span><span class="s1">.format(</span>
+        <span class="s1">exc_info</span><span class="s0">, </span><span class="s1">type(obj).__name__</span><span class="s0">, </span><span class="s1">id(obj)</span>
+    <span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">_ellipsize(s: str</span><span class="s0">, </span><span class="s1">maxsize: int) -&gt; str:</span>
+    <span class="s0">if </span><span class="s1">len(s) &gt; maxsize:</span>
+        <span class="s1">i = max(</span><span class="s3">0</span><span class="s0">, </span><span class="s1">(maxsize - </span><span class="s3">3</span><span class="s1">) // </span><span class="s3">2</span><span class="s1">)</span>
+        <span class="s1">j = max(</span><span class="s3">0</span><span class="s0">, </span><span class="s1">maxsize - </span><span class="s3">3 </span><span class="s1">- i)</span>
+        <span class="s0">return </span><span class="s1">s[:i] + </span><span class="s2">&quot;...&quot; </span><span class="s1">+ s[len(s) - j :]</span>
+    <span class="s0">return </span><span class="s1">s</span>
+
+
+<span class="s0">class </span><span class="s1">SafeRepr(reprlib.Repr):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    repr.Repr that limits the resulting size of repr() and includes 
+    information on exceptions raised during the call. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">maxsize: Optional[int]) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s4">&quot;&quot;&quot; 
+        :param maxsize: 
+            If not None, will truncate the resulting repr to that specific size, using ellipsis 
+            somewhere in the middle to hide the extra text. 
+            If None, will not impose any size limits on the returning repr. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">super().__init__()</span>
+        <span class="s5"># ``maxstring`` is used by the superclass, and needs to be an int; using a</span>
+        <span class="s5"># very large number in case maxsize is None, meaning we want to disable</span>
+        <span class="s5"># truncation.</span>
+        <span class="s1">self.maxstring = maxsize </span><span class="s0">if </span><span class="s1">maxsize </span><span class="s0">is not None else </span><span class="s3">1_000_000_000</span>
+        <span class="s1">self.maxsize = maxsize</span>
+
+    <span class="s0">def </span><span class="s1">repr(self</span><span class="s0">, </span><span class="s1">x: object) -&gt; str:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">s = super().repr(x)</span>
+        <span class="s0">except </span><span class="s1">(KeyboardInterrupt</span><span class="s0">, </span><span class="s1">SystemExit):</span>
+            <span class="s0">raise</span>
+        <span class="s0">except </span><span class="s1">BaseException </span><span class="s0">as </span><span class="s1">exc:</span>
+            <span class="s1">s = _format_repr_exception(exc</span><span class="s0">, </span><span class="s1">x)</span>
+        <span class="s0">if </span><span class="s1">self.maxsize </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">s = _ellipsize(s</span><span class="s0">, </span><span class="s1">self.maxsize)</span>
+        <span class="s0">return </span><span class="s1">s</span>
+
+    <span class="s0">def </span><span class="s1">repr_instance(self</span><span class="s0">, </span><span class="s1">x: object</span><span class="s0">, </span><span class="s1">level: int) -&gt; str:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">s = repr(x)</span>
+        <span class="s0">except </span><span class="s1">(KeyboardInterrupt</span><span class="s0">, </span><span class="s1">SystemExit):</span>
+            <span class="s0">raise</span>
+        <span class="s0">except </span><span class="s1">BaseException </span><span class="s0">as </span><span class="s1">exc:</span>
+            <span class="s1">s = _format_repr_exception(exc</span><span class="s0">, </span><span class="s1">x)</span>
+        <span class="s0">if </span><span class="s1">self.maxsize </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">s = _ellipsize(s</span><span class="s0">, </span><span class="s1">self.maxsize)</span>
+        <span class="s0">return </span><span class="s1">s</span>
+
+
+<span class="s0">def </span><span class="s1">safeformat(obj: object) -&gt; str:</span>
+    <span class="s4">&quot;&quot;&quot;Return a pretty printed string for the given object. 
+ 
+    Failing __repr__ functions of user instances will be represented 
+    with a short exception info. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">pprint.pformat(obj)</span>
+    <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc:</span>
+        <span class="s0">return </span><span class="s1">_format_repr_exception(exc</span><span class="s0">, </span><span class="s1">obj)</span>
+
+
+<span class="s5"># Maximum size of overall repr of objects to display during assertion errors.</span>
+<span class="s1">DEFAULT_REPR_MAX_SIZE = </span><span class="s3">240</span>
+
+
+<span class="s0">def </span><span class="s1">saferepr(obj: object</span><span class="s0">, </span><span class="s1">maxsize: Optional[int] = DEFAULT_REPR_MAX_SIZE) -&gt; str:</span>
+    <span class="s4">&quot;&quot;&quot;Return a size-limited safe repr-string for the given object. 
+ 
+    Failing __repr__ functions of user instances will be represented 
+    with a short exception info and 'saferepr' generally takes 
+    care to never raise exceptions itself. 
+ 
+    This function is a wrapper around the Repr/reprlib functionality of the 
+    stdlib. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">SafeRepr(maxsize).repr(obj)</span>
+
+
+<span class="s0">class </span><span class="s1">AlwaysDispatchingPrettyPrinter(pprint.PrettyPrinter):</span>
+    <span class="s4">&quot;&quot;&quot;PrettyPrinter that always dispatches (regardless of width).&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_format(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">object: object</span><span class="s0">,</span>
+        <span class="s1">stream: IO[str]</span><span class="s0">,</span>
+        <span class="s1">indent: int</span><span class="s0">,</span>
+        <span class="s1">allowance: int</span><span class="s0">,</span>
+        <span class="s1">context: Dict[int</span><span class="s0">, </span><span class="s1">Any]</span><span class="s0">,</span>
+        <span class="s1">level: int</span><span class="s0">,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s5"># Type ignored because _dispatch is private.</span>
+        <span class="s1">p = self._dispatch.get(type(object).__repr__</span><span class="s0">, None</span><span class="s1">)  </span><span class="s5"># type: ignore[attr-defined]</span>
+
+        <span class="s1">objid = id(object)</span>
+        <span class="s0">if </span><span class="s1">objid </span><span class="s0">in </span><span class="s1">context </span><span class="s0">or </span><span class="s1">p </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s5"># Type ignored because _format is private.</span>
+            <span class="s1">super()._format(  </span><span class="s5"># type: ignore[misc]</span>
+                <span class="s1">object</span><span class="s0">,</span>
+                <span class="s1">stream</span><span class="s0">,</span>
+                <span class="s1">indent</span><span class="s0">,</span>
+                <span class="s1">allowance</span><span class="s0">,</span>
+                <span class="s1">context</span><span class="s0">,</span>
+                <span class="s1">level</span><span class="s0">,</span>
+            <span class="s1">)</span>
+            <span class="s0">return</span>
+
+        <span class="s1">context[objid] = </span><span class="s3">1</span>
+        <span class="s1">p(self</span><span class="s0">, </span><span class="s1">object</span><span class="s0">, </span><span class="s1">stream</span><span class="s0">, </span><span class="s1">indent</span><span class="s0">, </span><span class="s1">allowance</span><span class="s0">, </span><span class="s1">context</span><span class="s0">, </span><span class="s1">level + </span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s0">del </span><span class="s1">context[objid]</span>
+
+
+<span class="s0">def </span><span class="s1">_pformat_dispatch(</span>
+    <span class="s1">object: object</span><span class="s0">,</span>
+    <span class="s1">indent: int = </span><span class="s3">1</span><span class="s0">,</span>
+    <span class="s1">width: int = </span><span class="s3">80</span><span class="s0">,</span>
+    <span class="s1">depth: Optional[int] = </span><span class="s0">None,</span>
+    <span class="s1">*</span><span class="s0">,</span>
+    <span class="s1">compact: bool = </span><span class="s0">False,</span>
+<span class="s1">) -&gt; str:</span>
+    <span class="s0">return </span><span class="s1">AlwaysDispatchingPrettyPrinter(</span>
+        <span class="s1">indent=indent</span><span class="s0">, </span><span class="s1">width=width</span><span class="s0">, </span><span class="s1">depth=depth</span><span class="s0">, </span><span class="s1">compact=compact</span>
+    <span class="s1">).pformat(object)</span>
+</pre>
+</body>
+</html>

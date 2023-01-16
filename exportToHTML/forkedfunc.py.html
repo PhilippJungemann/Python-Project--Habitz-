@@ -1,0 +1,142 @@
+<html>
+<head>
+<title>forkedfunc.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+.s1 { color: #629755; font-style: italic;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+forkedfunc.py</font>
+</center></td></tr></table>
+<pre>
+<span class="s1">&quot;&quot;&quot; 
+    ForkedFunc provides a way to run a function in a forked process 
+    and get at its return value, stdout and stderr output as well 
+    as signals and exitstatusus. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s0">py</span>
+<span class="s2">import </span><span class="s0">os</span>
+<span class="s2">import </span><span class="s0">sys</span>
+<span class="s2">import </span><span class="s0">marshal</span>
+
+
+<span class="s2">def </span><span class="s0">get_unbuffered_io(fd</span><span class="s2">, </span><span class="s0">filename):</span>
+    <span class="s0">f = open(str(filename)</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s0">)</span>
+    <span class="s2">if </span><span class="s0">fd != f.fileno():</span>
+        <span class="s0">os.dup2(f.fileno()</span><span class="s2">, </span><span class="s0">fd)</span>
+    <span class="s2">class </span><span class="s0">AutoFlush:</span>
+        <span class="s2">def </span><span class="s0">write(self</span><span class="s2">, </span><span class="s0">data):</span>
+            <span class="s0">f.write(data)</span>
+            <span class="s0">f.flush()</span>
+        <span class="s2">def </span><span class="s0">__getattr__(self</span><span class="s2">, </span><span class="s0">name):</span>
+            <span class="s2">return </span><span class="s0">getattr(f</span><span class="s2">, </span><span class="s0">name)</span>
+    <span class="s2">return </span><span class="s0">AutoFlush()</span>
+
+
+<span class="s2">class </span><span class="s0">ForkedFunc:</span>
+    <span class="s0">EXITSTATUS_EXCEPTION = </span><span class="s4">3</span>
+
+
+    <span class="s2">def </span><span class="s0">__init__(self</span><span class="s2">, </span><span class="s0">fun</span><span class="s2">, </span><span class="s0">args=</span><span class="s2">None, </span><span class="s0">kwargs=</span><span class="s2">None, </span><span class="s0">nice_level=</span><span class="s4">0</span><span class="s2">,</span>
+                 <span class="s0">child_on_start=</span><span class="s2">None, </span><span class="s0">child_on_exit=</span><span class="s2">None</span><span class="s0">):</span>
+        <span class="s2">if </span><span class="s0">args </span><span class="s2">is None</span><span class="s0">:</span>
+            <span class="s0">args = []</span>
+        <span class="s2">if </span><span class="s0">kwargs </span><span class="s2">is None</span><span class="s0">:</span>
+            <span class="s0">kwargs = {}</span>
+        <span class="s0">self.fun = fun</span>
+        <span class="s0">self.args = args</span>
+        <span class="s0">self.kwargs = kwargs</span>
+        <span class="s0">self.tempdir = tempdir = py.path.local.mkdtemp()</span>
+        <span class="s0">self.RETVAL = tempdir.ensure(</span><span class="s3">'retval'</span><span class="s0">)</span>
+        <span class="s0">self.STDOUT = tempdir.ensure(</span><span class="s3">'stdout'</span><span class="s0">)</span>
+        <span class="s0">self.STDERR = tempdir.ensure(</span><span class="s3">'stderr'</span><span class="s0">)</span>
+
+        <span class="s0">pid = os.fork()</span>
+        <span class="s2">if </span><span class="s0">pid:  </span><span class="s5"># in parent process</span>
+            <span class="s0">self.pid = pid</span>
+        <span class="s2">else</span><span class="s0">:  </span><span class="s5"># in child process</span>
+            <span class="s0">self.pid = </span><span class="s2">None</span>
+            <span class="s0">self._child(nice_level</span><span class="s2">, </span><span class="s0">child_on_start</span><span class="s2">, </span><span class="s0">child_on_exit)</span>
+
+    <span class="s2">def </span><span class="s0">_child(self</span><span class="s2">, </span><span class="s0">nice_level</span><span class="s2">, </span><span class="s0">child_on_start</span><span class="s2">, </span><span class="s0">child_on_exit):</span>
+        <span class="s5"># right now we need to call a function, but first we need to</span>
+        <span class="s5"># map all IO that might happen</span>
+        <span class="s0">sys.stdout = stdout = get_unbuffered_io(</span><span class="s4">1</span><span class="s2">, </span><span class="s0">self.STDOUT)</span>
+        <span class="s0">sys.stderr = stderr = get_unbuffered_io(</span><span class="s4">2</span><span class="s2">, </span><span class="s0">self.STDERR)</span>
+        <span class="s0">retvalf = self.RETVAL.open(</span><span class="s3">&quot;wb&quot;</span><span class="s0">)</span>
+        <span class="s0">EXITSTATUS = </span><span class="s4">0</span>
+        <span class="s2">try</span><span class="s0">:</span>
+            <span class="s2">if </span><span class="s0">nice_level:</span>
+                <span class="s0">os.nice(nice_level)</span>
+            <span class="s2">try</span><span class="s0">:</span>
+                <span class="s2">if </span><span class="s0">child_on_start </span><span class="s2">is not None</span><span class="s0">:</span>
+                    <span class="s0">child_on_start()</span>
+                <span class="s0">retval = self.fun(*self.args</span><span class="s2">, </span><span class="s0">**self.kwargs)</span>
+                <span class="s0">retvalf.write(marshal.dumps(retval))</span>
+                <span class="s2">if </span><span class="s0">child_on_exit </span><span class="s2">is not None</span><span class="s0">:</span>
+                    <span class="s0">child_on_exit()</span>
+            <span class="s2">except</span><span class="s0">:</span>
+                <span class="s0">excinfo = py.code.ExceptionInfo()</span>
+                <span class="s0">stderr.write(str(excinfo._getreprcrash()))</span>
+                <span class="s0">EXITSTATUS = self.EXITSTATUS_EXCEPTION</span>
+        <span class="s2">finally</span><span class="s0">:</span>
+            <span class="s0">stdout.close()</span>
+            <span class="s0">stderr.close()</span>
+            <span class="s0">retvalf.close()</span>
+        <span class="s0">os.close(</span><span class="s4">1</span><span class="s0">)</span>
+        <span class="s0">os.close(</span><span class="s4">2</span><span class="s0">)</span>
+        <span class="s0">os._exit(EXITSTATUS)</span>
+
+    <span class="s2">def </span><span class="s0">waitfinish(self</span><span class="s2">, </span><span class="s0">waiter=os.waitpid):</span>
+        <span class="s0">pid</span><span class="s2">, </span><span class="s0">systemstatus = waiter(self.pid</span><span class="s2">, </span><span class="s4">0</span><span class="s0">)</span>
+        <span class="s2">if </span><span class="s0">systemstatus:</span>
+            <span class="s2">if </span><span class="s0">os.WIFSIGNALED(systemstatus):</span>
+                <span class="s0">exitstatus = os.WTERMSIG(systemstatus) + </span><span class="s4">128</span>
+            <span class="s2">else</span><span class="s0">:</span>
+                <span class="s0">exitstatus = os.WEXITSTATUS(systemstatus)</span>
+        <span class="s2">else</span><span class="s0">:</span>
+            <span class="s0">exitstatus = </span><span class="s4">0</span>
+        <span class="s0">signal = systemstatus &amp; </span><span class="s4">0x7f</span>
+        <span class="s2">if not </span><span class="s0">exitstatus </span><span class="s2">and not </span><span class="s0">signal:</span>
+            <span class="s0">retval = self.RETVAL.open(</span><span class="s3">'rb'</span><span class="s0">)</span>
+            <span class="s2">try</span><span class="s0">:</span>
+                <span class="s0">retval_data = retval.read()</span>
+            <span class="s2">finally</span><span class="s0">:</span>
+                <span class="s0">retval.close()</span>
+            <span class="s0">retval = marshal.loads(retval_data)</span>
+        <span class="s2">else</span><span class="s0">:</span>
+            <span class="s0">retval = </span><span class="s2">None</span>
+        <span class="s0">stdout = self.STDOUT.read()</span>
+        <span class="s0">stderr = self.STDERR.read()</span>
+        <span class="s0">self._removetemp()</span>
+        <span class="s2">return </span><span class="s0">Result(exitstatus</span><span class="s2">, </span><span class="s0">signal</span><span class="s2">, </span><span class="s0">retval</span><span class="s2">, </span><span class="s0">stdout</span><span class="s2">, </span><span class="s0">stderr)</span>
+
+    <span class="s2">def </span><span class="s0">_removetemp(self):</span>
+        <span class="s2">if </span><span class="s0">self.tempdir.check():</span>
+            <span class="s0">self.tempdir.remove()</span>
+
+    <span class="s2">def </span><span class="s0">__del__(self):</span>
+        <span class="s2">if </span><span class="s0">self.pid </span><span class="s2">is not None</span><span class="s0">:  </span><span class="s5"># only clean up in main process</span>
+            <span class="s0">self._removetemp()</span>
+
+
+<span class="s2">class </span><span class="s0">Result(object):</span>
+    <span class="s2">def </span><span class="s0">__init__(self</span><span class="s2">, </span><span class="s0">exitstatus</span><span class="s2">, </span><span class="s0">signal</span><span class="s2">, </span><span class="s0">retval</span><span class="s2">, </span><span class="s0">stdout</span><span class="s2">, </span><span class="s0">stderr):</span>
+        <span class="s0">self.exitstatus = exitstatus</span>
+        <span class="s0">self.signal = signal</span>
+        <span class="s0">self.retval = retval</span>
+        <span class="s0">self.out = stdout</span>
+        <span class="s0">self.err = stderr</span>
+</pre>
+</body>
+</html>

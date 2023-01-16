@@ -1,0 +1,116 @@
+<html>
+<head>
+<title>truncate.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+truncate.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Utilities for truncating assertion output. 
+ 
+Current default behaviour is to truncate assertion explanations at 
+~8 terminal lines, unless running in &quot;-vv&quot; mode or running on CI. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+
+<span class="s2">from </span><span class="s1">_pytest.assertion </span><span class="s2">import </span><span class="s1">util</span>
+<span class="s2">from </span><span class="s1">_pytest.nodes </span><span class="s2">import </span><span class="s1">Item</span>
+
+
+<span class="s1">DEFAULT_MAX_LINES = </span><span class="s3">8</span>
+<span class="s1">DEFAULT_MAX_CHARS = </span><span class="s3">8 </span><span class="s1">* </span><span class="s3">80</span>
+<span class="s1">USAGE_MSG = </span><span class="s4">&quot;use '-vv' to show&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">truncate_if_required(</span>
+    <span class="s1">explanation: List[str]</span><span class="s2">, </span><span class="s1">item: Item</span><span class="s2">, </span><span class="s1">max_length: Optional[int] = </span><span class="s2">None</span>
+<span class="s1">) -&gt; List[str]:</span>
+    <span class="s0">&quot;&quot;&quot;Truncate this assertion explanation if the given test item is eligible.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">_should_truncate_item(item):</span>
+        <span class="s2">return </span><span class="s1">_truncate_explanation(explanation)</span>
+    <span class="s2">return </span><span class="s1">explanation</span>
+
+
+<span class="s2">def </span><span class="s1">_should_truncate_item(item: Item) -&gt; bool:</span>
+    <span class="s0">&quot;&quot;&quot;Whether or not this test item is eligible for truncation.&quot;&quot;&quot;</span>
+    <span class="s1">verbose = item.config.option.verbose</span>
+    <span class="s2">return </span><span class="s1">verbose &lt; </span><span class="s3">2 </span><span class="s2">and not </span><span class="s1">util.running_on_ci()</span>
+
+
+<span class="s2">def </span><span class="s1">_truncate_explanation(</span>
+    <span class="s1">input_lines: List[str]</span><span class="s2">,</span>
+    <span class="s1">max_lines: Optional[int] = </span><span class="s2">None,</span>
+    <span class="s1">max_chars: Optional[int] = </span><span class="s2">None,</span>
+<span class="s1">) -&gt; List[str]:</span>
+    <span class="s0">&quot;&quot;&quot;Truncate given list of strings that makes up the assertion explanation. 
+ 
+    Truncates to either 8 lines, or 640 characters - whichever the input reaches 
+    first. The remaining lines will be replaced by a usage message. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">if </span><span class="s1">max_lines </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s1">max_lines = DEFAULT_MAX_LINES</span>
+    <span class="s2">if </span><span class="s1">max_chars </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s1">max_chars = DEFAULT_MAX_CHARS</span>
+
+    <span class="s5"># Check if truncation required</span>
+    <span class="s1">input_char_count = len(</span><span class="s4">&quot;&quot;</span><span class="s1">.join(input_lines))</span>
+    <span class="s2">if </span><span class="s1">len(input_lines) &lt;= max_lines </span><span class="s2">and </span><span class="s1">input_char_count &lt;= max_chars:</span>
+        <span class="s2">return </span><span class="s1">input_lines</span>
+
+    <span class="s5"># Truncate first to max_lines, and then truncate to max_chars if max_chars</span>
+    <span class="s5"># is exceeded.</span>
+    <span class="s1">truncated_explanation = input_lines[:max_lines]</span>
+    <span class="s1">truncated_explanation = _truncate_by_char_count(truncated_explanation</span><span class="s2">, </span><span class="s1">max_chars)</span>
+
+    <span class="s5"># Add ellipsis to final line</span>
+    <span class="s1">truncated_explanation[-</span><span class="s3">1</span><span class="s1">] = truncated_explanation[-</span><span class="s3">1</span><span class="s1">] + </span><span class="s4">&quot;...&quot;</span>
+
+    <span class="s5"># Append useful message to explanation</span>
+    <span class="s1">truncated_line_count = len(input_lines) - len(truncated_explanation)</span>
+    <span class="s1">truncated_line_count += </span><span class="s3">1  </span><span class="s5"># Account for the part-truncated final line</span>
+    <span class="s1">msg = </span><span class="s4">&quot;...Full output truncated&quot;</span>
+    <span class="s2">if </span><span class="s1">truncated_line_count == </span><span class="s3">1</span><span class="s1">:</span>
+        <span class="s1">msg += </span><span class="s4">f&quot; (</span><span class="s2">{</span><span class="s1">truncated_line_count</span><span class="s2">} </span><span class="s4">line hidden)&quot;</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">msg += </span><span class="s4">f&quot; (</span><span class="s2">{</span><span class="s1">truncated_line_count</span><span class="s2">} </span><span class="s4">lines hidden)&quot;</span>
+    <span class="s1">msg += </span><span class="s4">f&quot;, </span><span class="s2">{</span><span class="s1">USAGE_MSG</span><span class="s2">}</span><span class="s4">&quot;</span>
+    <span class="s1">truncated_explanation.extend([</span><span class="s4">&quot;&quot;</span><span class="s2">, </span><span class="s1">str(msg)])</span>
+    <span class="s2">return </span><span class="s1">truncated_explanation</span>
+
+
+<span class="s2">def </span><span class="s1">_truncate_by_char_count(input_lines: List[str]</span><span class="s2">, </span><span class="s1">max_chars: int) -&gt; List[str]:</span>
+    <span class="s5"># Check if truncation required</span>
+    <span class="s2">if </span><span class="s1">len(</span><span class="s4">&quot;&quot;</span><span class="s1">.join(input_lines)) &lt;= max_chars:</span>
+        <span class="s2">return </span><span class="s1">input_lines</span>
+
+    <span class="s5"># Find point at which input length exceeds total allowed length</span>
+    <span class="s1">iterated_char_count = </span><span class="s3">0</span>
+    <span class="s2">for </span><span class="s1">iterated_index</span><span class="s2">, </span><span class="s1">input_line </span><span class="s2">in </span><span class="s1">enumerate(input_lines):</span>
+        <span class="s2">if </span><span class="s1">iterated_char_count + len(input_line) &gt; max_chars:</span>
+            <span class="s2">break</span>
+        <span class="s1">iterated_char_count += len(input_line)</span>
+
+    <span class="s5"># Create truncated explanation with modified final line</span>
+    <span class="s1">truncated_result = input_lines[:iterated_index]</span>
+    <span class="s1">final_line = input_lines[iterated_index]</span>
+    <span class="s2">if </span><span class="s1">final_line:</span>
+        <span class="s1">final_line_truncate_point = max_chars - iterated_char_count</span>
+        <span class="s1">final_line = final_line[:final_line_truncate_point]</span>
+    <span class="s1">truncated_result.append(final_line)</span>
+    <span class="s2">return </span><span class="s1">truncated_result</span>
+</pre>
+</body>
+</html>

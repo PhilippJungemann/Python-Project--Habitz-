@@ -1,0 +1,1262 @@
+<html>
+<head>
+<title>svnwc.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+svnwc.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+svn-Command based Implementation of a Subversion WorkingCopy Path. 
+ 
+  SvnWCCommandPath  is the main class. 
+ 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span><span class="s2">, </span><span class="s1">sys</span><span class="s2">, </span><span class="s1">time</span><span class="s2">, </span><span class="s1">re</span><span class="s2">, </span><span class="s1">calendar</span>
+<span class="s2">import </span><span class="s1">py</span>
+<span class="s2">import </span><span class="s1">subprocess</span>
+<span class="s2">from </span><span class="s1">py._path </span><span class="s2">import </span><span class="s1">common</span>
+
+<span class="s3">#-----------------------------------------------------------</span>
+<span class="s3"># Caching latest repository revision and repo-paths</span>
+<span class="s3"># (getting them is slow with the current implementations)</span>
+<span class="s3">#</span>
+<span class="s3"># XXX make mt-safe</span>
+<span class="s3">#-----------------------------------------------------------</span>
+
+<span class="s2">class </span><span class="s1">cache:</span>
+    <span class="s1">proplist = {}</span>
+    <span class="s1">info = {}</span>
+    <span class="s1">entries = {}</span>
+    <span class="s1">prop = {}</span>
+
+<span class="s2">class </span><span class="s1">RepoEntry:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">url</span><span class="s2">, </span><span class="s1">rev</span><span class="s2">, </span><span class="s1">timestamp):</span>
+        <span class="s1">self.url = url</span>
+        <span class="s1">self.rev = rev</span>
+        <span class="s1">self.timestamp = timestamp</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s4">&quot;repo: %s;%s  %s&quot; </span><span class="s1">%(self.url</span><span class="s2">, </span><span class="s1">self.rev</span><span class="s2">, </span><span class="s1">self.timestamp)</span>
+
+<span class="s2">class </span><span class="s1">RepoCache:</span>
+    <span class="s0">&quot;&quot;&quot; The Repocache manages discovered repository paths 
+    and their revisions.  If inside a timeout the cache 
+    will even return the revision of the root. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">timeout = </span><span class="s5">20 </span><span class="s3"># seconds after which we forget that we know the last revision</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.repos = []</span>
+
+    <span class="s2">def </span><span class="s1">clear(self):</span>
+        <span class="s1">self.repos = []</span>
+
+    <span class="s2">def </span><span class="s1">put(self</span><span class="s2">, </span><span class="s1">url</span><span class="s2">, </span><span class="s1">rev</span><span class="s2">, </span><span class="s1">timestamp=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s2">if </span><span class="s1">rev </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return</span>
+        <span class="s2">if </span><span class="s1">timestamp </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">timestamp = time.time()</span>
+
+        <span class="s2">for </span><span class="s1">entry </span><span class="s2">in </span><span class="s1">self.repos:</span>
+            <span class="s2">if </span><span class="s1">url == entry.url:</span>
+                <span class="s1">entry.timestamp = timestamp</span>
+                <span class="s1">entry.rev = rev</span>
+                <span class="s3">#print &quot;set repo&quot;, entry</span>
+                <span class="s2">break</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">entry = RepoEntry(url</span><span class="s2">, </span><span class="s1">rev</span><span class="s2">, </span><span class="s1">timestamp)</span>
+            <span class="s1">self.repos.append(entry)</span>
+            <span class="s3">#print &quot;appended repo&quot;, entry</span>
+
+    <span class="s2">def </span><span class="s1">get(self</span><span class="s2">, </span><span class="s1">url):</span>
+        <span class="s1">now = time.time()</span>
+        <span class="s2">for </span><span class="s1">entry </span><span class="s2">in </span><span class="s1">self.repos:</span>
+            <span class="s2">if </span><span class="s1">url.startswith(entry.url):</span>
+                <span class="s2">if </span><span class="s1">now &lt; entry.timestamp + self.timeout:</span>
+                    <span class="s3">#print &quot;returning immediate Etrny&quot;, entry</span>
+                    <span class="s2">return </span><span class="s1">entry.url</span><span class="s2">, </span><span class="s1">entry.rev</span>
+                <span class="s2">return </span><span class="s1">entry.url</span><span class="s2">, </span><span class="s1">-</span><span class="s5">1</span>
+        <span class="s2">return </span><span class="s1">url</span><span class="s2">, </span><span class="s1">-</span><span class="s5">1</span>
+
+<span class="s1">repositories = RepoCache()</span>
+
+
+<span class="s3"># svn support code</span>
+
+<span class="s1">ALLOWED_CHARS = </span><span class="s4">&quot;_ -/</span><span class="s2">\\</span><span class="s4">=$.~+%&quot; </span><span class="s3">#add characters as necessary when tested</span>
+<span class="s2">if </span><span class="s1">sys.platform == </span><span class="s4">&quot;win32&quot;</span><span class="s1">:</span>
+    <span class="s1">ALLOWED_CHARS += </span><span class="s4">&quot;:&quot;</span>
+<span class="s1">ALLOWED_CHARS_HOST = ALLOWED_CHARS + </span><span class="s4">'@:'</span>
+
+<span class="s2">def </span><span class="s1">_getsvnversion(ver=[]):</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">return </span><span class="s1">ver[</span><span class="s5">0</span><span class="s1">]</span>
+    <span class="s2">except </span><span class="s1">IndexError:</span>
+        <span class="s1">v = py.process.cmdexec(</span><span class="s4">&quot;svn -q --version&quot;</span><span class="s1">)</span>
+        <span class="s1">v.strip()</span>
+        <span class="s1">v = </span><span class="s4">'.'</span><span class="s1">.join(v.split(</span><span class="s4">'.'</span><span class="s1">)[:</span><span class="s5">2</span><span class="s1">])</span>
+        <span class="s1">ver.append(v)</span>
+        <span class="s2">return </span><span class="s1">v</span>
+
+<span class="s2">def </span><span class="s1">_escape_helper(text):</span>
+    <span class="s1">text = str(text)</span>
+    <span class="s2">if </span><span class="s1">sys.platform != </span><span class="s4">'win32'</span><span class="s1">:</span>
+        <span class="s1">text = str(text).replace(</span><span class="s4">'$'</span><span class="s2">, </span><span class="s4">'</span><span class="s2">\\</span><span class="s4">$'</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">text</span>
+
+<span class="s2">def </span><span class="s1">_check_for_bad_chars(text</span><span class="s2">, </span><span class="s1">allowed_chars=ALLOWED_CHARS):</span>
+    <span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">str(text):</span>
+        <span class="s2">if </span><span class="s1">c.isalnum():</span>
+            <span class="s2">continue</span>
+        <span class="s2">if </span><span class="s1">c </span><span class="s2">in </span><span class="s1">allowed_chars:</span>
+            <span class="s2">continue</span>
+        <span class="s2">return True</span>
+    <span class="s2">return False</span>
+
+<span class="s2">def </span><span class="s1">checkbadchars(url):</span>
+    <span class="s3"># (hpk) not quite sure about the exact purpose, guido w.?</span>
+    <span class="s1">proto</span><span class="s2">, </span><span class="s1">uri = url.split(</span><span class="s4">&quot;://&quot;</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">proto != </span><span class="s4">&quot;file&quot;</span><span class="s1">:</span>
+        <span class="s1">host</span><span class="s2">, </span><span class="s1">uripath = uri.split(</span><span class="s4">'/'</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s3"># only check for bad chars in the non-protocol parts</span>
+        <span class="s2">if </span><span class="s1">(_check_for_bad_chars(host</span><span class="s2">, </span><span class="s1">ALLOWED_CHARS_HOST) \</span>
+            <span class="s2">or </span><span class="s1">_check_for_bad_chars(uripath</span><span class="s2">, </span><span class="s1">ALLOWED_CHARS)):</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;bad char in %r&quot; </span><span class="s1">% (url</span><span class="s2">, </span><span class="s1">))</span>
+
+
+<span class="s3">#_______________________________________________________________</span>
+
+<span class="s2">class </span><span class="s1">SvnPathBase(common.PathBase):</span>
+    <span class="s0">&quot;&quot;&quot; Base implementation for SvnPath implementations. &quot;&quot;&quot;</span>
+    <span class="s1">sep = </span><span class="s4">'/'</span>
+
+    <span class="s2">def </span><span class="s1">_geturl(self):</span>
+        <span class="s2">return </span><span class="s1">self.strpath</span>
+    <span class="s1">url = property(_geturl</span><span class="s2">, None, None, </span><span class="s4">&quot;url of this svn-path.&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s0">&quot;&quot;&quot; return a string representation (including rev-number) &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.strpath</span>
+
+    <span class="s2">def </span><span class="s1">__hash__(self):</span>
+        <span class="s2">return </span><span class="s1">hash(self.strpath)</span>
+
+    <span class="s2">def </span><span class="s1">new(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s0">&quot;&quot;&quot; create a modified version of this path. A 'rev' argument 
+            indicates a new revision. 
+            the following keyword arguments modify various path parts:: 
+ 
+              http://host.com/repo/path/file.ext 
+              |-----------------------|          dirname 
+                                        |------| basename 
+                                        |--|     purebasename 
+                                            |--| ext 
+        &quot;&quot;&quot;</span>
+        <span class="s1">obj = object.__new__(self.__class__)</span>
+        <span class="s1">obj.rev = kw.get(</span><span class="s4">'rev'</span><span class="s2">, </span><span class="s1">self.rev)</span>
+        <span class="s1">obj.auth = kw.get(</span><span class="s4">'auth'</span><span class="s2">, </span><span class="s1">self.auth)</span>
+        <span class="s1">dirname</span><span class="s2">, </span><span class="s1">basename</span><span class="s2">, </span><span class="s1">purebasename</span><span class="s2">, </span><span class="s1">ext = self._getbyspec(</span>
+             <span class="s4">&quot;dirname,basename,purebasename,ext&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s4">'basename' </span><span class="s2">in </span><span class="s1">kw:</span>
+            <span class="s2">if </span><span class="s4">'purebasename' </span><span class="s2">in </span><span class="s1">kw </span><span class="s2">or </span><span class="s4">'ext' </span><span class="s2">in </span><span class="s1">kw:</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid specification %r&quot; </span><span class="s1">% kw)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">pb = kw.setdefault(</span><span class="s4">'purebasename'</span><span class="s2">, </span><span class="s1">purebasename)</span>
+            <span class="s1">ext = kw.setdefault(</span><span class="s4">'ext'</span><span class="s2">, </span><span class="s1">ext)</span>
+            <span class="s2">if </span><span class="s1">ext </span><span class="s2">and not </span><span class="s1">ext.startswith(</span><span class="s4">'.'</span><span class="s1">):</span>
+                <span class="s1">ext = </span><span class="s4">'.' </span><span class="s1">+ ext</span>
+            <span class="s1">kw[</span><span class="s4">'basename'</span><span class="s1">] = pb + ext</span>
+
+        <span class="s1">kw.setdefault(</span><span class="s4">'dirname'</span><span class="s2">, </span><span class="s1">dirname)</span>
+        <span class="s1">kw.setdefault(</span><span class="s4">'sep'</span><span class="s2">, </span><span class="s1">self.sep)</span>
+        <span class="s2">if </span><span class="s1">kw[</span><span class="s4">'basename'</span><span class="s1">]:</span>
+            <span class="s1">obj.strpath = </span><span class="s4">&quot;%(dirname)s%(sep)s%(basename)s&quot; </span><span class="s1">% kw</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">obj.strpath = </span><span class="s4">&quot;%(dirname)s&quot; </span><span class="s1">% kw</span>
+        <span class="s2">return </span><span class="s1">obj</span>
+
+    <span class="s2">def </span><span class="s1">_getbyspec(self</span><span class="s2">, </span><span class="s1">spec):</span>
+        <span class="s0">&quot;&quot;&quot; get specified parts of the path.  'arg' is a string 
+            with comma separated path parts. The parts are returned 
+            in exactly the order of the specification. 
+ 
+            you may specify the following parts: 
+ 
+            http://host.com/repo/path/file.ext 
+            |-----------------------|          dirname 
+                                      |------| basename 
+                                      |--|     purebasename 
+                                          |--| ext 
+        &quot;&quot;&quot;</span>
+        <span class="s1">res = []</span>
+        <span class="s1">parts = self.strpath.split(self.sep)</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">spec.split(</span><span class="s4">','</span><span class="s1">):</span>
+            <span class="s1">name = name.strip()</span>
+            <span class="s2">if </span><span class="s1">name == </span><span class="s4">'dirname'</span><span class="s1">:</span>
+                <span class="s1">res.append(self.sep.join(parts[:-</span><span class="s5">1</span><span class="s1">]))</span>
+            <span class="s2">elif </span><span class="s1">name == </span><span class="s4">'basename'</span><span class="s1">:</span>
+                <span class="s1">res.append(parts[-</span><span class="s5">1</span><span class="s1">])</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">basename = parts[-</span><span class="s5">1</span><span class="s1">]</span>
+                <span class="s1">i = basename.rfind(</span><span class="s4">'.'</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">i == -</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s1">purebasename</span><span class="s2">, </span><span class="s1">ext = basename</span><span class="s2">, </span><span class="s4">''</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">purebasename</span><span class="s2">, </span><span class="s1">ext = basename[:i]</span><span class="s2">, </span><span class="s1">basename[i:]</span>
+                <span class="s2">if </span><span class="s1">name == </span><span class="s4">'purebasename'</span><span class="s1">:</span>
+                    <span class="s1">res.append(purebasename)</span>
+                <span class="s2">elif </span><span class="s1">name == </span><span class="s4">'ext'</span><span class="s1">:</span>
+                    <span class="s1">res.append(ext)</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s2">raise </span><span class="s1">NameError(</span><span class="s4">&quot;Don't know part %r&quot; </span><span class="s1">% name)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s2">def </span><span class="s1">__eq__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s0">&quot;&quot;&quot; return true if path and rev attributes each match &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">(str(self) == str(other) </span><span class="s2">and</span>
+               <span class="s1">(self.rev == other.rev </span><span class="s2">or </span><span class="s1">self.rev == other.rev))</span>
+
+    <span class="s2">def </span><span class="s1">__ne__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return not </span><span class="s1">self == other</span>
+
+    <span class="s2">def </span><span class="s1">join(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot; return a new Path (with the same revision) which is composed 
+            of the self Path followed by 'args' path components. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">args:</span>
+            <span class="s2">return </span><span class="s1">self</span>
+
+        <span class="s1">args = tuple([arg.strip(self.sep) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">args])</span>
+        <span class="s1">parts = (self.strpath</span><span class="s2">, </span><span class="s1">) + args</span>
+        <span class="s1">newpath = self.__class__(self.sep.join(parts)</span><span class="s2">, </span><span class="s1">self.rev</span><span class="s2">, </span><span class="s1">self.auth)</span>
+        <span class="s2">return </span><span class="s1">newpath</span>
+
+    <span class="s2">def </span><span class="s1">propget(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s0">&quot;&quot;&quot; return the content of the given property. &quot;&quot;&quot;</span>
+        <span class="s1">value = self._propget(name)</span>
+        <span class="s2">return </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">proplist(self):</span>
+        <span class="s0">&quot;&quot;&quot; list all property names. &quot;&quot;&quot;</span>
+        <span class="s1">content = self._proplist()</span>
+        <span class="s2">return </span><span class="s1">content</span>
+
+    <span class="s2">def </span><span class="s1">size(self):</span>
+        <span class="s0">&quot;&quot;&quot; Return the size of the file content of the Path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.info().size</span>
+
+    <span class="s2">def </span><span class="s1">mtime(self):</span>
+        <span class="s0">&quot;&quot;&quot; Return the last modification time of the file. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.info().mtime</span>
+
+    <span class="s3"># shared help methods</span>
+
+    <span class="s2">def </span><span class="s1">_escape(self</span><span class="s2">, </span><span class="s1">cmd):</span>
+        <span class="s2">return </span><span class="s1">_escape_helper(cmd)</span>
+
+
+    <span class="s3">#def _childmaxrev(self):</span>
+    <span class="s3">#    &quot;&quot;&quot; return maximum revision number of childs (or self.rev if no childs) &quot;&quot;&quot;</span>
+    <span class="s3">#    rev = self.rev</span>
+    <span class="s3">#    for name, info in self._listdir_nameinfo():</span>
+    <span class="s3">#        rev = max(rev, info.created_rev)</span>
+    <span class="s3">#    return rev</span>
+
+    <span class="s3">#def _getlatestrevision(self):</span>
+    <span class="s3">#    &quot;&quot;&quot; return latest repo-revision for this path. &quot;&quot;&quot;</span>
+    <span class="s3">#    url = self.strpath</span>
+    <span class="s3">#    path = self.__class__(url, None)</span>
+    <span class="s3">#</span>
+    <span class="s3">#    # we need a long walk to find the root-repo and revision</span>
+    <span class="s3">#    while 1:</span>
+    <span class="s3">#        try:</span>
+    <span class="s3">#            rev = max(rev, path._childmaxrev())</span>
+    <span class="s3">#            previous = path</span>
+    <span class="s3">#            path = path.dirpath()</span>
+    <span class="s3">#        except (IOError, process.cmdexec.Error):</span>
+    <span class="s3">#            break</span>
+    <span class="s3">#    if rev is None:</span>
+    <span class="s3">#        raise IOError, &quot;could not determine newest repo revision for %s&quot; % self</span>
+    <span class="s3">#    return rev</span>
+
+    <span class="s2">class </span><span class="s1">Checkers(common.Checkers):</span>
+        <span class="s2">def </span><span class="s1">dir(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">self.path.info().kind == </span><span class="s4">'dir'</span>
+            <span class="s2">except </span><span class="s1">py.error.Error:</span>
+                <span class="s2">return </span><span class="s1">self._listdirworks()</span>
+
+        <span class="s2">def </span><span class="s1">_listdirworks(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">self.path.listdir()</span>
+            <span class="s2">except </span><span class="s1">py.error.ENOENT:</span>
+                <span class="s2">return False</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">return True</span>
+
+        <span class="s2">def </span><span class="s1">file(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">self.path.info().kind == </span><span class="s4">'file'</span>
+            <span class="s2">except </span><span class="s1">py.error.ENOENT:</span>
+                <span class="s2">return False</span>
+
+        <span class="s2">def </span><span class="s1">exists(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">return </span><span class="s1">self.path.info()</span>
+            <span class="s2">except </span><span class="s1">py.error.ENOENT:</span>
+                <span class="s2">return </span><span class="s1">self._listdirworks()</span>
+
+<span class="s2">def </span><span class="s1">parse_apr_time(timestr):</span>
+    <span class="s1">i = timestr.rfind(</span><span class="s4">'.'</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">i == -</span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;could not parse %s&quot; </span><span class="s1">% timestr)</span>
+    <span class="s1">timestr = timestr[:i]</span>
+    <span class="s1">parsedtime = time.strptime(timestr</span><span class="s2">, </span><span class="s4">&quot;%Y-%m-%dT%H:%M:%S&quot;</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">time.mktime(parsedtime)</span>
+
+<span class="s2">class </span><span class="s1">PropListDict(dict):</span>
+    <span class="s0">&quot;&quot;&quot; a Dictionary which fetches values (InfoSvnCommand instances) lazily&quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">keynames):</span>
+        <span class="s1">dict.__init__(self</span><span class="s2">, </span><span class="s1">[(x</span><span class="s2">, None</span><span class="s1">) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">keynames])</span>
+        <span class="s1">self.path = path</span>
+
+    <span class="s2">def </span><span class="s1">__getitem__(self</span><span class="s2">, </span><span class="s1">key):</span>
+        <span class="s1">value = dict.__getitem__(self</span><span class="s2">, </span><span class="s1">key)</span>
+        <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">value = self.path.propget(key)</span>
+            <span class="s1">dict.__setitem__(self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value)</span>
+        <span class="s2">return </span><span class="s1">value</span>
+
+<span class="s2">def </span><span class="s1">fixlocale():</span>
+    <span class="s2">if </span><span class="s1">sys.platform != </span><span class="s4">'win32'</span><span class="s1">:</span>
+        <span class="s2">return </span><span class="s4">'LC_ALL=C '</span>
+    <span class="s2">return </span><span class="s4">''</span>
+
+<span class="s3"># some nasty chunk of code to solve path and url conversion and quoting issues</span>
+<span class="s1">ILLEGAL_CHARS = </span><span class="s4">'* | </span><span class="s2">\\ </span><span class="s4">/ : &lt; &gt; ? </span><span class="s2">\t \n \x0b \x0c \r</span><span class="s4">'</span><span class="s1">.split(</span><span class="s4">' '</span><span class="s1">)</span>
+<span class="s2">if </span><span class="s1">os.sep </span><span class="s2">in </span><span class="s1">ILLEGAL_CHARS:</span>
+    <span class="s1">ILLEGAL_CHARS.remove(os.sep)</span>
+<span class="s1">ISWINDOWS = sys.platform == </span><span class="s4">'win32'</span>
+<span class="s1">_reg_allow_disk = re.compile(</span><span class="s4">r'^([a-z]\:\\)?[^:]+$'</span><span class="s2">, </span><span class="s1">re.I)</span>
+<span class="s2">def </span><span class="s1">_check_path(path):</span>
+    <span class="s1">illegal = ILLEGAL_CHARS[:]</span>
+    <span class="s1">sp = path.strpath</span>
+    <span class="s2">if </span><span class="s1">ISWINDOWS:</span>
+        <span class="s1">illegal.remove(</span><span class="s4">':'</span><span class="s1">)</span>
+        <span class="s2">if not </span><span class="s1">_reg_allow_disk.match(sp):</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">'path may not contain a colon (:)'</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s1">char </span><span class="s2">in </span><span class="s1">sp:</span>
+        <span class="s2">if </span><span class="s1">char </span><span class="s2">not in </span><span class="s1">string.printable </span><span class="s2">or </span><span class="s1">char </span><span class="s2">in </span><span class="s1">illegal:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">'illegal character %r in path' </span><span class="s1">% (char</span><span class="s2">,</span><span class="s1">))</span>
+
+<span class="s2">def </span><span class="s1">path_to_fspath(path</span><span class="s2">, </span><span class="s1">addat=</span><span class="s2">True</span><span class="s1">):</span>
+    <span class="s1">_check_path(path)</span>
+    <span class="s1">sp = path.strpath</span>
+    <span class="s2">if </span><span class="s1">addat </span><span class="s2">and </span><span class="s1">path.rev != -</span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s1">sp = </span><span class="s4">'%s@%s' </span><span class="s1">% (sp</span><span class="s2">, </span><span class="s1">path.rev)</span>
+    <span class="s2">elif </span><span class="s1">addat:</span>
+        <span class="s1">sp = </span><span class="s4">'%s@HEAD' </span><span class="s1">% (sp</span><span class="s2">,</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">sp</span>
+
+<span class="s2">def </span><span class="s1">url_from_path(path):</span>
+    <span class="s1">fspath = path_to_fspath(path</span><span class="s2">, False</span><span class="s1">)</span>
+    <span class="s2">from </span><span class="s1">urllib </span><span class="s2">import </span><span class="s1">quote</span>
+    <span class="s2">if </span><span class="s1">ISWINDOWS:</span>
+        <span class="s1">match = _reg_allow_disk.match(fspath)</span>
+        <span class="s1">fspath = fspath.replace(</span><span class="s4">'</span><span class="s2">\\</span><span class="s4">'</span><span class="s2">, </span><span class="s4">'/'</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">match.group(</span><span class="s5">1</span><span class="s1">):</span>
+            <span class="s1">fspath = </span><span class="s4">'/%s%s' </span><span class="s1">% (match.group(</span><span class="s5">1</span><span class="s1">).replace(</span><span class="s4">'</span><span class="s2">\\</span><span class="s4">'</span><span class="s2">, </span><span class="s4">'/'</span><span class="s1">)</span><span class="s2">,</span>
+                                <span class="s1">quote(fspath[len(match.group(</span><span class="s5">1</span><span class="s1">)):]))</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">fspath = quote(fspath)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">fspath = quote(fspath)</span>
+    <span class="s2">if </span><span class="s1">path.rev != -</span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s1">fspath = </span><span class="s4">'%s@%s' </span><span class="s1">% (fspath</span><span class="s2">, </span><span class="s1">path.rev)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">fspath = </span><span class="s4">'%s@HEAD' </span><span class="s1">% (fspath</span><span class="s2">,</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s4">'file://%s' </span><span class="s1">% (fspath</span><span class="s2">,</span><span class="s1">)</span>
+
+<span class="s2">class </span><span class="s1">SvnAuth(object):</span>
+    <span class="s0">&quot;&quot;&quot; container for auth information for Subversion &quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">username</span><span class="s2">, </span><span class="s1">password</span><span class="s2">, </span><span class="s1">cache_auth=</span><span class="s2">True, </span><span class="s1">interactive=</span><span class="s2">True</span><span class="s1">):</span>
+        <span class="s1">self.username = username</span>
+        <span class="s1">self.password = password</span>
+        <span class="s1">self.cache_auth = cache_auth</span>
+        <span class="s1">self.interactive = interactive</span>
+
+    <span class="s2">def </span><span class="s1">makecmdoptions(self):</span>
+        <span class="s1">uname = self.username.replace(</span><span class="s4">'&quot;'</span><span class="s2">, </span><span class="s4">'</span><span class="s2">\\</span><span class="s4">&quot;'</span><span class="s1">)</span>
+        <span class="s1">passwd = self.password.replace(</span><span class="s4">'&quot;'</span><span class="s2">, </span><span class="s4">'</span><span class="s2">\\</span><span class="s4">&quot;'</span><span class="s1">)</span>
+        <span class="s1">ret = []</span>
+        <span class="s2">if </span><span class="s1">uname:</span>
+            <span class="s1">ret.append(</span><span class="s4">'--username=&quot;%s&quot;' </span><span class="s1">% (uname</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">if </span><span class="s1">passwd:</span>
+            <span class="s1">ret.append(</span><span class="s4">'--password=&quot;%s&quot;' </span><span class="s1">% (passwd</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">if not </span><span class="s1">self.cache_auth:</span>
+            <span class="s1">ret.append(</span><span class="s4">'--no-auth-cache'</span><span class="s1">)</span>
+        <span class="s2">if not </span><span class="s1">self.interactive:</span>
+            <span class="s1">ret.append(</span><span class="s4">'--non-interactive'</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s4">' '</span><span class="s1">.join(ret)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;SvnAuth username=%s ...&gt;&quot; </span><span class="s1">%(self.username</span><span class="s2">,</span><span class="s1">)</span>
+
+<span class="s1">rex_blame = re.compile(</span><span class="s4">r'\s*(\d+)\s+(\S+) (.*)'</span><span class="s1">)</span>
+
+<span class="s2">class </span><span class="s1">SvnWCCommandPath(common.PathBase):</span>
+    <span class="s0">&quot;&quot;&quot; path implementation offering access/modification to svn working copies. 
+        It has methods similar to the functions in os.path and similar to the 
+        commands of the svn client. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">sep = os.sep</span>
+
+    <span class="s2">def </span><span class="s1">__new__(cls</span><span class="s2">, </span><span class="s1">wcpath=</span><span class="s2">None, </span><span class="s1">auth=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self = object.__new__(cls)</span>
+        <span class="s2">if </span><span class="s1">isinstance(wcpath</span><span class="s2">, </span><span class="s1">cls):</span>
+            <span class="s2">if </span><span class="s1">wcpath.__class__ == cls:</span>
+                <span class="s2">return </span><span class="s1">wcpath</span>
+            <span class="s1">wcpath = wcpath.localpath</span>
+        <span class="s2">if </span><span class="s1">_check_for_bad_chars(str(wcpath)</span><span class="s2">,</span>
+                                          <span class="s1">ALLOWED_CHARS):</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;bad char in wcpath %s&quot; </span><span class="s1">% (wcpath</span><span class="s2">, </span><span class="s1">))</span>
+        <span class="s1">self.localpath = py.path.local(wcpath)</span>
+        <span class="s1">self.auth = auth</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s1">strpath = property(</span><span class="s2">lambda </span><span class="s1">x: str(x.localpath)</span><span class="s2">, None, None, </span><span class="s4">&quot;string path&quot;</span><span class="s1">)</span>
+    <span class="s1">rev = property(</span><span class="s2">lambda </span><span class="s1">x: x.info(usecache=</span><span class="s5">0</span><span class="s1">).rev</span><span class="s2">, None, None, </span><span class="s4">&quot;revision&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__eq__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return </span><span class="s1">self.localpath == getattr(other</span><span class="s2">, </span><span class="s4">'localpath'</span><span class="s2">, None</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_geturl(self):</span>
+        <span class="s2">if </span><span class="s1">getattr(self</span><span class="s2">, </span><span class="s4">'_url'</span><span class="s2">, None</span><span class="s1">) </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">info = self.info()</span>
+            <span class="s1">self._url = info.url </span><span class="s3">#SvnPath(info.url, info.rev)</span>
+        <span class="s2">assert </span><span class="s1">isinstance(self._url</span><span class="s2">, </span><span class="s1">py.builtin._basestring)</span>
+        <span class="s2">return </span><span class="s1">self._url</span>
+
+    <span class="s1">url = property(_geturl</span><span class="s2">, None, None, </span><span class="s4">&quot;url of this WC item&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">_escape(self</span><span class="s2">, </span><span class="s1">cmd):</span>
+        <span class="s2">return </span><span class="s1">_escape_helper(cmd)</span>
+
+    <span class="s2">def </span><span class="s1">dump(self</span><span class="s2">, </span><span class="s1">obj):</span>
+        <span class="s0">&quot;&quot;&quot; pickle object into path location&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.localpath.dump(obj)</span>
+
+    <span class="s2">def </span><span class="s1">svnurl(self):</span>
+        <span class="s0">&quot;&quot;&quot; return current SvnPath for this WC-item. &quot;&quot;&quot;</span>
+        <span class="s1">info = self.info()</span>
+        <span class="s2">return </span><span class="s1">py.path.svnurl(info.url)</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s4">&quot;svnwc(%r)&quot; </span><span class="s1">% (self.strpath) </span><span class="s3"># , self._url)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s1">str(self.localpath)</span>
+
+    <span class="s2">def </span><span class="s1">_makeauthoptions(self):</span>
+        <span class="s2">if </span><span class="s1">self.auth </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s4">''</span>
+        <span class="s2">return </span><span class="s1">self.auth.makecmdoptions()</span>
+
+    <span class="s2">def </span><span class="s1">_authsvn(self</span><span class="s2">, </span><span class="s1">cmd</span><span class="s2">, </span><span class="s1">args=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">args = args </span><span class="s2">and </span><span class="s1">list(args) </span><span class="s2">or </span><span class="s1">[]</span>
+        <span class="s1">args.append(self._makeauthoptions())</span>
+        <span class="s2">return </span><span class="s1">self._svn(cmd</span><span class="s2">, </span><span class="s1">*args)</span>
+
+    <span class="s2">def </span><span class="s1">_svn(self</span><span class="s2">, </span><span class="s1">cmd</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s1">l = [</span><span class="s4">'svn %s' </span><span class="s1">% cmd]</span>
+        <span class="s1">args = [self._escape(item) </span><span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">args]</span>
+        <span class="s1">l.extend(args)</span>
+        <span class="s1">l.append(</span><span class="s4">'&quot;%s&quot;' </span><span class="s1">% self._escape(self.strpath))</span>
+        <span class="s3"># try fixing the locale because we can't otherwise parse</span>
+        <span class="s1">string = fixlocale() + </span><span class="s4">&quot; &quot;</span><span class="s1">.join(l)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">key = </span><span class="s4">'LC_MESSAGES'</span>
+                <span class="s1">hold = os.environ.get(key)</span>
+                <span class="s1">os.environ[key] = </span><span class="s4">'C'</span>
+                <span class="s1">out = py.process.cmdexec(string)</span>
+            <span class="s2">finally</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">hold:</span>
+                    <span class="s1">os.environ[key] = hold</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s2">del </span><span class="s1">os.environ[key]</span>
+        <span class="s2">except </span><span class="s1">py.process.cmdexec.Error:</span>
+            <span class="s1">e = sys.exc_info()[</span><span class="s5">1</span><span class="s1">]</span>
+            <span class="s1">strerr = e.err.lower()</span>
+            <span class="s2">if </span><span class="s1">strerr.find(</span><span class="s4">'not found'</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">py.error.ENOENT(self)</span>
+            <span class="s2">elif </span><span class="s1">strerr.find(</span><span class="s4">&quot;E200009:&quot;</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">py.error.ENOENT(self)</span>
+            <span class="s2">if </span><span class="s1">(strerr.find(</span><span class="s4">'file exists'</span><span class="s1">) != -</span><span class="s5">1 </span><span class="s2">or</span>
+                <span class="s1">strerr.find(</span><span class="s4">'file already exists'</span><span class="s1">) != -</span><span class="s5">1 </span><span class="s2">or</span>
+                <span class="s1">strerr.find(</span><span class="s4">'w150002:'</span><span class="s1">) != -</span><span class="s5">1 </span><span class="s2">or</span>
+                <span class="s1">strerr.find(</span><span class="s4">&quot;can't create directory&quot;</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">):</span>
+                <span class="s2">raise </span><span class="s1">py.error.EEXIST(strerr) </span><span class="s3">#self)</span>
+            <span class="s2">raise</span>
+        <span class="s2">return </span><span class="s1">out</span>
+
+    <span class="s2">def </span><span class="s1">switch(self</span><span class="s2">, </span><span class="s1">url):</span>
+        <span class="s0">&quot;&quot;&quot; switch to given URL. &quot;&quot;&quot;</span>
+        <span class="s1">self._authsvn(</span><span class="s4">'switch'</span><span class="s2">, </span><span class="s1">[url])</span>
+
+    <span class="s2">def </span><span class="s1">checkout(self</span><span class="s2">, </span><span class="s1">url=</span><span class="s2">None, </span><span class="s1">rev=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; checkout from url to local wcpath. &quot;&quot;&quot;</span>
+        <span class="s1">args = []</span>
+        <span class="s2">if </span><span class="s1">url </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">url = self.url</span>
+        <span class="s2">if </span><span class="s1">rev </span><span class="s2">is None or </span><span class="s1">rev == -</span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">(sys.platform != </span><span class="s4">'win32' </span><span class="s2">and</span>
+                    <span class="s1">_getsvnversion() == </span><span class="s4">'1.3'</span><span class="s1">):</span>
+                <span class="s1">url += </span><span class="s4">&quot;@HEAD&quot;</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">_getsvnversion() == </span><span class="s4">'1.3'</span><span class="s1">:</span>
+                <span class="s1">url += </span><span class="s4">&quot;@%d&quot; </span><span class="s1">% rev</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">args.append(</span><span class="s4">'-r' </span><span class="s1">+ str(rev))</span>
+        <span class="s1">args.append(url)</span>
+        <span class="s1">self._authsvn(</span><span class="s4">'co'</span><span class="s2">, </span><span class="s1">args)</span>
+
+    <span class="s2">def </span><span class="s1">update(self</span><span class="s2">, </span><span class="s1">rev=</span><span class="s4">'HEAD'</span><span class="s2">, </span><span class="s1">interactive=</span><span class="s2">True</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; update working copy item to given revision. (None -&gt; HEAD). &quot;&quot;&quot;</span>
+        <span class="s1">opts = [</span><span class="s4">'-r'</span><span class="s2">, </span><span class="s1">rev]</span>
+        <span class="s2">if not </span><span class="s1">interactive:</span>
+            <span class="s1">opts.append(</span><span class="s4">&quot;--non-interactive&quot;</span><span class="s1">)</span>
+        <span class="s1">self._authsvn(</span><span class="s4">'up'</span><span class="s2">, </span><span class="s1">opts)</span>
+
+    <span class="s2">def </span><span class="s1">write(self</span><span class="s2">, </span><span class="s1">content</span><span class="s2">, </span><span class="s1">mode=</span><span class="s4">'w'</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; write content into local filesystem wc. &quot;&quot;&quot;</span>
+        <span class="s1">self.localpath.write(content</span><span class="s2">, </span><span class="s1">mode)</span>
+
+    <span class="s2">def </span><span class="s1">dirpath(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot; return the directory Path of the current Path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.__class__(self.localpath.dirpath(*args)</span><span class="s2">, </span><span class="s1">auth=self.auth)</span>
+
+    <span class="s2">def </span><span class="s1">_ensuredirs(self):</span>
+        <span class="s1">parent = self.dirpath()</span>
+        <span class="s2">if </span><span class="s1">parent.check(dir=</span><span class="s5">0</span><span class="s1">):</span>
+            <span class="s1">parent._ensuredirs()</span>
+        <span class="s2">if </span><span class="s1">self.check(dir=</span><span class="s5">0</span><span class="s1">):</span>
+            <span class="s1">self.mkdir()</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">ensure(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; ensure that an args-joined path exists (by default as 
+            a file). if you specify a keyword argument 'directory=True' 
+            then the path is forced  to be a directory path. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">p = self.join(*args)</span>
+        <span class="s2">if </span><span class="s1">p.check():</span>
+            <span class="s2">if </span><span class="s1">p.check(versioned=</span><span class="s2">False</span><span class="s1">):</span>
+                <span class="s1">p.add()</span>
+            <span class="s2">return </span><span class="s1">p</span>
+        <span class="s2">if </span><span class="s1">kwargs.get(</span><span class="s4">'dir'</span><span class="s2">, </span><span class="s5">0</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">p._ensuredirs()</span>
+        <span class="s1">parent = p.dirpath()</span>
+        <span class="s1">parent._ensuredirs()</span>
+        <span class="s1">p.write(</span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+        <span class="s1">p.add()</span>
+        <span class="s2">return </span><span class="s1">p</span>
+
+    <span class="s2">def </span><span class="s1">mkdir(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot; create &amp; return the directory joined with args. &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">args:</span>
+            <span class="s2">return </span><span class="s1">self.join(*args).mkdir()</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">self._svn(</span><span class="s4">'mkdir'</span><span class="s1">)</span>
+            <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">add(self):</span>
+        <span class="s0">&quot;&quot;&quot; add ourself to svn &quot;&quot;&quot;</span>
+        <span class="s1">self._svn(</span><span class="s4">'add'</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">remove(self</span><span class="s2">, </span><span class="s1">rec=</span><span class="s5">1</span><span class="s2">, </span><span class="s1">force=</span><span class="s5">1</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; remove a file or a directory tree. 'rec'ursive is 
+            ignored and considered always true (because of 
+            underlying svn semantics. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">assert </span><span class="s1">rec</span><span class="s2">, </span><span class="s4">&quot;svn cannot remove non-recursively&quot;</span>
+        <span class="s2">if not </span><span class="s1">self.check(versioned=</span><span class="s2">True</span><span class="s1">):</span>
+            <span class="s3"># not added to svn (anymore?), just remove</span>
+            <span class="s1">py.path.local(self).remove()</span>
+            <span class="s2">return</span>
+        <span class="s1">flags = []</span>
+        <span class="s2">if </span><span class="s1">force:</span>
+            <span class="s1">flags.append(</span><span class="s4">'--force'</span><span class="s1">)</span>
+        <span class="s1">self._svn(</span><span class="s4">'remove'</span><span class="s2">, </span><span class="s1">*flags)</span>
+
+    <span class="s2">def </span><span class="s1">copy(self</span><span class="s2">, </span><span class="s1">target):</span>
+        <span class="s0">&quot;&quot;&quot; copy path to target.&quot;&quot;&quot;</span>
+        <span class="s1">py.process.cmdexec(</span><span class="s4">&quot;svn copy %s %s&quot; </span><span class="s1">%(str(self)</span><span class="s2">, </span><span class="s1">str(target)))</span>
+
+    <span class="s2">def </span><span class="s1">rename(self</span><span class="s2">, </span><span class="s1">target):</span>
+        <span class="s0">&quot;&quot;&quot; rename this path to target. &quot;&quot;&quot;</span>
+        <span class="s1">py.process.cmdexec(</span><span class="s4">&quot;svn move --force %s %s&quot; </span><span class="s1">%(str(self)</span><span class="s2">, </span><span class="s1">str(target)))</span>
+
+    <span class="s2">def </span><span class="s1">lock(self):</span>
+        <span class="s0">&quot;&quot;&quot; set a lock (exclusive) on the resource &quot;&quot;&quot;</span>
+        <span class="s1">out = self._authsvn(</span><span class="s4">'lock'</span><span class="s1">).strip()</span>
+        <span class="s2">if not </span><span class="s1">out:</span>
+            <span class="s3"># warning or error, raise exception</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;unknown error in svn lock command&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">unlock(self):</span>
+        <span class="s0">&quot;&quot;&quot; unset a previously set lock &quot;&quot;&quot;</span>
+        <span class="s1">out = self._authsvn(</span><span class="s4">'unlock'</span><span class="s1">).strip()</span>
+        <span class="s2">if </span><span class="s1">out.startswith(</span><span class="s4">'svn:'</span><span class="s1">):</span>
+            <span class="s3"># warning or error, raise exception</span>
+            <span class="s2">raise </span><span class="s1">Exception(out[</span><span class="s5">4</span><span class="s1">:])</span>
+
+    <span class="s2">def </span><span class="s1">cleanup(self):</span>
+        <span class="s0">&quot;&quot;&quot; remove any locks from the resource &quot;&quot;&quot;</span>
+        <span class="s3"># XXX should be fixed properly!!!</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.unlock()</span>
+        <span class="s2">except</span><span class="s1">:</span>
+            <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">status(self</span><span class="s2">, </span><span class="s1">updates=</span><span class="s5">0</span><span class="s2">, </span><span class="s1">rec=</span><span class="s5">0</span><span class="s2">, </span><span class="s1">externals=</span><span class="s5">0</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return (collective) Status object for this file. &quot;&quot;&quot;</span>
+        <span class="s3"># http://svnbook.red-bean.com/book.html#svn-ch-3-sect-4.3.1</span>
+        <span class="s3">#             2201     2192        jum   test</span>
+        <span class="s3"># XXX</span>
+        <span class="s2">if </span><span class="s1">externals:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;XXX cannot perform status() &quot;</span>
+                             <span class="s4">&quot;on external items yet&quot;</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s3">#1.2 supports: externals = '--ignore-externals'</span>
+            <span class="s1">externals = </span><span class="s4">''</span>
+        <span class="s2">if </span><span class="s1">rec:</span>
+            <span class="s1">rec= </span><span class="s4">''</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">rec = </span><span class="s4">'--non-recursive'</span>
+
+        <span class="s3"># XXX does not work on all subversion versions</span>
+        <span class="s3">#if not externals:</span>
+        <span class="s3">#    externals = '--ignore-externals'</span>
+
+        <span class="s2">if </span><span class="s1">updates:</span>
+            <span class="s1">updates = </span><span class="s4">'-u'</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">updates = </span><span class="s4">''</span>
+
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">cmd = </span><span class="s4">'status -v --xml --no-ignore %s %s %s' </span><span class="s1">% (</span>
+                    <span class="s1">updates</span><span class="s2">, </span><span class="s1">rec</span><span class="s2">, </span><span class="s1">externals)</span>
+            <span class="s1">out = self._authsvn(cmd)</span>
+        <span class="s2">except </span><span class="s1">py.process.cmdexec.Error:</span>
+            <span class="s1">cmd = </span><span class="s4">'status -v --no-ignore %s %s %s' </span><span class="s1">% (</span>
+                    <span class="s1">updates</span><span class="s2">, </span><span class="s1">rec</span><span class="s2">, </span><span class="s1">externals)</span>
+            <span class="s1">out = self._authsvn(cmd)</span>
+            <span class="s1">rootstatus = WCStatus(self).fromstring(out</span><span class="s2">, </span><span class="s1">self)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">rootstatus = XMLWCStatus(self).fromstring(out</span><span class="s2">, </span><span class="s1">self)</span>
+        <span class="s2">return </span><span class="s1">rootstatus</span>
+
+    <span class="s2">def </span><span class="s1">diff(self</span><span class="s2">, </span><span class="s1">rev=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a diff of the current path against revision rev (defaulting 
+            to the last one). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">args = []</span>
+        <span class="s2">if </span><span class="s1">rev </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">args.append(</span><span class="s4">&quot;-r %d&quot; </span><span class="s1">% rev)</span>
+        <span class="s1">out = self._authsvn(</span><span class="s4">'diff'</span><span class="s2">, </span><span class="s1">args)</span>
+        <span class="s2">return </span><span class="s1">out</span>
+
+    <span class="s2">def </span><span class="s1">blame(self):</span>
+        <span class="s0">&quot;&quot;&quot; return a list of tuples of three elements: 
+            (revision, commiter, line) 
+        &quot;&quot;&quot;</span>
+        <span class="s1">out = self._svn(</span><span class="s4">'blame'</span><span class="s1">)</span>
+        <span class="s1">result = []</span>
+        <span class="s1">blamelines = out.splitlines()</span>
+        <span class="s1">reallines = py.path.svnurl(self.url).readlines()</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">(blameline</span><span class="s2">, </span><span class="s1">line) </span><span class="s2">in </span><span class="s1">enumerate(</span>
+                <span class="s1">zip(blamelines</span><span class="s2">, </span><span class="s1">reallines)):</span>
+            <span class="s1">m = rex_blame.match(blameline)</span>
+            <span class="s2">if not </span><span class="s1">m:</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;output line %r of svn blame does not match &quot;</span>
+                                 <span class="s4">&quot;expected format&quot; </span><span class="s1">% (line</span><span class="s2">, </span><span class="s1">))</span>
+            <span class="s1">rev</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">_ = m.groups()</span>
+            <span class="s1">result.append((int(rev)</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">line))</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+    <span class="s1">_rex_commit = re.compile(</span><span class="s4">r'.*Committed revision (\d+)\.$'</span><span class="s2">, </span><span class="s1">re.DOTALL)</span>
+    <span class="s2">def </span><span class="s1">commit(self</span><span class="s2">, </span><span class="s1">msg=</span><span class="s4">''</span><span class="s2">, </span><span class="s1">rec=</span><span class="s5">1</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; commit with support for non-recursive commits &quot;&quot;&quot;</span>
+        <span class="s3"># XXX i guess escaping should be done better here?!?</span>
+        <span class="s1">cmd = </span><span class="s4">'commit -m &quot;%s&quot; --force-log' </span><span class="s1">% (msg.replace(</span><span class="s4">'&quot;'</span><span class="s2">, </span><span class="s4">'</span><span class="s2">\\</span><span class="s4">&quot;'</span><span class="s1">)</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s2">if not </span><span class="s1">rec:</span>
+            <span class="s1">cmd += </span><span class="s4">' -N'</span>
+        <span class="s1">out = self._authsvn(cmd)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">del </span><span class="s1">cache.info[self]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">pass</span>
+        <span class="s2">if </span><span class="s1">out:</span>
+            <span class="s1">m = self._rex_commit.match(out)</span>
+            <span class="s2">return </span><span class="s1">int(m.group(</span><span class="s5">1</span><span class="s1">))</span>
+
+    <span class="s2">def </span><span class="s1">propset(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s0">&quot;&quot;&quot; set property name to value on this path. &quot;&quot;&quot;</span>
+        <span class="s1">d = py.path.local.mkdtemp()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">p = d.join(</span><span class="s4">'value'</span><span class="s1">)</span>
+            <span class="s1">p.write(value)</span>
+            <span class="s1">self._svn(</span><span class="s4">'propset'</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s4">'--file'</span><span class="s2">, </span><span class="s1">str(p)</span><span class="s2">, </span><span class="s1">*args)</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">d.remove()</span>
+
+    <span class="s2">def </span><span class="s1">propget(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s0">&quot;&quot;&quot; get property name on this path. &quot;&quot;&quot;</span>
+        <span class="s1">res = self._svn(</span><span class="s4">'propget'</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s2">return </span><span class="s1">res[:-</span><span class="s5">1</span><span class="s1">] </span><span class="s3"># strip trailing newline</span>
+
+    <span class="s2">def </span><span class="s1">propdel(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s0">&quot;&quot;&quot; delete property name on this path. &quot;&quot;&quot;</span>
+        <span class="s1">res = self._svn(</span><span class="s4">'propdel'</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s2">return </span><span class="s1">res[:-</span><span class="s5">1</span><span class="s1">] </span><span class="s3"># strip trailing newline</span>
+
+    <span class="s2">def </span><span class="s1">proplist(self</span><span class="s2">, </span><span class="s1">rec=</span><span class="s5">0</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a mapping of property names to property values. 
+If rec is True, then return a dictionary mapping sub-paths to such mappings. 
+&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">rec:</span>
+            <span class="s1">res = self._svn(</span><span class="s4">'proplist -R'</span><span class="s1">)</span>
+            <span class="s2">return </span><span class="s1">make_recursive_propdict(self</span><span class="s2">, </span><span class="s1">res)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">res = self._svn(</span><span class="s4">'proplist'</span><span class="s1">)</span>
+            <span class="s1">lines = res.split(</span><span class="s4">'</span><span class="s2">\n</span><span class="s4">'</span><span class="s1">)</span>
+            <span class="s1">lines = [x.strip() </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">lines[</span><span class="s5">1</span><span class="s1">:]]</span>
+            <span class="s2">return </span><span class="s1">PropListDict(self</span><span class="s2">, </span><span class="s1">lines)</span>
+
+    <span class="s2">def </span><span class="s1">revert(self</span><span class="s2">, </span><span class="s1">rec=</span><span class="s5">0</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; revert the local changes of this path. if rec is True, do so 
+recursively. &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">rec:</span>
+            <span class="s1">result = self._svn(</span><span class="s4">'revert -R'</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">result = self._svn(</span><span class="s4">'revert'</span><span class="s1">)</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">new(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s0">&quot;&quot;&quot; create a modified version of this path. A 'rev' argument 
+            indicates a new revision. 
+            the following keyword arguments modify various path parts: 
+ 
+              http://host.com/repo/path/file.ext 
+              |-----------------------|          dirname 
+                                        |------| basename 
+                                        |--|     purebasename 
+                                            |--| ext 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">kw:</span>
+            <span class="s1">localpath = self.localpath.new(**kw)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">localpath = self.localpath</span>
+        <span class="s2">return </span><span class="s1">self.__class__(localpath</span><span class="s2">, </span><span class="s1">auth=self.auth)</span>
+
+    <span class="s2">def </span><span class="s1">join(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; return a new Path (with the same revision) which is composed 
+            of the self Path followed by 'args' path components. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">args:</span>
+            <span class="s2">return </span><span class="s1">self</span>
+        <span class="s1">localpath = self.localpath.join(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+        <span class="s2">return </span><span class="s1">self.__class__(localpath</span><span class="s2">, </span><span class="s1">auth=self.auth)</span>
+
+    <span class="s2">def </span><span class="s1">info(self</span><span class="s2">, </span><span class="s1">usecache=</span><span class="s5">1</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return an Info structure with svn-provided information. &quot;&quot;&quot;</span>
+        <span class="s1">info = usecache </span><span class="s2">and </span><span class="s1">cache.info.get(self)</span>
+        <span class="s2">if not </span><span class="s1">info:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">output = self._svn(</span><span class="s4">'info'</span><span class="s1">)</span>
+            <span class="s2">except </span><span class="s1">py.process.cmdexec.Error:</span>
+                <span class="s1">e = sys.exc_info()[</span><span class="s5">1</span><span class="s1">]</span>
+                <span class="s2">if </span><span class="s1">e.err.find(</span><span class="s4">'Path is not a working copy directory'</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s2">raise </span><span class="s1">py.error.ENOENT(self</span><span class="s2">, </span><span class="s1">e.err)</span>
+                <span class="s2">elif </span><span class="s1">e.err.find(</span><span class="s4">&quot;is not under version control&quot;</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s2">raise </span><span class="s1">py.error.ENOENT(self</span><span class="s2">, </span><span class="s1">e.err)</span>
+                <span class="s2">raise</span>
+            <span class="s3"># XXX SVN 1.3 has output on stderr instead of stdout (while it does</span>
+            <span class="s3"># return 0!), so a bit nasty, but we assume no output is output</span>
+            <span class="s3"># to stderr...</span>
+            <span class="s2">if </span><span class="s1">(output.strip() == </span><span class="s4">'' </span><span class="s2">or</span>
+                    <span class="s1">output.lower().find(</span><span class="s4">'not a versioned resource'</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">):</span>
+                <span class="s2">raise </span><span class="s1">py.error.ENOENT(self</span><span class="s2">, </span><span class="s1">output)</span>
+            <span class="s1">info = InfoSvnWCCommand(output)</span>
+
+            <span class="s3"># Can't reliably compare on Windows without access to win32api</span>
+            <span class="s2">if </span><span class="s1">sys.platform != </span><span class="s4">'win32'</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">info.path != self.localpath:</span>
+                    <span class="s2">raise </span><span class="s1">py.error.ENOENT(self</span><span class="s2">, </span><span class="s4">&quot;not a versioned resource:&quot; </span><span class="s1">+</span>
+                            <span class="s4">&quot; %s != %s&quot; </span><span class="s1">% (info.path</span><span class="s2">, </span><span class="s1">self.localpath))</span>
+            <span class="s1">cache.info[self] = info</span>
+        <span class="s2">return </span><span class="s1">info</span>
+
+    <span class="s2">def </span><span class="s1">listdir(self</span><span class="s2">, </span><span class="s1">fil=</span><span class="s2">None, </span><span class="s1">sort=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a sequence of Paths. 
+ 
+        listdir will return either a tuple or a list of paths 
+        depending on implementation choices. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance(fil</span><span class="s2">, </span><span class="s1">str):</span>
+            <span class="s1">fil = common.FNMatcher(fil)</span>
+        <span class="s3"># XXX unify argument naming with LocalPath.listdir</span>
+        <span class="s2">def </span><span class="s1">notsvn(path):</span>
+            <span class="s2">return </span><span class="s1">path.basename != </span><span class="s4">'.svn'</span>
+
+        <span class="s1">paths = []</span>
+        <span class="s2">for </span><span class="s1">localpath </span><span class="s2">in </span><span class="s1">self.localpath.listdir(notsvn):</span>
+            <span class="s1">p = self.__class__(localpath</span><span class="s2">, </span><span class="s1">auth=self.auth)</span>
+            <span class="s2">if </span><span class="s1">notsvn(p) </span><span class="s2">and </span><span class="s1">(</span><span class="s2">not </span><span class="s1">fil </span><span class="s2">or </span><span class="s1">fil(p)):</span>
+                <span class="s1">paths.append(p)</span>
+        <span class="s1">self._sortlist(paths</span><span class="s2">, </span><span class="s1">sort)</span>
+        <span class="s2">return </span><span class="s1">paths</span>
+
+    <span class="s2">def </span><span class="s1">open(self</span><span class="s2">, </span><span class="s1">mode=</span><span class="s4">'r'</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return an opened file with the given mode. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">open(self.strpath</span><span class="s2">, </span><span class="s1">mode)</span>
+
+    <span class="s2">def </span><span class="s1">_getbyspec(self</span><span class="s2">, </span><span class="s1">spec):</span>
+        <span class="s2">return </span><span class="s1">self.localpath._getbyspec(spec)</span>
+
+    <span class="s2">class </span><span class="s1">Checkers(py.path.local.Checkers):</span>
+        <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">path):</span>
+            <span class="s1">self.svnwcpath = path</span>
+            <span class="s1">self.path = path.localpath</span>
+        <span class="s2">def </span><span class="s1">versioned(self):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">s = self.svnwcpath.info()</span>
+            <span class="s2">except </span><span class="s1">(py.error.ENOENT</span><span class="s2">, </span><span class="s1">py.error.EEXIST):</span>
+                <span class="s2">return False</span>
+            <span class="s2">except </span><span class="s1">py.process.cmdexec.Error:</span>
+                <span class="s1">e = sys.exc_info()[</span><span class="s5">1</span><span class="s1">]</span>
+                <span class="s2">if </span><span class="s1">e.err.find(</span><span class="s4">'is not a working copy'</span><span class="s1">)!=-</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s2">return False</span>
+                <span class="s2">if </span><span class="s1">e.err.lower().find(</span><span class="s4">'not a versioned resource'</span><span class="s1">) != -</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s2">return False</span>
+                <span class="s2">raise</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">log(self</span><span class="s2">, </span><span class="s1">rev_start=</span><span class="s2">None, </span><span class="s1">rev_end=</span><span class="s5">1</span><span class="s2">, </span><span class="s1">verbose=</span><span class="s2">False</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a list of LogEntry instances for this path. 
+rev_start is the starting revision (defaulting to the first one). 
+rev_end is the last revision (defaulting to HEAD). 
+if verbose is True, then the LogEntry instances also know which files changed. 
+&quot;&quot;&quot;</span>
+        <span class="s2">assert </span><span class="s1">self.check()   </span><span class="s3"># make it simpler for the pipe</span>
+        <span class="s1">rev_start = rev_start </span><span class="s2">is None and </span><span class="s4">&quot;HEAD&quot; </span><span class="s2">or </span><span class="s1">rev_start</span>
+        <span class="s1">rev_end = rev_end </span><span class="s2">is None and </span><span class="s4">&quot;HEAD&quot; </span><span class="s2">or </span><span class="s1">rev_end</span>
+        <span class="s2">if </span><span class="s1">rev_start == </span><span class="s4">&quot;HEAD&quot; </span><span class="s2">and </span><span class="s1">rev_end == </span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s1">rev_opt = </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">rev_opt = </span><span class="s4">&quot;-r %s:%s&quot; </span><span class="s1">% (rev_start</span><span class="s2">, </span><span class="s1">rev_end)</span>
+        <span class="s1">verbose_opt = verbose </span><span class="s2">and </span><span class="s4">&quot;-v&quot; </span><span class="s2">or </span><span class="s4">&quot;&quot;</span>
+        <span class="s1">locale_env = fixlocale()</span>
+        <span class="s3"># some blather on stderr</span>
+        <span class="s1">auth_opt = self._makeauthoptions()</span>
+        <span class="s3">#stdin, stdout, stderr  = os.popen3(locale_env +</span>
+        <span class="s3">#                                   'svn log --xml %s %s %s &quot;%s&quot;' % (</span>
+        <span class="s3">#                                    rev_opt, verbose_opt, auth_opt,</span>
+        <span class="s3">#                                    self.strpath))</span>
+        <span class="s1">cmd = locale_env + </span><span class="s4">'svn log --xml %s %s %s &quot;%s&quot;' </span><span class="s1">% (</span>
+            <span class="s1">rev_opt</span><span class="s2">, </span><span class="s1">verbose_opt</span><span class="s2">, </span><span class="s1">auth_opt</span><span class="s2">, </span><span class="s1">self.strpath)</span>
+
+        <span class="s1">popen = subprocess.Popen(cmd</span><span class="s2">,</span>
+                    <span class="s1">stdout=subprocess.PIPE</span><span class="s2">,</span>
+                    <span class="s1">stderr=subprocess.PIPE</span><span class="s2">,</span>
+                    <span class="s1">shell=</span><span class="s2">True,</span>
+        <span class="s1">)</span>
+        <span class="s1">stdout</span><span class="s2">, </span><span class="s1">stderr = popen.communicate()</span>
+        <span class="s1">stdout = py.builtin._totext(stdout</span><span class="s2">, </span><span class="s1">sys.getdefaultencoding())</span>
+        <span class="s1">minidom</span><span class="s2">,</span><span class="s1">ExpatError = importxml()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">tree = minidom.parseString(stdout)</span>
+        <span class="s2">except </span><span class="s1">ExpatError:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">'no such revision'</span><span class="s1">)</span>
+        <span class="s1">result = []</span>
+        <span class="s2">for </span><span class="s1">logentry </span><span class="s2">in </span><span class="s1">filter(</span><span class="s2">None, </span><span class="s1">tree.firstChild.childNodes):</span>
+            <span class="s2">if </span><span class="s1">logentry.nodeType == logentry.ELEMENT_NODE:</span>
+                <span class="s1">result.append(LogEntry(logentry))</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">size(self):</span>
+        <span class="s0">&quot;&quot;&quot; Return the size of the file content of the Path. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.info().size</span>
+
+    <span class="s2">def </span><span class="s1">mtime(self):</span>
+        <span class="s0">&quot;&quot;&quot; Return the last modification time of the file. &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.info().mtime</span>
+
+    <span class="s2">def </span><span class="s1">__hash__(self):</span>
+        <span class="s2">return </span><span class="s1">hash((self.strpath</span><span class="s2">, </span><span class="s1">self.__class__</span><span class="s2">, </span><span class="s1">self.auth))</span>
+
+
+<span class="s2">class </span><span class="s1">WCStatus:</span>
+    <span class="s1">attrnames = (</span><span class="s4">'modified'</span><span class="s2">,</span><span class="s4">'added'</span><span class="s2">, </span><span class="s4">'conflict'</span><span class="s2">, </span><span class="s4">'unchanged'</span><span class="s2">, </span><span class="s4">'external'</span><span class="s2">,</span>
+                <span class="s4">'deleted'</span><span class="s2">, </span><span class="s4">'prop_modified'</span><span class="s2">, </span><span class="s4">'unknown'</span><span class="s2">, </span><span class="s4">'update_available'</span><span class="s2">,</span>
+                <span class="s4">'incomplete'</span><span class="s2">, </span><span class="s4">'kindmismatch'</span><span class="s2">, </span><span class="s4">'ignored'</span><span class="s2">, </span><span class="s4">'locked'</span><span class="s2">, </span><span class="s4">'replaced'</span>
+                <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">wcpath</span><span class="s2">, </span><span class="s1">rev=</span><span class="s2">None, </span><span class="s1">modrev=</span><span class="s2">None, </span><span class="s1">author=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.wcpath = wcpath</span>
+        <span class="s1">self.rev = rev</span>
+        <span class="s1">self.modrev = modrev</span>
+        <span class="s1">self.author = author</span>
+
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">self.attrnames:</span>
+            <span class="s1">setattr(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">[])</span>
+
+    <span class="s2">def </span><span class="s1">allpath(self</span><span class="s2">, </span><span class="s1">sort=</span><span class="s2">True, </span><span class="s1">**kw):</span>
+        <span class="s1">d = {}</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">self.attrnames:</span>
+            <span class="s2">if </span><span class="s1">name </span><span class="s2">not in </span><span class="s1">kw </span><span class="s2">or </span><span class="s1">kw[name]:</span>
+                <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">getattr(self</span><span class="s2">, </span><span class="s1">name):</span>
+                    <span class="s1">d[path] = </span><span class="s5">1</span>
+        <span class="s1">l = d.keys()</span>
+        <span class="s2">if </span><span class="s1">sort:</span>
+            <span class="s1">l.sort()</span>
+        <span class="s2">return </span><span class="s1">l</span>
+
+    <span class="s3"># XXX a bit scary to assume there's always 2 spaces between username and</span>
+    <span class="s3"># path, however with win32 allowing spaces in user names there doesn't</span>
+    <span class="s3"># seem to be a more solid approach :(</span>
+    <span class="s1">_rex_status = re.compile(</span><span class="s4">r'\s+(\d+|-)\s+(\S+)\s+(.+?)\s{2,}(.*)'</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">fromstring(data</span><span class="s2">, </span><span class="s1">rootwcpath</span><span class="s2">, </span><span class="s1">rev=</span><span class="s2">None, </span><span class="s1">modrev=</span><span class="s2">None, </span><span class="s1">author=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; return a new WCStatus object from data 's' 
+        &quot;&quot;&quot;</span>
+        <span class="s1">rootstatus = WCStatus(rootwcpath</span><span class="s2">, </span><span class="s1">rev</span><span class="s2">, </span><span class="s1">modrev</span><span class="s2">, </span><span class="s1">author)</span>
+        <span class="s1">update_rev = </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">data.split(</span><span class="s4">'</span><span class="s2">\n</span><span class="s4">'</span><span class="s1">):</span>
+            <span class="s2">if not </span><span class="s1">line.strip():</span>
+                <span class="s2">continue</span>
+            <span class="s3">#print &quot;processing %r&quot; % line</span>
+            <span class="s1">flags</span><span class="s2">, </span><span class="s1">rest = line[:</span><span class="s5">8</span><span class="s1">]</span><span class="s2">, </span><span class="s1">line[</span><span class="s5">8</span><span class="s1">:]</span>
+            <span class="s3"># first column</span>
+            <span class="s1">c0</span><span class="s2">,</span><span class="s1">c1</span><span class="s2">,</span><span class="s1">c2</span><span class="s2">,</span><span class="s1">c3</span><span class="s2">,</span><span class="s1">c4</span><span class="s2">,</span><span class="s1">c5</span><span class="s2">,</span><span class="s1">x6</span><span class="s2">,</span><span class="s1">c7 = flags</span>
+            <span class="s3">#if '*' in line:</span>
+            <span class="s3">#    print &quot;flags&quot;, repr(flags), &quot;rest&quot;, repr(rest)</span>
+
+            <span class="s2">if </span><span class="s1">c0 </span><span class="s2">in </span><span class="s4">'?XI'</span><span class="s1">:</span>
+                <span class="s1">fn = line.split(</span><span class="s2">None, </span><span class="s5">1</span><span class="s1">)[</span><span class="s5">1</span><span class="s1">]</span>
+                <span class="s2">if </span><span class="s1">c0 == </span><span class="s4">'?'</span><span class="s1">:</span>
+                    <span class="s1">wcpath = rootwcpath.join(fn</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                    <span class="s1">rootstatus.unknown.append(wcpath)</span>
+                <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'X'</span><span class="s1">:</span>
+                    <span class="s1">wcpath = rootwcpath.__class__(</span>
+                        <span class="s1">rootwcpath.localpath.join(fn</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span><span class="s2">,</span>
+                        <span class="s1">auth=rootwcpath.auth)</span>
+                    <span class="s1">rootstatus.external.append(wcpath)</span>
+                <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'I'</span><span class="s1">:</span>
+                    <span class="s1">wcpath = rootwcpath.join(fn</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                    <span class="s1">rootstatus.ignored.append(wcpath)</span>
+
+                <span class="s2">continue</span>
+
+            <span class="s3">#elif c0 in '~!' or c4 == 'S':</span>
+            <span class="s3">#    raise NotImplementedError(&quot;received flag %r&quot; % c0)</span>
+
+            <span class="s1">m = WCStatus._rex_status.match(rest)</span>
+            <span class="s2">if not </span><span class="s1">m:</span>
+                <span class="s2">if </span><span class="s1">c7 == </span><span class="s4">'*'</span><span class="s1">:</span>
+                    <span class="s1">fn = rest.strip()</span>
+                    <span class="s1">wcpath = rootwcpath.join(fn</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                    <span class="s1">rootstatus.update_available.append(wcpath)</span>
+                    <span class="s2">continue</span>
+                <span class="s2">if </span><span class="s1">line.lower().find(</span><span class="s4">'against revision:'</span><span class="s1">)!=-</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s1">update_rev = int(rest.split(</span><span class="s4">':'</span><span class="s1">)[</span><span class="s5">1</span><span class="s1">].strip())</span>
+                    <span class="s2">continue</span>
+                <span class="s2">if </span><span class="s1">line.lower().find(</span><span class="s4">'status on external'</span><span class="s1">) &gt; -</span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s3"># XXX not sure what to do here... perhaps we want to</span>
+                    <span class="s3"># store some state instead of just continuing, as right</span>
+                    <span class="s3"># now it makes the top-level external get added twice</span>
+                    <span class="s3"># (once as external, once as 'normal' unchanged item)</span>
+                    <span class="s3"># because of the way SVN presents external items</span>
+                    <span class="s2">continue</span>
+                <span class="s3"># keep trying</span>
+                <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;could not parse line %r&quot; </span><span class="s1">% line)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">rev</span><span class="s2">, </span><span class="s1">modrev</span><span class="s2">, </span><span class="s1">author</span><span class="s2">, </span><span class="s1">fn = m.groups()</span>
+            <span class="s1">wcpath = rootwcpath.join(fn</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s3">#assert wcpath.check()</span>
+            <span class="s2">if </span><span class="s1">c0 == </span><span class="s4">'M'</span><span class="s1">:</span>
+                <span class="s2">assert </span><span class="s1">wcpath.check(file=</span><span class="s5">1</span><span class="s1">)</span><span class="s2">, </span><span class="s4">&quot;didn't expect a directory with changed content here&quot;</span>
+                <span class="s1">rootstatus.modified.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'A' </span><span class="s2">or </span><span class="s1">c3 == </span><span class="s4">'+' </span><span class="s1">:</span>
+                <span class="s1">rootstatus.added.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'D'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.deleted.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'C'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.conflict.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'~'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.kindmismatch.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'!'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.incomplete.append(wcpath)</span>
+            <span class="s2">elif </span><span class="s1">c0 == </span><span class="s4">'R'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.replaced.append(wcpath)</span>
+            <span class="s2">elif not </span><span class="s1">c0.strip():</span>
+                <span class="s1">rootstatus.unchanged.append(wcpath)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">NotImplementedError(</span><span class="s4">&quot;received flag %r&quot; </span><span class="s1">% c0)</span>
+
+            <span class="s2">if </span><span class="s1">c1 == </span><span class="s4">'M'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.prop_modified.append(wcpath)</span>
+            <span class="s3"># XXX do we cover all client versions here?</span>
+            <span class="s2">if </span><span class="s1">c2 == </span><span class="s4">'L' </span><span class="s2">or </span><span class="s1">c5 == </span><span class="s4">'K'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.locked.append(wcpath)</span>
+            <span class="s2">if </span><span class="s1">c7 == </span><span class="s4">'*'</span><span class="s1">:</span>
+                <span class="s1">rootstatus.update_available.append(wcpath)</span>
+
+            <span class="s2">if </span><span class="s1">wcpath == rootwcpath:</span>
+                <span class="s1">rootstatus.rev = rev</span>
+                <span class="s1">rootstatus.modrev = modrev</span>
+                <span class="s1">rootstatus.author = author</span>
+                <span class="s2">if </span><span class="s1">update_rev:</span>
+                    <span class="s1">rootstatus.update_rev = update_rev</span>
+                <span class="s2">continue</span>
+        <span class="s2">return </span><span class="s1">rootstatus</span>
+    <span class="s1">fromstring = staticmethod(fromstring)</span>
+
+<span class="s2">class </span><span class="s1">XMLWCStatus(WCStatus):</span>
+    <span class="s2">def </span><span class="s1">fromstring(data</span><span class="s2">, </span><span class="s1">rootwcpath</span><span class="s2">, </span><span class="s1">rev=</span><span class="s2">None, </span><span class="s1">modrev=</span><span class="s2">None, </span><span class="s1">author=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot; parse 'data' (XML string as outputted by svn st) into a status obj 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># XXX for externals, the path is shown twice: once</span>
+        <span class="s3"># with external information, and once with full info as if</span>
+        <span class="s3"># the item was a normal non-external... the current way of</span>
+        <span class="s3"># dealing with this issue is by ignoring it - this does make</span>
+        <span class="s3"># externals appear as external items as well as 'normal',</span>
+        <span class="s3"># unchanged ones in the status object so this is far from ideal</span>
+        <span class="s1">rootstatus = WCStatus(rootwcpath</span><span class="s2">, </span><span class="s1">rev</span><span class="s2">, </span><span class="s1">modrev</span><span class="s2">, </span><span class="s1">author)</span>
+        <span class="s1">update_rev = </span><span class="s2">None</span>
+        <span class="s1">minidom</span><span class="s2">, </span><span class="s1">ExpatError = importxml()</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">doc = minidom.parseString(data)</span>
+        <span class="s2">except </span><span class="s1">ExpatError:</span>
+            <span class="s1">e = sys.exc_info()[</span><span class="s5">1</span><span class="s1">]</span>
+            <span class="s2">raise </span><span class="s1">ValueError(str(e))</span>
+        <span class="s1">urevels = doc.getElementsByTagName(</span><span class="s4">'against'</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">urevels:</span>
+            <span class="s1">rootstatus.update_rev = urevels[-</span><span class="s5">1</span><span class="s1">].getAttribute(</span><span class="s4">'revision'</span><span class="s1">)</span>
+        <span class="s2">for </span><span class="s1">entryel </span><span class="s2">in </span><span class="s1">doc.getElementsByTagName(</span><span class="s4">'entry'</span><span class="s1">):</span>
+            <span class="s1">path = entryel.getAttribute(</span><span class="s4">'path'</span><span class="s1">)</span>
+            <span class="s1">statusel = entryel.getElementsByTagName(</span><span class="s4">'wc-status'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+            <span class="s1">itemstatus = statusel.getAttribute(</span><span class="s4">'item'</span><span class="s1">)</span>
+
+            <span class="s2">if </span><span class="s1">itemstatus == </span><span class="s4">'unversioned'</span><span class="s1">:</span>
+                <span class="s1">wcpath = rootwcpath.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">rootstatus.unknown.append(wcpath)</span>
+                <span class="s2">continue</span>
+            <span class="s2">elif </span><span class="s1">itemstatus == </span><span class="s4">'external'</span><span class="s1">:</span>
+                <span class="s1">wcpath = rootwcpath.__class__(</span>
+                    <span class="s1">rootwcpath.localpath.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">auth=rootwcpath.auth)</span>
+                <span class="s1">rootstatus.external.append(wcpath)</span>
+                <span class="s2">continue</span>
+            <span class="s2">elif </span><span class="s1">itemstatus == </span><span class="s4">'ignored'</span><span class="s1">:</span>
+                <span class="s1">wcpath = rootwcpath.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">rootstatus.ignored.append(wcpath)</span>
+                <span class="s2">continue</span>
+            <span class="s2">elif </span><span class="s1">itemstatus == </span><span class="s4">'incomplete'</span><span class="s1">:</span>
+                <span class="s1">wcpath = rootwcpath.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">rootstatus.incomplete.append(wcpath)</span>
+                <span class="s2">continue</span>
+
+            <span class="s1">rev = statusel.getAttribute(</span><span class="s4">'revision'</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">itemstatus == </span><span class="s4">'added' </span><span class="s2">or </span><span class="s1">itemstatus == </span><span class="s4">'none'</span><span class="s1">:</span>
+                <span class="s1">rev = </span><span class="s4">'0'</span>
+                <span class="s1">modrev = </span><span class="s4">'?'</span>
+                <span class="s1">author = </span><span class="s4">'?'</span>
+                <span class="s1">date = </span><span class="s4">''</span>
+            <span class="s2">elif </span><span class="s1">itemstatus == </span><span class="s4">&quot;replaced&quot;</span><span class="s1">:</span>
+                <span class="s2">pass</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s3">#print entryel.toxml()</span>
+                <span class="s1">commitel = entryel.getElementsByTagName(</span><span class="s4">'commit'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+                <span class="s2">if </span><span class="s1">commitel:</span>
+                    <span class="s1">modrev = commitel.getAttribute(</span><span class="s4">'revision'</span><span class="s1">)</span>
+                    <span class="s1">author = </span><span class="s4">''</span>
+                    <span class="s1">author_els = commitel.getElementsByTagName(</span><span class="s4">'author'</span><span class="s1">)</span>
+                    <span class="s2">if </span><span class="s1">author_els:</span>
+                        <span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">author_els[</span><span class="s5">0</span><span class="s1">].childNodes:</span>
+                            <span class="s1">author += c.nodeValue</span>
+                    <span class="s1">date = </span><span class="s4">''</span>
+                    <span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">commitel.getElementsByTagName(</span><span class="s4">'date'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]\</span>
+                            <span class="s1">.childNodes:</span>
+                        <span class="s1">date += c.nodeValue</span>
+
+            <span class="s1">wcpath = rootwcpath.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+
+            <span class="s2">assert </span><span class="s1">itemstatus != </span><span class="s4">'modified' </span><span class="s2">or </span><span class="s1">wcpath.check(file=</span><span class="s5">1</span><span class="s1">)</span><span class="s2">, </span><span class="s1">(</span>
+                <span class="s4">'did</span><span class="s2">\'</span><span class="s4">t expect a directory with changed content here'</span><span class="s1">)</span>
+
+            <span class="s1">itemattrname = {</span>
+                <span class="s4">'normal'</span><span class="s1">: </span><span class="s4">'unchanged'</span><span class="s2">,</span>
+                <span class="s4">'unversioned'</span><span class="s1">: </span><span class="s4">'unknown'</span><span class="s2">,</span>
+                <span class="s4">'conflicted'</span><span class="s1">: </span><span class="s4">'conflict'</span><span class="s2">,</span>
+                <span class="s4">'none'</span><span class="s1">: </span><span class="s4">'added'</span><span class="s2">,</span>
+            <span class="s1">}.get(itemstatus</span><span class="s2">, </span><span class="s1">itemstatus)</span>
+
+            <span class="s1">attr = getattr(rootstatus</span><span class="s2">, </span><span class="s1">itemattrname)</span>
+            <span class="s1">attr.append(wcpath)</span>
+
+            <span class="s1">propsstatus = statusel.getAttribute(</span><span class="s4">'props'</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">propsstatus </span><span class="s2">not in </span><span class="s1">(</span><span class="s4">'none'</span><span class="s2">, </span><span class="s4">'normal'</span><span class="s1">):</span>
+                <span class="s1">rootstatus.prop_modified.append(wcpath)</span>
+
+            <span class="s2">if </span><span class="s1">wcpath == rootwcpath:</span>
+                <span class="s1">rootstatus.rev = rev</span>
+                <span class="s1">rootstatus.modrev = modrev</span>
+                <span class="s1">rootstatus.author = author</span>
+                <span class="s1">rootstatus.date = date</span>
+
+            <span class="s3"># handle repos-status element (remote info)</span>
+            <span class="s1">rstatusels = entryel.getElementsByTagName(</span><span class="s4">'repos-status'</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">rstatusels:</span>
+                <span class="s1">rstatusel = rstatusels[</span><span class="s5">0</span><span class="s1">]</span>
+                <span class="s1">ritemstatus = rstatusel.getAttribute(</span><span class="s4">'item'</span><span class="s1">)</span>
+                <span class="s2">if </span><span class="s1">ritemstatus </span><span class="s2">in </span><span class="s1">(</span><span class="s4">'added'</span><span class="s2">, </span><span class="s4">'modified'</span><span class="s1">):</span>
+                    <span class="s1">rootstatus.update_available.append(wcpath)</span>
+
+            <span class="s1">lockels = entryel.getElementsByTagName(</span><span class="s4">'lock'</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">len(lockels):</span>
+                <span class="s1">rootstatus.locked.append(wcpath)</span>
+
+        <span class="s2">return </span><span class="s1">rootstatus</span>
+    <span class="s1">fromstring = staticmethod(fromstring)</span>
+
+<span class="s2">class </span><span class="s1">InfoSvnWCCommand:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">output):</span>
+        <span class="s3"># Path: test</span>
+        <span class="s3"># URL: http://codespeak.net/svn/std.path/trunk/dist/std.path/test</span>
+        <span class="s3"># Repository UUID: fd0d7bf2-dfb6-0310-8d31-b7ecfe96aada</span>
+        <span class="s3"># Revision: 2151</span>
+        <span class="s3"># Node Kind: directory</span>
+        <span class="s3"># Schedule: normal</span>
+        <span class="s3"># Last Changed Author: hpk</span>
+        <span class="s3"># Last Changed Rev: 2100</span>
+        <span class="s3"># Last Changed Date: 2003-10-27 20:43:14 +0100 (Mon, 27 Oct 2003)</span>
+        <span class="s3"># Properties Last Updated: 2003-11-03 14:47:48 +0100 (Mon, 03 Nov 2003)</span>
+
+        <span class="s1">d = {}</span>
+        <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">output.split(</span><span class="s4">'</span><span class="s2">\n</span><span class="s4">'</span><span class="s1">):</span>
+            <span class="s2">if not </span><span class="s1">line.strip():</span>
+                <span class="s2">continue</span>
+            <span class="s1">key</span><span class="s2">, </span><span class="s1">value = line.split(</span><span class="s4">':'</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">key = key.lower().replace(</span><span class="s4">' '</span><span class="s2">, </span><span class="s4">''</span><span class="s1">)</span>
+            <span class="s1">value = value.strip()</span>
+            <span class="s1">d[key] = value</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.url = d[</span><span class="s4">'url'</span><span class="s1">]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">raise  </span><span class="s1">ValueError(</span><span class="s4">&quot;Not a versioned resource&quot;</span><span class="s1">)</span>
+            <span class="s3">#raise ValueError, &quot;Not a versioned resource %r&quot; % path</span>
+        <span class="s1">self.kind = d[</span><span class="s4">'nodekind'</span><span class="s1">] == </span><span class="s4">'directory' </span><span class="s2">and </span><span class="s4">'dir' </span><span class="s2">or </span><span class="s1">d[</span><span class="s4">'nodekind'</span><span class="s1">]</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.rev = int(d[</span><span class="s4">'revision'</span><span class="s1">])</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s1">self.rev = </span><span class="s2">None</span>
+
+        <span class="s1">self.path = py.path.local(d[</span><span class="s4">'path'</span><span class="s1">])</span>
+        <span class="s1">self.size = self.path.size()</span>
+        <span class="s2">if </span><span class="s4">'lastchangedrev' </span><span class="s2">in </span><span class="s1">d:</span>
+            <span class="s1">self.created_rev = int(d[</span><span class="s4">'lastchangedrev'</span><span class="s1">])</span>
+        <span class="s2">if </span><span class="s4">'lastchangedauthor' </span><span class="s2">in </span><span class="s1">d:</span>
+            <span class="s1">self.last_author = d[</span><span class="s4">'lastchangedauthor'</span><span class="s1">]</span>
+        <span class="s2">if </span><span class="s4">'lastchangeddate' </span><span class="s2">in </span><span class="s1">d:</span>
+            <span class="s1">self.mtime = parse_wcinfotime(d[</span><span class="s4">'lastchangeddate'</span><span class="s1">])</span>
+            <span class="s1">self.time = self.mtime * </span><span class="s5">1000000</span>
+
+    <span class="s2">def </span><span class="s1">__eq__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return </span><span class="s1">self.__dict__ == other.__dict__</span>
+
+<span class="s2">def </span><span class="s1">parse_wcinfotime(timestr):</span>
+    <span class="s0">&quot;&quot;&quot; Returns seconds since epoch, UTC. &quot;&quot;&quot;</span>
+    <span class="s3"># example: 2003-10-27 20:43:14 +0100 (Mon, 27 Oct 2003)</span>
+    <span class="s1">m = re.match(</span><span class="s4">r'(\d+-\d+-\d+ \d+:\d+:\d+) ([+-]\d+) .*'</span><span class="s2">, </span><span class="s1">timestr)</span>
+    <span class="s2">if not </span><span class="s1">m:</span>
+        <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;timestring %r does not match&quot; </span><span class="s1">% timestr)</span>
+    <span class="s1">timestr</span><span class="s2">, </span><span class="s1">timezone = m.groups()</span>
+    <span class="s3"># do not handle timezone specially, return value should be UTC</span>
+    <span class="s1">parsedtime = time.strptime(timestr</span><span class="s2">, </span><span class="s4">&quot;%Y-%m-%d %H:%M:%S&quot;</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">calendar.timegm(parsedtime)</span>
+
+<span class="s2">def </span><span class="s1">make_recursive_propdict(wcroot</span><span class="s2">,</span>
+                            <span class="s1">output</span><span class="s2">,</span>
+                            <span class="s1">rex = re.compile(</span><span class="s4">&quot;Properties on '(.*)':&quot;</span><span class="s1">)):</span>
+    <span class="s0">&quot;&quot;&quot; Return a dictionary of path-&gt;PropListDict mappings. &quot;&quot;&quot;</span>
+    <span class="s1">lines = [x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">output.split(</span><span class="s4">'</span><span class="s2">\n</span><span class="s4">'</span><span class="s1">) </span><span class="s2">if </span><span class="s1">x]</span>
+    <span class="s1">pdict = {}</span>
+    <span class="s2">while </span><span class="s1">lines:</span>
+        <span class="s1">line = lines.pop(</span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">m = rex.match(line)</span>
+        <span class="s2">if not </span><span class="s1">m:</span>
+            <span class="s2">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;could not parse propget-line: %r&quot; </span><span class="s1">% line)</span>
+        <span class="s1">path = m.groups()[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">wcpath = wcroot.join(path</span><span class="s2">, </span><span class="s1">abs=</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">propnames = []</span>
+        <span class="s2">while </span><span class="s1">lines </span><span class="s2">and </span><span class="s1">lines[</span><span class="s5">0</span><span class="s1">].startswith(</span><span class="s4">'  '</span><span class="s1">):</span>
+            <span class="s1">propname = lines.pop(</span><span class="s5">0</span><span class="s1">).strip()</span>
+            <span class="s1">propnames.append(propname)</span>
+        <span class="s2">assert </span><span class="s1">propnames</span><span class="s2">, </span><span class="s4">&quot;must have found properties!&quot;</span>
+        <span class="s1">pdict[wcpath] = PropListDict(wcpath</span><span class="s2">, </span><span class="s1">propnames)</span>
+    <span class="s2">return </span><span class="s1">pdict</span>
+
+
+<span class="s2">def </span><span class="s1">importxml(cache=[]):</span>
+    <span class="s2">if </span><span class="s1">cache:</span>
+        <span class="s2">return </span><span class="s1">cache</span>
+    <span class="s2">from </span><span class="s1">xml.dom </span><span class="s2">import </span><span class="s1">minidom</span>
+    <span class="s2">from </span><span class="s1">xml.parsers.expat </span><span class="s2">import </span><span class="s1">ExpatError</span>
+    <span class="s1">cache.extend([minidom</span><span class="s2">, </span><span class="s1">ExpatError])</span>
+    <span class="s2">return </span><span class="s1">cache</span>
+
+<span class="s2">class </span><span class="s1">LogEntry:</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">logentry):</span>
+        <span class="s1">self.rev = int(logentry.getAttribute(</span><span class="s4">'revision'</span><span class="s1">))</span>
+        <span class="s2">for </span><span class="s1">lpart </span><span class="s2">in </span><span class="s1">filter(</span><span class="s2">None, </span><span class="s1">logentry.childNodes):</span>
+            <span class="s2">if </span><span class="s1">lpart.nodeType == lpart.ELEMENT_NODE:</span>
+                <span class="s2">if </span><span class="s1">lpart.nodeName == </span><span class="s4">'author'</span><span class="s1">:</span>
+                    <span class="s1">self.author = lpart.firstChild.nodeValue</span>
+                <span class="s2">elif </span><span class="s1">lpart.nodeName == </span><span class="s4">'msg'</span><span class="s1">:</span>
+                    <span class="s2">if </span><span class="s1">lpart.firstChild:</span>
+                        <span class="s1">self.msg = lpart.firstChild.nodeValue</span>
+                    <span class="s2">else</span><span class="s1">:</span>
+                        <span class="s1">self.msg = </span><span class="s4">''</span>
+                <span class="s2">elif </span><span class="s1">lpart.nodeName == </span><span class="s4">'date'</span><span class="s1">:</span>
+                    <span class="s3">#2003-07-29T20:05:11.598637Z</span>
+                    <span class="s1">timestr = lpart.firstChild.nodeValue</span>
+                    <span class="s1">self.date = parse_apr_time(timestr)</span>
+                <span class="s2">elif </span><span class="s1">lpart.nodeName == </span><span class="s4">'paths'</span><span class="s1">:</span>
+                    <span class="s1">self.strpaths = []</span>
+                    <span class="s2">for </span><span class="s1">ppart </span><span class="s2">in </span><span class="s1">filter(</span><span class="s2">None, </span><span class="s1">lpart.childNodes):</span>
+                        <span class="s2">if </span><span class="s1">ppart.nodeType == ppart.ELEMENT_NODE:</span>
+                            <span class="s1">self.strpaths.append(PathEntry(ppart))</span>
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s4">'&lt;Logentry rev=%d author=%s date=%s&gt;' </span><span class="s1">% (</span>
+            <span class="s1">self.rev</span><span class="s2">, </span><span class="s1">self.author</span><span class="s2">, </span><span class="s1">self.date)</span>
+
+
+</pre>
+</body>
+</html>

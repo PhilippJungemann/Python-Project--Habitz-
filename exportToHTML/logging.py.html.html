@@ -1,0 +1,78 @@
+<html>
+<head>
+<title>logging.py.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #e8bf6a;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #bababa;}
+.s3 { color: #a5c261;}
+.s4 { color: #6d9cbe;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+logging.py.html</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;html&gt;</span>
+<span class="s0">&lt;head&gt;</span>
+<span class="s0">&lt;title&gt;</span><span class="s1">logging.py</span><span class="s0">&lt;/title&gt;</span>
+<span class="s0">&lt;meta </span><span class="s2">http-equiv</span><span class="s3">=&quot;Content-Type&quot; </span><span class="s2">content</span><span class="s3">=&quot;text/html; charset=utf-8&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;style </span><span class="s2">type</span><span class="s3">=&quot;text/css&quot;</span><span class="s0">&gt;</span>
+<span class="s1">.s0 { color: #cc7832;}</span>
+<span class="s1">.s1 { color: #a9b7c6;}</span>
+<span class="s1">.s2 { color: #629755; font-style: italic;}</span>
+<span class="s1">.s3 { color: #6a8759;}</span>
+<span class="s1">.s4 { color: #808080;}</span>
+<span class="s1">.s5 { color: #6897bb;}</span>
+<span class="s0">&lt;/style&gt;</span>
+<span class="s0">&lt;/head&gt;</span>
+<span class="s0">&lt;body </span><span class="s2">bgcolor</span><span class="s3">=&quot;#2b2b2b&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;table </span><span class="s2">CELLSPACING</span><span class="s3">=0 </span><span class="s2">CELLPADDING</span><span class="s3">=5 </span><span class="s2">COLS</span><span class="s3">=1 </span><span class="s2">WIDTH</span><span class="s3">=&quot;100%&quot; </span><span class="s2">BGCOLOR</span><span class="s3">=&quot;#606060&quot; </span><span class="s0">&gt;</span>
+<span class="s0">&lt;tr&gt;&lt;td&gt;&lt;center&gt;</span>
+<span class="s0">&lt;font </span><span class="s2">face</span><span class="s3">=&quot;Arial, Helvetica&quot; </span><span class="s2">color</span><span class="s3">=&quot;#000000&quot;</span><span class="s0">&gt;</span>
+<span class="s1">logging.py</span><span class="s0">&lt;/font&gt;</span>
+<span class="s0">&lt;/center&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</span>
+<span class="s0">&lt;pre&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">sys</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">logging</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">distutils.log</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">from </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">. </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">monkey</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">_not_warning(record):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">record.levelno </span><span class="s4">&amp;lt; </span><span class="s1">logging.WARNING</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">configure():</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">Configure logging to emit warning and above to stderr </span>
+    <span class="s1">and everything else to stdout. This behavior is provided </span>
+    <span class="s1">for compatibility with distutils.log but may change in </span>
+    <span class="s1">the future. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">err_handler = logging.StreamHandler()</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">err_handler.setLevel(logging.WARNING)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">out_handler = logging.StreamHandler(sys.stdout)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">out_handler.addFilter(_not_warning)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">handlers = err_handler</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">out_handler</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">logging.basicConfig(</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">format=</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;</span><span class="s1">{message}</span><span class="s4">&amp;quot;</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">style=</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'{'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">handlers=handlers</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">level=logging.DEBUG)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">monkey.patch_func(set_threshold</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">distutils.log</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'set_threshold'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">)</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># For some reason `distutils.log` module is getting cached in `distutils.dist`</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># and then loaded again when patched,</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># implying: id(distutils.log) != id(distutils.dist.log).</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># Make sure the same module object is used everywhere:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">distutils.dist.log = distutils.log</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">set_threshold(level):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">logging.root.setLevel(level*</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s5&quot;</span><span class="s0">&gt;</span><span class="s1">10</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">set_threshold.unpatched(level)</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;/pre&gt;</span>
+<span class="s0">&lt;/body&gt;</span>
+<span class="s0">&lt;/html&gt;</span></pre>
+</body>
+</html>

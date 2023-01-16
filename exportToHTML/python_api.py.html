@@ -1,0 +1,997 @@
+<html>
+<head>
+<title>python_api.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+python_api.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">math</span>
+<span class="s0">import </span><span class="s1">pprint</span>
+<span class="s0">from </span><span class="s1">collections.abc </span><span class="s0">import </span><span class="s1">Collection</span>
+<span class="s0">from </span><span class="s1">collections.abc </span><span class="s0">import </span><span class="s1">Sized</span>
+<span class="s0">from </span><span class="s1">decimal </span><span class="s0">import </span><span class="s1">Decimal</span>
+<span class="s0">from </span><span class="s1">numbers </span><span class="s0">import </span><span class="s1">Complex</span>
+<span class="s0">from </span><span class="s1">types </span><span class="s0">import </span><span class="s1">TracebackType</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Callable</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">cast</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Generic</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">List</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Mapping</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">overload</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Pattern</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Sequence</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Tuple</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Type</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TYPE_CHECKING</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TypeVar</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+<span class="s0">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s0">from </span><span class="s1">numpy </span><span class="s0">import </span><span class="s1">ndarray</span>
+
+
+<span class="s0">import </span><span class="s1">_pytest._code</span>
+<span class="s0">from </span><span class="s1">_pytest.compat </span><span class="s0">import </span><span class="s1">final</span>
+<span class="s0">from </span><span class="s1">_pytest.compat </span><span class="s0">import </span><span class="s1">STRING_TYPES</span>
+<span class="s0">from </span><span class="s1">_pytest.outcomes </span><span class="s0">import </span><span class="s1">fail</span>
+
+
+<span class="s0">def </span><span class="s1">_non_numeric_type_error(value</span><span class="s0">, </span><span class="s1">at: Optional[str]) -&gt; TypeError:</span>
+    <span class="s1">at_str = </span><span class="s2">f&quot; at </span><span class="s0">{</span><span class="s1">at</span><span class="s0">}</span><span class="s2">&quot; </span><span class="s0">if </span><span class="s1">at </span><span class="s0">else </span><span class="s2">&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">TypeError(</span>
+        <span class="s2">&quot;cannot make approximate comparisons to non-numeric values: {!r} {}&quot;</span><span class="s1">.format(</span>
+            <span class="s1">value</span><span class="s0">, </span><span class="s1">at_str</span>
+        <span class="s1">)</span>
+    <span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">_compare_approx(</span>
+    <span class="s1">full_object: object</span><span class="s0">,</span>
+    <span class="s1">message_data: Sequence[Tuple[str</span><span class="s0">, </span><span class="s1">str</span><span class="s0">, </span><span class="s1">str]]</span><span class="s0">,</span>
+    <span class="s1">number_of_elements: int</span><span class="s0">,</span>
+    <span class="s1">different_ids: Sequence[object]</span><span class="s0">,</span>
+    <span class="s1">max_abs_diff: float</span><span class="s0">,</span>
+    <span class="s1">max_rel_diff: float</span><span class="s0">,</span>
+<span class="s1">) -&gt; List[str]:</span>
+    <span class="s1">message_list = list(message_data)</span>
+    <span class="s1">message_list.insert(</span><span class="s3">0</span><span class="s0">, </span><span class="s1">(</span><span class="s2">&quot;Index&quot;</span><span class="s0">, </span><span class="s2">&quot;Obtained&quot;</span><span class="s0">, </span><span class="s2">&quot;Expected&quot;</span><span class="s1">))</span>
+    <span class="s1">max_sizes = [</span><span class="s3">0</span><span class="s0">, </span><span class="s3">0</span><span class="s0">, </span><span class="s3">0</span><span class="s1">]</span>
+    <span class="s0">for </span><span class="s1">index</span><span class="s0">, </span><span class="s1">obtained</span><span class="s0">, </span><span class="s1">expected </span><span class="s0">in </span><span class="s1">message_list:</span>
+        <span class="s1">max_sizes[</span><span class="s3">0</span><span class="s1">] = max(max_sizes[</span><span class="s3">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">len(index))</span>
+        <span class="s1">max_sizes[</span><span class="s3">1</span><span class="s1">] = max(max_sizes[</span><span class="s3">1</span><span class="s1">]</span><span class="s0">, </span><span class="s1">len(obtained))</span>
+        <span class="s1">max_sizes[</span><span class="s3">2</span><span class="s1">] = max(max_sizes[</span><span class="s3">2</span><span class="s1">]</span><span class="s0">, </span><span class="s1">len(expected))</span>
+    <span class="s1">explanation = [</span>
+        <span class="s2">f&quot;comparison failed. Mismatched elements: </span><span class="s0">{</span><span class="s1">len(different_ids)</span><span class="s0">} </span><span class="s2">/ </span><span class="s0">{</span><span class="s1">number_of_elements</span><span class="s0">}</span><span class="s2">:&quot;</span><span class="s0">,</span>
+        <span class="s2">f&quot;Max absolute difference: </span><span class="s0">{</span><span class="s1">max_abs_diff</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+        <span class="s2">f&quot;Max relative difference: </span><span class="s0">{</span><span class="s1">max_rel_diff</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+    <span class="s1">] + [</span>
+        <span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">indexes</span><span class="s0">:</span><span class="s2">&lt;</span><span class="s0">{</span><span class="s1">max_sizes[</span><span class="s3">0</span><span class="s1">]</span><span class="s0">}} </span><span class="s2">| </span><span class="s0">{</span><span class="s1">obtained</span><span class="s0">:</span><span class="s2">&lt;</span><span class="s0">{</span><span class="s1">max_sizes[</span><span class="s3">1</span><span class="s1">]</span><span class="s0">}} </span><span class="s2">| </span><span class="s0">{</span><span class="s1">expected</span><span class="s0">:</span><span class="s2">&lt;</span><span class="s0">{</span><span class="s1">max_sizes[</span><span class="s3">2</span><span class="s1">]</span><span class="s0">}}</span><span class="s2">&quot;</span>
+        <span class="s0">for </span><span class="s1">indexes</span><span class="s0">, </span><span class="s1">obtained</span><span class="s0">, </span><span class="s1">expected </span><span class="s0">in </span><span class="s1">message_list</span>
+    <span class="s1">]</span>
+    <span class="s0">return </span><span class="s1">explanation</span>
+
+
+<span class="s4"># builtin pytest.approx helper</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxBase:</span>
+    <span class="s5">&quot;&quot;&quot;Provide shared utilities for making approximate comparisons between 
+    numbers or sequences of numbers.&quot;&quot;&quot;</span>
+
+    <span class="s4"># Tell numpy to use our `__eq__` operator instead of its.</span>
+    <span class="s1">__array_ufunc__ = </span><span class="s0">None</span>
+    <span class="s1">__array_priority__ = </span><span class="s3">100</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">expected</span><span class="s0">, </span><span class="s1">rel=</span><span class="s0">None, </span><span class="s1">abs=</span><span class="s0">None, </span><span class="s1">nan_ok: bool = </span><span class="s0">False</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s1">self.expected = expected</span>
+        <span class="s1">self.abs = abs</span>
+        <span class="s1">self.rel = rel</span>
+        <span class="s1">self.nan_ok = nan_ok</span>
+        <span class="s1">self._check_type()</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s0">def </span><span class="s1">_repr_compare(self</span><span class="s0">, </span><span class="s1">other_side: Any) -&gt; List[str]:</span>
+        <span class="s0">return </span><span class="s1">[</span>
+            <span class="s2">&quot;comparison failed&quot;</span><span class="s0">,</span>
+            <span class="s2">f&quot;Obtained: </span><span class="s0">{</span><span class="s1">other_side</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+            <span class="s2">f&quot;Expected: </span><span class="s0">{</span><span class="s1">self</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+        <span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s0">return </span><span class="s1">all(</span>
+            <span class="s1">a == self._approx_scalar(x) </span><span class="s0">for </span><span class="s1">a</span><span class="s0">, </span><span class="s1">x </span><span class="s0">in </span><span class="s1">self._yield_comparisons(actual)</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">__bool__(self):</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">raise </span><span class="s1">AssertionError(</span>
+            <span class="s2">&quot;approx() is not supported in a boolean context.</span><span class="s0">\n</span><span class="s2">Did you mean: `assert a == approx(b)`?&quot;</span>
+        <span class="s1">)</span>
+
+    <span class="s4"># Ignore type because of https://github.com/python/mypy/issues/4266.</span>
+    <span class="s1">__hash__ = </span><span class="s0">None  </span><span class="s4"># type: ignore</span>
+
+    <span class="s0">def </span><span class="s1">__ne__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s0">return not </span><span class="s1">(actual == self)</span>
+
+    <span class="s0">def </span><span class="s1">_approx_scalar(self</span><span class="s0">, </span><span class="s1">x) -&gt; </span><span class="s2">&quot;ApproxScalar&quot;</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">Decimal):</span>
+            <span class="s0">return </span><span class="s1">ApproxDecimal(x</span><span class="s0">, </span><span class="s1">rel=self.rel</span><span class="s0">, </span><span class="s1">abs=self.abs</span><span class="s0">, </span><span class="s1">nan_ok=self.nan_ok)</span>
+        <span class="s0">return </span><span class="s1">ApproxScalar(x</span><span class="s0">, </span><span class="s1">rel=self.rel</span><span class="s0">, </span><span class="s1">abs=self.abs</span><span class="s0">, </span><span class="s1">nan_ok=self.nan_ok)</span>
+
+    <span class="s0">def </span><span class="s1">_yield_comparisons(self</span><span class="s0">, </span><span class="s1">actual):</span>
+        <span class="s5">&quot;&quot;&quot;Yield all the pairs of numbers to be compared. 
+ 
+        This is used to implement the `__eq__` method. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s0">def </span><span class="s1">_check_type(self) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s5">&quot;&quot;&quot;Raise a TypeError if the expected value is not a valid type.&quot;&quot;&quot;</span>
+        <span class="s4"># This is only a concern if the expected value is a sequence.  In every</span>
+        <span class="s4"># other case, the approx() function ensures that the expected value has</span>
+        <span class="s4"># a numeric type.  For this reason, the default is to do nothing.  The</span>
+        <span class="s4"># classes that deal with sequences should reimplement this method to</span>
+        <span class="s4"># raise if there are any non-numeric elements in the sequence.</span>
+
+
+<span class="s0">def </span><span class="s1">_recursive_list_map(f</span><span class="s0">, </span><span class="s1">x):</span>
+    <span class="s0">if </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">list):</span>
+        <span class="s0">return </span><span class="s1">[_recursive_list_map(f</span><span class="s0">, </span><span class="s1">xi) </span><span class="s0">for </span><span class="s1">xi </span><span class="s0">in </span><span class="s1">x]</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">f(x)</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxNumpy(ApproxBase):</span>
+    <span class="s5">&quot;&quot;&quot;Perform approximate comparisons where the expected value is numpy array.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s1">list_scalars = _recursive_list_map(self._approx_scalar</span><span class="s0">, </span><span class="s1">self.expected.tolist())</span>
+        <span class="s0">return </span><span class="s2">f&quot;approx(</span><span class="s0">{</span><span class="s1">list_scalars</span><span class="s0">!r}</span><span class="s2">)&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_repr_compare(self</span><span class="s0">, </span><span class="s1">other_side: </span><span class="s2">&quot;ndarray&quot;</span><span class="s1">) -&gt; List[str]:</span>
+        <span class="s0">import </span><span class="s1">itertools</span>
+        <span class="s0">import </span><span class="s1">math</span>
+
+        <span class="s0">def </span><span class="s1">get_value_from_nested_list(</span>
+            <span class="s1">nested_list: List[Any]</span><span class="s0">, </span><span class="s1">nd_index: Tuple[Any</span><span class="s0">, </span><span class="s1">...]</span>
+        <span class="s1">) -&gt; Any:</span>
+            <span class="s5">&quot;&quot;&quot; 
+            Helper function to get the value out of a nested list, given an n-dimensional index. 
+            This mimics numpy's indexing, but for raw nested python lists. 
+            &quot;&quot;&quot;</span>
+            <span class="s1">value: Any = nested_list</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">nd_index:</span>
+                <span class="s1">value = value[i]</span>
+            <span class="s0">return </span><span class="s1">value</span>
+
+        <span class="s1">np_array_shape = self.expected.shape</span>
+        <span class="s1">approx_side_as_list = _recursive_list_map(</span>
+            <span class="s1">self._approx_scalar</span><span class="s0">, </span><span class="s1">self.expected.tolist()</span>
+        <span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">np_array_shape != other_side.shape:</span>
+            <span class="s0">return </span><span class="s1">[</span>
+                <span class="s2">&quot;Impossible to compare arrays with different shapes.&quot;</span><span class="s0">,</span>
+                <span class="s2">f&quot;Shapes: </span><span class="s0">{</span><span class="s1">np_array_shape</span><span class="s0">} </span><span class="s2">and </span><span class="s0">{</span><span class="s1">other_side.shape</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+            <span class="s1">]</span>
+
+        <span class="s1">number_of_elements = self.expected.size</span>
+        <span class="s1">max_abs_diff = -math.inf</span>
+        <span class="s1">max_rel_diff = -math.inf</span>
+        <span class="s1">different_ids = []</span>
+        <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">itertools.product(*(range(i) </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">np_array_shape)):</span>
+            <span class="s1">approx_value = get_value_from_nested_list(approx_side_as_list</span><span class="s0">, </span><span class="s1">index)</span>
+            <span class="s1">other_value = get_value_from_nested_list(other_side</span><span class="s0">, </span><span class="s1">index)</span>
+            <span class="s0">if </span><span class="s1">approx_value != other_value:</span>
+                <span class="s1">abs_diff = abs(approx_value.expected - other_value)</span>
+                <span class="s1">max_abs_diff = max(max_abs_diff</span><span class="s0">, </span><span class="s1">abs_diff)</span>
+                <span class="s0">if </span><span class="s1">other_value == </span><span class="s3">0.0</span><span class="s1">:</span>
+                    <span class="s1">max_rel_diff = math.inf</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">max_rel_diff = max(max_rel_diff</span><span class="s0">, </span><span class="s1">abs_diff / abs(other_value))</span>
+                <span class="s1">different_ids.append(index)</span>
+
+        <span class="s1">message_data = [</span>
+            <span class="s1">(</span>
+                <span class="s1">str(index)</span><span class="s0">,</span>
+                <span class="s1">str(get_value_from_nested_list(other_side</span><span class="s0">, </span><span class="s1">index))</span><span class="s0">,</span>
+                <span class="s1">str(get_value_from_nested_list(approx_side_as_list</span><span class="s0">, </span><span class="s1">index))</span><span class="s0">,</span>
+            <span class="s1">)</span>
+            <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">different_ids</span>
+        <span class="s1">]</span>
+        <span class="s0">return </span><span class="s1">_compare_approx(</span>
+            <span class="s1">self.expected</span><span class="s0">,</span>
+            <span class="s1">message_data</span><span class="s0">,</span>
+            <span class="s1">number_of_elements</span><span class="s0">,</span>
+            <span class="s1">different_ids</span><span class="s0">,</span>
+            <span class="s1">max_abs_diff</span><span class="s0">,</span>
+            <span class="s1">max_rel_diff</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s0">import </span><span class="s1">numpy </span><span class="s0">as </span><span class="s1">np</span>
+
+        <span class="s4"># self.expected is supposed to always be an array here.</span>
+
+        <span class="s0">if not </span><span class="s1">np.isscalar(actual):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">actual = np.asarray(actual)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e:</span>
+                <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">f&quot;cannot compare '</span><span class="s0">{</span><span class="s1">actual</span><span class="s0">}</span><span class="s2">' to numpy.ndarray&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+
+        <span class="s0">if not </span><span class="s1">np.isscalar(actual) </span><span class="s0">and </span><span class="s1">actual.shape != self.expected.shape:</span>
+            <span class="s0">return False</span>
+
+        <span class="s0">return </span><span class="s1">super().__eq__(actual)</span>
+
+    <span class="s0">def </span><span class="s1">_yield_comparisons(self</span><span class="s0">, </span><span class="s1">actual):</span>
+        <span class="s0">import </span><span class="s1">numpy </span><span class="s0">as </span><span class="s1">np</span>
+
+        <span class="s4"># `actual` can either be a numpy array or a scalar, it is treated in</span>
+        <span class="s4"># `__eq__` before being passed to `ApproxBase.__eq__`, which is the</span>
+        <span class="s4"># only method that calls this one.</span>
+
+        <span class="s0">if </span><span class="s1">np.isscalar(actual):</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">np.ndindex(self.expected.shape):</span>
+                <span class="s0">yield </span><span class="s1">actual</span><span class="s0">, </span><span class="s1">self.expected[i].item()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">np.ndindex(self.expected.shape):</span>
+                <span class="s0">yield </span><span class="s1">actual[i].item()</span><span class="s0">, </span><span class="s1">self.expected[i].item()</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxMapping(ApproxBase):</span>
+    <span class="s5">&quot;&quot;&quot;Perform approximate comparisons where the expected value is a mapping 
+    with numeric values (the keys can be anything).&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s0">return </span><span class="s2">&quot;approx({!r})&quot;</span><span class="s1">.format(</span>
+            <span class="s1">{k: self._approx_scalar(v) </span><span class="s0">for </span><span class="s1">k</span><span class="s0">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self.expected.items()}</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_repr_compare(self</span><span class="s0">, </span><span class="s1">other_side: Mapping[object</span><span class="s0">, </span><span class="s1">float]) -&gt; List[str]:</span>
+        <span class="s0">import </span><span class="s1">math</span>
+
+        <span class="s1">approx_side_as_map = {</span>
+            <span class="s1">k: self._approx_scalar(v) </span><span class="s0">for </span><span class="s1">k</span><span class="s0">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self.expected.items()</span>
+        <span class="s1">}</span>
+
+        <span class="s1">number_of_elements = len(approx_side_as_map)</span>
+        <span class="s1">max_abs_diff = -math.inf</span>
+        <span class="s1">max_rel_diff = -math.inf</span>
+        <span class="s1">different_ids = []</span>
+        <span class="s0">for </span><span class="s1">(approx_key</span><span class="s0">, </span><span class="s1">approx_value)</span><span class="s0">, </span><span class="s1">other_value </span><span class="s0">in </span><span class="s1">zip(</span>
+            <span class="s1">approx_side_as_map.items()</span><span class="s0">, </span><span class="s1">other_side.values()</span>
+        <span class="s1">):</span>
+            <span class="s0">if </span><span class="s1">approx_value != other_value:</span>
+                <span class="s1">max_abs_diff = max(</span>
+                    <span class="s1">max_abs_diff</span><span class="s0">, </span><span class="s1">abs(approx_value.expected - other_value)</span>
+                <span class="s1">)</span>
+                <span class="s1">max_rel_diff = max(</span>
+                    <span class="s1">max_rel_diff</span><span class="s0">,</span>
+                    <span class="s1">abs((approx_value.expected - other_value) / approx_value.expected)</span><span class="s0">,</span>
+                <span class="s1">)</span>
+                <span class="s1">different_ids.append(approx_key)</span>
+
+        <span class="s1">message_data = [</span>
+            <span class="s1">(str(key)</span><span class="s0">, </span><span class="s1">str(other_side[key])</span><span class="s0">, </span><span class="s1">str(approx_side_as_map[key]))</span>
+            <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">different_ids</span>
+        <span class="s1">]</span>
+
+        <span class="s0">return </span><span class="s1">_compare_approx(</span>
+            <span class="s1">self.expected</span><span class="s0">,</span>
+            <span class="s1">message_data</span><span class="s0">,</span>
+            <span class="s1">number_of_elements</span><span class="s0">,</span>
+            <span class="s1">different_ids</span><span class="s0">,</span>
+            <span class="s1">max_abs_diff</span><span class="s0">,</span>
+            <span class="s1">max_rel_diff</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">set(actual.keys()) != set(self.expected.keys()):</span>
+                <span class="s0">return False</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">return False</span>
+
+        <span class="s0">return </span><span class="s1">super().__eq__(actual)</span>
+
+    <span class="s0">def </span><span class="s1">_yield_comparisons(self</span><span class="s0">, </span><span class="s1">actual):</span>
+        <span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">self.expected.keys():</span>
+            <span class="s0">yield </span><span class="s1">actual[k]</span><span class="s0">, </span><span class="s1">self.expected[k]</span>
+
+    <span class="s0">def </span><span class="s1">_check_type(self) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">for </span><span class="s1">key</span><span class="s0">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">self.expected.items():</span>
+            <span class="s0">if </span><span class="s1">isinstance(value</span><span class="s0">, </span><span class="s1">type(self.expected)):</span>
+                <span class="s1">msg = </span><span class="s2">&quot;pytest.approx() does not support nested dictionaries: key={!r} value={!r}</span><span class="s0">\n  </span><span class="s2">full mapping={}&quot;</span>
+                <span class="s0">raise </span><span class="s1">TypeError(msg.format(key</span><span class="s0">, </span><span class="s1">value</span><span class="s0">, </span><span class="s1">pprint.pformat(self.expected)))</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxSequenceLike(ApproxBase):</span>
+    <span class="s5">&quot;&quot;&quot;Perform approximate comparisons where the expected value is a sequence of numbers.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s1">seq_type = type(self.expected)</span>
+        <span class="s0">if </span><span class="s1">seq_type </span><span class="s0">not in </span><span class="s1">(tuple</span><span class="s0">, </span><span class="s1">list):</span>
+            <span class="s1">seq_type = list</span>
+        <span class="s0">return </span><span class="s2">&quot;approx({!r})&quot;</span><span class="s1">.format(</span>
+            <span class="s1">seq_type(self._approx_scalar(x) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">self.expected)</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_repr_compare(self</span><span class="s0">, </span><span class="s1">other_side: Sequence[float]) -&gt; List[str]:</span>
+        <span class="s0">import </span><span class="s1">math</span>
+
+        <span class="s0">if </span><span class="s1">len(self.expected) != len(other_side):</span>
+            <span class="s0">return </span><span class="s1">[</span>
+                <span class="s2">&quot;Impossible to compare lists with different sizes.&quot;</span><span class="s0">,</span>
+                <span class="s2">f&quot;Lengths: </span><span class="s0">{</span><span class="s1">len(self.expected)</span><span class="s0">} </span><span class="s2">and </span><span class="s0">{</span><span class="s1">len(other_side)</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+            <span class="s1">]</span>
+
+        <span class="s1">approx_side_as_map = _recursive_list_map(self._approx_scalar</span><span class="s0">, </span><span class="s1">self.expected)</span>
+
+        <span class="s1">number_of_elements = len(approx_side_as_map)</span>
+        <span class="s1">max_abs_diff = -math.inf</span>
+        <span class="s1">max_rel_diff = -math.inf</span>
+        <span class="s1">different_ids = []</span>
+        <span class="s0">for </span><span class="s1">i</span><span class="s0">, </span><span class="s1">(approx_value</span><span class="s0">, </span><span class="s1">other_value) </span><span class="s0">in </span><span class="s1">enumerate(</span>
+            <span class="s1">zip(approx_side_as_map</span><span class="s0">, </span><span class="s1">other_side)</span>
+        <span class="s1">):</span>
+            <span class="s0">if </span><span class="s1">approx_value != other_value:</span>
+                <span class="s1">abs_diff = abs(approx_value.expected - other_value)</span>
+                <span class="s1">max_abs_diff = max(max_abs_diff</span><span class="s0">, </span><span class="s1">abs_diff)</span>
+                <span class="s0">if </span><span class="s1">other_value == </span><span class="s3">0.0</span><span class="s1">:</span>
+                    <span class="s1">max_rel_diff = math.inf</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">max_rel_diff = max(max_rel_diff</span><span class="s0">, </span><span class="s1">abs_diff / abs(other_value))</span>
+                <span class="s1">different_ids.append(i)</span>
+
+        <span class="s1">message_data = [</span>
+            <span class="s1">(str(i)</span><span class="s0">, </span><span class="s1">str(other_side[i])</span><span class="s0">, </span><span class="s1">str(approx_side_as_map[i]))</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">different_ids</span>
+        <span class="s1">]</span>
+
+        <span class="s0">return </span><span class="s1">_compare_approx(</span>
+            <span class="s1">self.expected</span><span class="s0">,</span>
+            <span class="s1">message_data</span><span class="s0">,</span>
+            <span class="s1">number_of_elements</span><span class="s0">,</span>
+            <span class="s1">different_ids</span><span class="s0">,</span>
+            <span class="s1">max_abs_diff</span><span class="s0">,</span>
+            <span class="s1">max_rel_diff</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">len(actual) != len(self.expected):</span>
+                <span class="s0">return False</span>
+        <span class="s0">except </span><span class="s1">TypeError:</span>
+            <span class="s0">return False</span>
+        <span class="s0">return </span><span class="s1">super().__eq__(actual)</span>
+
+    <span class="s0">def </span><span class="s1">_yield_comparisons(self</span><span class="s0">, </span><span class="s1">actual):</span>
+        <span class="s0">return </span><span class="s1">zip(actual</span><span class="s0">, </span><span class="s1">self.expected)</span>
+
+    <span class="s0">def </span><span class="s1">_check_type(self) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">for </span><span class="s1">index</span><span class="s0">, </span><span class="s1">x </span><span class="s0">in </span><span class="s1">enumerate(self.expected):</span>
+            <span class="s0">if </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">type(self.expected)):</span>
+                <span class="s1">msg = </span><span class="s2">&quot;pytest.approx() does not support nested data structures: {!r} at index {}</span><span class="s0">\n  </span><span class="s2">full sequence: {}&quot;</span>
+                <span class="s0">raise </span><span class="s1">TypeError(msg.format(x</span><span class="s0">, </span><span class="s1">index</span><span class="s0">, </span><span class="s1">pprint.pformat(self.expected)))</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxScalar(ApproxBase):</span>
+    <span class="s5">&quot;&quot;&quot;Perform approximate comparisons where the expected value is a single number.&quot;&quot;&quot;</span>
+
+    <span class="s4"># Using Real should be better than this Union, but not possible yet:</span>
+    <span class="s4"># https://github.com/python/typeshed/pull/3108</span>
+    <span class="s1">DEFAULT_ABSOLUTE_TOLERANCE: Union[float</span><span class="s0">, </span><span class="s1">Decimal] = </span><span class="s3">1e-12</span>
+    <span class="s1">DEFAULT_RELATIVE_TOLERANCE: Union[float</span><span class="s0">, </span><span class="s1">Decimal] = </span><span class="s3">1e-6</span>
+
+    <span class="s0">def </span><span class="s1">__repr__(self) -&gt; str:</span>
+        <span class="s5">&quot;&quot;&quot;Return a string communicating both the expected value and the 
+        tolerance for the comparison being made. 
+ 
+        For example, ``1.0 ± 1e-6``, ``(3+4j) ± 5e-6 ∠ ±180°``. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Don't show a tolerance for values that aren't compared using</span>
+        <span class="s4"># tolerances, i.e. non-numerics and infinities. Need to call abs to</span>
+        <span class="s4"># handle complex numbers, e.g. (inf + 1j).</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">not </span><span class="s1">isinstance(self.expected</span><span class="s0">, </span><span class="s1">(Complex</span><span class="s0">, </span><span class="s1">Decimal))) </span><span class="s0">or </span><span class="s1">math.isinf(</span>
+            <span class="s1">abs(self.expected)  </span><span class="s4"># type: ignore[arg-type]</span>
+        <span class="s1">):</span>
+            <span class="s0">return </span><span class="s1">str(self.expected)</span>
+
+        <span class="s4"># If a sensible tolerance can't be calculated, self.tolerance will</span>
+        <span class="s4"># raise a ValueError.  In this case, display '???'.</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">vetted_tolerance = </span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">self.tolerance</span><span class="s0">:</span><span class="s2">.1e</span><span class="s0">}</span><span class="s2">&quot;</span>
+            <span class="s0">if </span><span class="s1">(</span>
+                <span class="s1">isinstance(self.expected</span><span class="s0">, </span><span class="s1">Complex)</span>
+                <span class="s0">and </span><span class="s1">self.expected.imag</span>
+                <span class="s0">and not </span><span class="s1">math.isinf(self.tolerance)</span>
+            <span class="s1">):</span>
+                <span class="s1">vetted_tolerance += </span><span class="s2">&quot; ∠ ±180°&quot;</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s1">vetted_tolerance = </span><span class="s2">&quot;???&quot;</span>
+
+        <span class="s0">return </span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">self.expected</span><span class="s0">} </span><span class="s2">± </span><span class="s0">{</span><span class="s1">vetted_tolerance</span><span class="s0">}</span><span class="s2">&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__eq__(self</span><span class="s0">, </span><span class="s1">actual) -&gt; bool:</span>
+        <span class="s5">&quot;&quot;&quot;Return whether the given value is equal to the expected value 
+        within the pre-specified tolerance.&quot;&quot;&quot;</span>
+        <span class="s1">asarray = _as_numpy_array(actual)</span>
+        <span class="s0">if </span><span class="s1">asarray </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s4"># Call ``__eq__()`` manually to prevent infinite-recursion with</span>
+            <span class="s4"># numpy&lt;1.13.  See #3748.</span>
+            <span class="s0">return </span><span class="s1">all(self.__eq__(a) </span><span class="s0">for </span><span class="s1">a </span><span class="s0">in </span><span class="s1">asarray.flat)</span>
+
+        <span class="s4"># Short-circuit exact equality.</span>
+        <span class="s0">if </span><span class="s1">actual == self.expected:</span>
+            <span class="s0">return True</span>
+
+        <span class="s4"># If either type is non-numeric, fall back to strict equality.</span>
+        <span class="s4"># NB: we need Complex, rather than just Number, to ensure that __abs__,</span>
+        <span class="s4"># __sub__, and __float__ are defined.</span>
+        <span class="s0">if not </span><span class="s1">(</span>
+            <span class="s1">isinstance(self.expected</span><span class="s0">, </span><span class="s1">(Complex</span><span class="s0">, </span><span class="s1">Decimal))</span>
+            <span class="s0">and </span><span class="s1">isinstance(actual</span><span class="s0">, </span><span class="s1">(Complex</span><span class="s0">, </span><span class="s1">Decimal))</span>
+        <span class="s1">):</span>
+            <span class="s0">return False</span>
+
+        <span class="s4"># Allow the user to control whether NaNs are considered equal to each</span>
+        <span class="s4"># other or not.  The abs() calls are for compatibility with complex</span>
+        <span class="s4"># numbers.</span>
+        <span class="s0">if </span><span class="s1">math.isnan(abs(self.expected)):  </span><span class="s4"># type: ignore[arg-type]</span>
+            <span class="s0">return </span><span class="s1">self.nan_ok </span><span class="s0">and </span><span class="s1">math.isnan(abs(actual))  </span><span class="s4"># type: ignore[arg-type]</span>
+
+        <span class="s4"># Infinity shouldn't be approximately equal to anything but itself, but</span>
+        <span class="s4"># if there's a relative tolerance, it will be infinite and infinity</span>
+        <span class="s4"># will seem approximately equal to everything.  The equal-to-itself</span>
+        <span class="s4"># case would have been short circuited above, so here we can just</span>
+        <span class="s4"># return false if the expected value is infinite.  The abs() call is</span>
+        <span class="s4"># for compatibility with complex numbers.</span>
+        <span class="s0">if </span><span class="s1">math.isinf(abs(self.expected)):  </span><span class="s4"># type: ignore[arg-type]</span>
+            <span class="s0">return False</span>
+
+        <span class="s4"># Return true if the two numbers are within the tolerance.</span>
+        <span class="s1">result: bool = abs(self.expected - actual) &lt;= self.tolerance</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s4"># Ignore type because of https://github.com/python/mypy/issues/4266.</span>
+    <span class="s1">__hash__ = </span><span class="s0">None  </span><span class="s4"># type: ignore</span>
+
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">tolerance(self):</span>
+        <span class="s5">&quot;&quot;&quot;Return the tolerance for the comparison. 
+ 
+        This could be either an absolute tolerance or a relative tolerance, 
+        depending on what the user specified or which would be larger. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">set_default(x</span><span class="s0">, </span><span class="s1">default):</span>
+            <span class="s0">return </span><span class="s1">x </span><span class="s0">if </span><span class="s1">x </span><span class="s0">is not None else </span><span class="s1">default</span>
+
+        <span class="s4"># Figure out what the absolute tolerance should be.  ``self.abs`` is</span>
+        <span class="s4"># either None or a value specified by the user.</span>
+        <span class="s1">absolute_tolerance = set_default(self.abs</span><span class="s0">, </span><span class="s1">self.DEFAULT_ABSOLUTE_TOLERANCE)</span>
+
+        <span class="s0">if </span><span class="s1">absolute_tolerance &lt; </span><span class="s3">0</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span>
+                <span class="s2">f&quot;absolute tolerance can't be negative: </span><span class="s0">{</span><span class="s1">absolute_tolerance</span><span class="s0">}</span><span class="s2">&quot;</span>
+            <span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">math.isnan(absolute_tolerance):</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;absolute tolerance can't be NaN.&quot;</span><span class="s1">)</span>
+
+        <span class="s4"># If the user specified an absolute tolerance but not a relative one,</span>
+        <span class="s4"># just return the absolute tolerance.</span>
+        <span class="s0">if </span><span class="s1">self.rel </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">self.abs </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s0">return </span><span class="s1">absolute_tolerance</span>
+
+        <span class="s4"># Figure out what the relative tolerance should be.  ``self.rel`` is</span>
+        <span class="s4"># either None or a value specified by the user.  This is done after</span>
+        <span class="s4"># we've made sure the user didn't ask for an absolute tolerance only,</span>
+        <span class="s4"># because we don't want to raise errors about the relative tolerance if</span>
+        <span class="s4"># we aren't even going to use it.</span>
+        <span class="s1">relative_tolerance = set_default(</span>
+            <span class="s1">self.rel</span><span class="s0">, </span><span class="s1">self.DEFAULT_RELATIVE_TOLERANCE</span>
+        <span class="s1">) * abs(self.expected)</span>
+
+        <span class="s0">if </span><span class="s1">relative_tolerance &lt; </span><span class="s3">0</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span>
+                <span class="s2">f&quot;relative tolerance can't be negative: </span><span class="s0">{</span><span class="s1">relative_tolerance</span><span class="s0">}</span><span class="s2">&quot;</span>
+            <span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">math.isnan(relative_tolerance):</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;relative tolerance can't be NaN.&quot;</span><span class="s1">)</span>
+
+        <span class="s4"># Return the larger of the relative and absolute tolerances.</span>
+        <span class="s0">return </span><span class="s1">max(relative_tolerance</span><span class="s0">, </span><span class="s1">absolute_tolerance)</span>
+
+
+<span class="s0">class </span><span class="s1">ApproxDecimal(ApproxScalar):</span>
+    <span class="s5">&quot;&quot;&quot;Perform approximate comparisons where the expected value is a Decimal.&quot;&quot;&quot;</span>
+
+    <span class="s1">DEFAULT_ABSOLUTE_TOLERANCE = Decimal(</span><span class="s2">&quot;1e-12&quot;</span><span class="s1">)</span>
+    <span class="s1">DEFAULT_RELATIVE_TOLERANCE = Decimal(</span><span class="s2">&quot;1e-6&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">approx(expected</span><span class="s0">, </span><span class="s1">rel=</span><span class="s0">None, </span><span class="s1">abs=</span><span class="s0">None, </span><span class="s1">nan_ok: bool = </span><span class="s0">False</span><span class="s1">) -&gt; ApproxBase:</span>
+    <span class="s5">&quot;&quot;&quot;Assert that two numbers (or two ordered sequences of numbers) are equal to each other 
+    within some tolerance. 
+ 
+    Due to the :std:doc:`tutorial/floatingpoint`, numbers that we 
+    would intuitively expect to be equal are not always so:: 
+ 
+        &gt;&gt;&gt; 0.1 + 0.2 == 0.3 
+        False 
+ 
+    This problem is commonly encountered when writing tests, e.g. when making 
+    sure that floating-point values are what you expect them to be.  One way to 
+    deal with this problem is to assert that two floating-point numbers are 
+    equal to within some appropriate tolerance:: 
+ 
+        &gt;&gt;&gt; abs((0.1 + 0.2) - 0.3) &lt; 1e-6 
+        True 
+ 
+    However, comparisons like this are tedious to write and difficult to 
+    understand.  Furthermore, absolute comparisons like the one above are 
+    usually discouraged because there's no tolerance that works well for all 
+    situations.  ``1e-6`` is good for numbers around ``1``, but too small for 
+    very big numbers and too big for very small ones.  It's better to express 
+    the tolerance as a fraction of the expected value, but relative comparisons 
+    like that are even more difficult to write correctly and concisely. 
+ 
+    The ``approx`` class performs floating-point comparisons using a syntax 
+    that's as intuitive as possible:: 
+ 
+        &gt;&gt;&gt; from pytest import approx 
+        &gt;&gt;&gt; 0.1 + 0.2 == approx(0.3) 
+        True 
+ 
+    The same syntax also works for ordered sequences of numbers:: 
+ 
+        &gt;&gt;&gt; (0.1 + 0.2, 0.2 + 0.4) == approx((0.3, 0.6)) 
+        True 
+ 
+    ``numpy`` arrays:: 
+ 
+        &gt;&gt;&gt; import numpy as np                                                          # doctest: +SKIP 
+        &gt;&gt;&gt; np.array([0.1, 0.2]) + np.array([0.2, 0.4]) == approx(np.array([0.3, 0.6])) # doctest: +SKIP 
+        True 
+ 
+    And for a ``numpy`` array against a scalar:: 
+ 
+        &gt;&gt;&gt; import numpy as np                                         # doctest: +SKIP 
+        &gt;&gt;&gt; np.array([0.1, 0.2]) + np.array([0.2, 0.1]) == approx(0.3) # doctest: +SKIP 
+        True 
+ 
+    Only ordered sequences are supported, because ``approx`` needs 
+    to infer the relative position of the sequences without ambiguity. This means 
+    ``sets`` and other unordered sequences are not supported. 
+ 
+    Finally, dictionary *values* can also be compared:: 
+ 
+        &gt;&gt;&gt; {'a': 0.1 + 0.2, 'b': 0.2 + 0.4} == approx({'a': 0.3, 'b': 0.6}) 
+        True 
+ 
+    The comparison will be true if both mappings have the same keys and their 
+    respective values match the expected tolerances. 
+ 
+    **Tolerances** 
+ 
+    By default, ``approx`` considers numbers within a relative tolerance of 
+    ``1e-6`` (i.e. one part in a million) of its expected value to be equal. 
+    This treatment would lead to surprising results if the expected value was 
+    ``0.0``, because nothing but ``0.0`` itself is relatively close to ``0.0``. 
+    To handle this case less surprisingly, ``approx`` also considers numbers 
+    within an absolute tolerance of ``1e-12`` of its expected value to be 
+    equal.  Infinity and NaN are special cases.  Infinity is only considered 
+    equal to itself, regardless of the relative tolerance.  NaN is not 
+    considered equal to anything by default, but you can make it be equal to 
+    itself by setting the ``nan_ok`` argument to True.  (This is meant to 
+    facilitate comparing arrays that use NaN to mean &quot;no data&quot;.) 
+ 
+    Both the relative and absolute tolerances can be changed by passing 
+    arguments to the ``approx`` constructor:: 
+ 
+        &gt;&gt;&gt; 1.0001 == approx(1) 
+        False 
+        &gt;&gt;&gt; 1.0001 == approx(1, rel=1e-3) 
+        True 
+        &gt;&gt;&gt; 1.0001 == approx(1, abs=1e-3) 
+        True 
+ 
+    If you specify ``abs`` but not ``rel``, the comparison will not consider 
+    the relative tolerance at all.  In other words, two numbers that are within 
+    the default relative tolerance of ``1e-6`` will still be considered unequal 
+    if they exceed the specified absolute tolerance.  If you specify both 
+    ``abs`` and ``rel``, the numbers will be considered equal if either 
+    tolerance is met:: 
+ 
+        &gt;&gt;&gt; 1 + 1e-8 == approx(1) 
+        True 
+        &gt;&gt;&gt; 1 + 1e-8 == approx(1, abs=1e-12) 
+        False 
+        &gt;&gt;&gt; 1 + 1e-8 == approx(1, rel=1e-6, abs=1e-12) 
+        True 
+ 
+    You can also use ``approx`` to compare nonnumeric types, or dicts and 
+    sequences containing nonnumeric types, in which case it falls back to 
+    strict equality. This can be useful for comparing dicts and sequences that 
+    can contain optional values:: 
+ 
+        &gt;&gt;&gt; {&quot;required&quot;: 1.0000005, &quot;optional&quot;: None} == approx({&quot;required&quot;: 1, &quot;optional&quot;: None}) 
+        True 
+        &gt;&gt;&gt; [None, 1.0000005] == approx([None,1]) 
+        True 
+        &gt;&gt;&gt; [&quot;foo&quot;, 1.0000005] == approx([None,1]) 
+        False 
+ 
+    If you're thinking about using ``approx``, then you might want to know how 
+    it compares to other good ways of comparing floating-point numbers.  All of 
+    these algorithms are based on relative and absolute tolerances and should 
+    agree for the most part, but they do have meaningful differences: 
+ 
+    - ``math.isclose(a, b, rel_tol=1e-9, abs_tol=0.0)``:  True if the relative 
+      tolerance is met w.r.t. either ``a`` or ``b`` or if the absolute 
+      tolerance is met.  Because the relative tolerance is calculated w.r.t. 
+      both ``a`` and ``b``, this test is symmetric (i.e.  neither ``a`` nor 
+      ``b`` is a &quot;reference value&quot;).  You have to specify an absolute tolerance 
+      if you want to compare to ``0.0`` because there is no tolerance by 
+      default.  More information: :py:func:`math.isclose`. 
+ 
+    - ``numpy.isclose(a, b, rtol=1e-5, atol=1e-8)``: True if the difference 
+      between ``a`` and ``b`` is less that the sum of the relative tolerance 
+      w.r.t. ``b`` and the absolute tolerance.  Because the relative tolerance 
+      is only calculated w.r.t. ``b``, this test is asymmetric and you can 
+      think of ``b`` as the reference value.  Support for comparing sequences 
+      is provided by :py:func:`numpy.allclose`.  More information: 
+      :std:doc:`numpy:reference/generated/numpy.isclose`. 
+ 
+    - ``unittest.TestCase.assertAlmostEqual(a, b)``: True if ``a`` and ``b`` 
+      are within an absolute tolerance of ``1e-7``.  No relative tolerance is 
+      considered , so this function is not appropriate for very large or very 
+      small numbers.  Also, it's only available in subclasses of ``unittest.TestCase`` 
+      and it's ugly because it doesn't follow PEP8.  More information: 
+      :py:meth:`unittest.TestCase.assertAlmostEqual`. 
+ 
+    - ``a == pytest.approx(b, rel=1e-6, abs=1e-12)``: True if the relative 
+      tolerance is met w.r.t. ``b`` or if the absolute tolerance is met. 
+      Because the relative tolerance is only calculated w.r.t. ``b``, this test 
+      is asymmetric and you can think of ``b`` as the reference value.  In the 
+      special case that you explicitly specify an absolute tolerance but not a 
+      relative tolerance, only the absolute tolerance is considered. 
+ 
+    .. note:: 
+ 
+        ``approx`` can handle numpy arrays, but we recommend the 
+        specialised test helpers in :std:doc:`numpy:reference/routines.testing` 
+        if you need support for comparisons, NaNs, or ULP-based tolerances. 
+ 
+    .. warning:: 
+ 
+       .. versionchanged:: 3.2 
+ 
+       In order to avoid inconsistent behavior, :py:exc:`TypeError` is 
+       raised for ``&gt;``, ``&gt;=``, ``&lt;`` and ``&lt;=`` comparisons. 
+       The example below illustrates the problem:: 
+ 
+           assert approx(0.1) &gt; 0.1 + 1e-10  # calls approx(0.1).__gt__(0.1 + 1e-10) 
+           assert 0.1 + 1e-10 &gt; approx(0.1)  # calls approx(0.1).__lt__(0.1 + 1e-10) 
+ 
+       In the second example one expects ``approx(0.1).__le__(0.1 + 1e-10)`` 
+       to be called. But instead, ``approx(0.1).__lt__(0.1 + 1e-10)`` is used to 
+       comparison. This is because the call hierarchy of rich comparisons 
+       follows a fixed behavior. More information: :py:meth:`object.__ge__` 
+ 
+    .. versionchanged:: 3.7.1 
+       ``approx`` raises ``TypeError`` when it encounters a dict value or 
+       sequence element of nonnumeric type. 
+ 
+    .. versionchanged:: 6.1.0 
+       ``approx`` falls back to strict equality for nonnumeric types instead 
+       of raising ``TypeError``. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Delegate the comparison to a class that knows how to deal with the type</span>
+    <span class="s4"># of the expected value (e.g. int, float, list, dict, numpy.array, etc).</span>
+    <span class="s4">#</span>
+    <span class="s4"># The primary responsibility of these classes is to implement ``__eq__()``</span>
+    <span class="s4"># and ``__repr__()``.  The former is used to actually check if some</span>
+    <span class="s4"># &quot;actual&quot; value is equivalent to the given expected value within the</span>
+    <span class="s4"># allowed tolerance.  The latter is used to show the user the expected</span>
+    <span class="s4"># value and tolerance, in the case that a test failed.</span>
+    <span class="s4">#</span>
+    <span class="s4"># The actual logic for making approximate comparisons can be found in</span>
+    <span class="s4"># ApproxScalar, which is used to compare individual numbers.  All of the</span>
+    <span class="s4"># other Approx classes eventually delegate to this class.  The ApproxBase</span>
+    <span class="s4"># class provides some convenient methods and overloads, but isn't really</span>
+    <span class="s4"># essential.</span>
+
+    <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+
+    <span class="s0">if </span><span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">Decimal):</span>
+        <span class="s1">cls: Type[ApproxBase] = ApproxDecimal</span>
+    <span class="s0">elif </span><span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">Mapping):</span>
+        <span class="s1">cls = ApproxMapping</span>
+    <span class="s0">elif </span><span class="s1">_is_numpy_array(expected):</span>
+        <span class="s1">expected = _as_numpy_array(expected)</span>
+        <span class="s1">cls = ApproxNumpy</span>
+    <span class="s0">elif </span><span class="s1">(</span>
+        <span class="s1">hasattr(expected</span><span class="s0">, </span><span class="s2">&quot;__getitem__&quot;</span><span class="s1">)</span>
+        <span class="s0">and </span><span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">Sized)</span>
+        <span class="s4"># Type ignored because the error is wrong -- not unreachable.</span>
+        <span class="s0">and not </span><span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">STRING_TYPES)  </span><span class="s4"># type: ignore[unreachable]</span>
+    <span class="s1">):</span>
+        <span class="s1">cls = ApproxSequenceLike</span>
+    <span class="s0">elif </span><span class="s1">(</span>
+        <span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">Collection)</span>
+        <span class="s4"># Type ignored because the error is wrong -- not unreachable.</span>
+        <span class="s0">and not </span><span class="s1">isinstance(expected</span><span class="s0">, </span><span class="s1">STRING_TYPES)  </span><span class="s4"># type: ignore[unreachable]</span>
+    <span class="s1">):</span>
+        <span class="s1">msg = </span><span class="s2">f&quot;pytest.approx() only supports ordered sequences, but got: </span><span class="s0">{</span><span class="s1">repr(expected)</span><span class="s0">}</span><span class="s2">&quot;</span>
+        <span class="s0">raise </span><span class="s1">TypeError(msg)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">cls = ApproxScalar</span>
+
+    <span class="s0">return </span><span class="s1">cls(expected</span><span class="s0">, </span><span class="s1">rel</span><span class="s0">, </span><span class="s1">abs</span><span class="s0">, </span><span class="s1">nan_ok)</span>
+
+
+<span class="s0">def </span><span class="s1">_is_numpy_array(obj: object) -&gt; bool:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return true if the given object is implicitly convertible to ndarray, 
+    and numpy is already imported. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">_as_numpy_array(obj) </span><span class="s0">is not None</span>
+
+
+<span class="s0">def </span><span class="s1">_as_numpy_array(obj: object) -&gt; Optional[</span><span class="s2">&quot;ndarray&quot;</span><span class="s1">]:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return an ndarray if the given object is implicitly convertible to ndarray, 
+    and numpy is already imported, otherwise None. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">import </span><span class="s1">sys</span>
+
+    <span class="s1">np: Any = sys.modules.get(</span><span class="s2">&quot;numpy&quot;</span><span class="s1">)</span>
+    <span class="s0">if </span><span class="s1">np </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s4"># avoid infinite recursion on numpy scalars, which have __array__</span>
+        <span class="s0">if </span><span class="s1">np.isscalar(obj):</span>
+            <span class="s0">return None</span>
+        <span class="s0">elif </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">np.ndarray):</span>
+            <span class="s0">return </span><span class="s1">obj</span>
+        <span class="s0">elif </span><span class="s1">hasattr(obj</span><span class="s0">, </span><span class="s2">&quot;__array__&quot;</span><span class="s1">) </span><span class="s0">or </span><span class="s1">hasattr(</span><span class="s2">&quot;obj&quot;</span><span class="s0">, </span><span class="s2">&quot;__array_interface__&quot;</span><span class="s1">):</span>
+            <span class="s0">return </span><span class="s1">np.asarray(obj)</span>
+    <span class="s0">return None</span>
+
+
+<span class="s4"># builtin pytest.raises helper</span>
+
+<span class="s1">E = TypeVar(</span><span class="s2">&quot;E&quot;</span><span class="s0">, </span><span class="s1">bound=BaseException)</span>
+
+
+<span class="s1">@overload</span>
+<span class="s0">def </span><span class="s1">raises(</span>
+    <span class="s1">expected_exception: Union[Type[E]</span><span class="s0">, </span><span class="s1">Tuple[Type[E]</span><span class="s0">, </span><span class="s1">...]]</span><span class="s0">,</span>
+    <span class="s1">*</span><span class="s0">,</span>
+    <span class="s1">match: Optional[Union[str</span><span class="s0">, </span><span class="s1">Pattern[str]]] = ...</span><span class="s0">,</span>
+<span class="s1">) -&gt; </span><span class="s2">&quot;RaisesContext[E]&quot;</span><span class="s1">:</span>
+    <span class="s1">...</span>
+
+
+<span class="s1">@overload</span>
+<span class="s0">def </span><span class="s1">raises(</span>
+    <span class="s1">expected_exception: Union[Type[E]</span><span class="s0">, </span><span class="s1">Tuple[Type[E]</span><span class="s0">, </span><span class="s1">...]]</span><span class="s0">,</span>
+    <span class="s1">func: Callable[...</span><span class="s0">, </span><span class="s1">Any]</span><span class="s0">,</span>
+    <span class="s1">*args: Any</span><span class="s0">,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; _pytest._code.ExceptionInfo[E]:</span>
+    <span class="s1">...</span>
+
+
+<span class="s0">def </span><span class="s1">raises(</span>
+    <span class="s1">expected_exception: Union[Type[E]</span><span class="s0">, </span><span class="s1">Tuple[Type[E]</span><span class="s0">, </span><span class="s1">...]]</span><span class="s0">, </span><span class="s1">*args: Any</span><span class="s0">, </span><span class="s1">**kwargs: Any</span>
+<span class="s1">) -&gt; Union[</span><span class="s2">&quot;RaisesContext[E]&quot;</span><span class="s0">, </span><span class="s1">_pytest._code.ExceptionInfo[E]]:</span>
+    <span class="s5">r&quot;&quot;&quot;Assert that a code block/function call raises ``expected_exception`` 
+    or raise a failure exception otherwise. 
+ 
+    :kwparam match: 
+        If specified, a string containing a regular expression, 
+        or a regular expression object, that is tested against the string 
+        representation of the exception using :py:func:`re.search`. To match a literal 
+        string that may contain :std:ref:`special characters &lt;re-syntax&gt;`, the pattern can 
+        first be escaped with :py:func:`re.escape`. 
+ 
+        (This is only used when :py:func:`pytest.raises` is used as a context manager, 
+        and passed through to the function otherwise. 
+        When using :py:func:`pytest.raises` as a function, you can use: 
+        ``pytest.raises(Exc, func, match=&quot;passed on&quot;).match(&quot;my pattern&quot;)``.) 
+ 
+    .. currentmodule:: _pytest._code 
+ 
+    Use ``pytest.raises`` as a context manager, which will capture the exception of the given 
+    type:: 
+ 
+        &gt;&gt;&gt; import pytest 
+        &gt;&gt;&gt; with pytest.raises(ZeroDivisionError): 
+        ...    1/0 
+ 
+    If the code block does not raise the expected exception (``ZeroDivisionError`` in the example 
+    above), or no exception at all, the check will fail instead. 
+ 
+    You can also use the keyword argument ``match`` to assert that the 
+    exception matches a text or regex:: 
+ 
+        &gt;&gt;&gt; with pytest.raises(ValueError, match='must be 0 or None'): 
+        ...     raise ValueError(&quot;value must be 0 or None&quot;) 
+ 
+        &gt;&gt;&gt; with pytest.raises(ValueError, match=r'must be \d+$'): 
+        ...     raise ValueError(&quot;value must be 42&quot;) 
+ 
+    The context manager produces an :class:`ExceptionInfo` object which can be used to inspect the 
+    details of the captured exception:: 
+ 
+        &gt;&gt;&gt; with pytest.raises(ValueError) as exc_info: 
+        ...     raise ValueError(&quot;value must be 42&quot;) 
+        &gt;&gt;&gt; assert exc_info.type is ValueError 
+        &gt;&gt;&gt; assert exc_info.value.args[0] == &quot;value must be 42&quot; 
+ 
+    .. note:: 
+ 
+       When using ``pytest.raises`` as a context manager, it's worthwhile to 
+       note that normal context manager rules apply and that the exception 
+       raised *must* be the final line in the scope of the context manager. 
+       Lines of code after that, within the scope of the context manager will 
+       not be executed. For example:: 
+ 
+           &gt;&gt;&gt; value = 15 
+           &gt;&gt;&gt; with pytest.raises(ValueError) as exc_info: 
+           ...     if value &gt; 10: 
+           ...         raise ValueError(&quot;value must be &lt;= 10&quot;) 
+           ...     assert exc_info.type is ValueError  # this will not execute 
+ 
+       Instead, the following approach must be taken (note the difference in 
+       scope):: 
+ 
+           &gt;&gt;&gt; with pytest.raises(ValueError) as exc_info: 
+           ...     if value &gt; 10: 
+           ...         raise ValueError(&quot;value must be &lt;= 10&quot;) 
+           ... 
+           &gt;&gt;&gt; assert exc_info.type is ValueError 
+ 
+    **Using with** ``pytest.mark.parametrize`` 
+ 
+    When using :ref:`pytest.mark.parametrize ref` 
+    it is possible to parametrize tests such that 
+    some runs raise an exception and others do not. 
+ 
+    See :ref:`parametrizing_conditional_raising` for an example. 
+ 
+    **Legacy form** 
+ 
+    It is possible to specify a callable by passing a to-be-called lambda:: 
+ 
+        &gt;&gt;&gt; raises(ZeroDivisionError, lambda: 1/0) 
+        &lt;ExceptionInfo ...&gt; 
+ 
+    or you can specify an arbitrary callable with arguments:: 
+ 
+        &gt;&gt;&gt; def f(x): return 1/x 
+        ... 
+        &gt;&gt;&gt; raises(ZeroDivisionError, f, 0) 
+        &lt;ExceptionInfo ...&gt; 
+        &gt;&gt;&gt; raises(ZeroDivisionError, f, x=0) 
+        &lt;ExceptionInfo ...&gt; 
+ 
+    The form above is fully supported but discouraged for new code because the 
+    context manager form is regarded as more readable and less error-prone. 
+ 
+    .. note:: 
+        Similar to caught exception objects in Python, explicitly clearing 
+        local references to returned ``ExceptionInfo`` objects can 
+        help the Python interpreter speed up its garbage collection. 
+ 
+        Clearing those references breaks a reference cycle 
+        (``ExceptionInfo`` --&gt; caught exception --&gt; frame stack raising 
+        the exception --&gt; current frame stack --&gt; local variables --&gt; 
+        ``ExceptionInfo``) which makes Python keep all objects referenced 
+        from that cycle (including all local variables in the current 
+        frame) alive until the next cyclic garbage collection run. 
+        More detailed information can be found in the official Python 
+        documentation for :ref:`the try statement &lt;python:try&gt;`. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+
+    <span class="s0">if </span><span class="s1">isinstance(expected_exception</span><span class="s0">, </span><span class="s1">type):</span>
+        <span class="s1">excepted_exceptions: Tuple[Type[E]</span><span class="s0">, </span><span class="s1">...] = (expected_exception</span><span class="s0">,</span><span class="s1">)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">excepted_exceptions = expected_exception</span>
+    <span class="s0">for </span><span class="s1">exc </span><span class="s0">in </span><span class="s1">excepted_exceptions:</span>
+        <span class="s0">if not </span><span class="s1">isinstance(exc</span><span class="s0">, </span><span class="s1">type) </span><span class="s0">or not </span><span class="s1">issubclass(exc</span><span class="s0">, </span><span class="s1">BaseException):</span>
+            <span class="s1">msg = </span><span class="s2">&quot;expected exception must be a BaseException type, not {}&quot;  </span><span class="s4"># type: ignore[unreachable]</span>
+            <span class="s1">not_a = exc.__name__ </span><span class="s0">if </span><span class="s1">isinstance(exc</span><span class="s0">, </span><span class="s1">type) </span><span class="s0">else </span><span class="s1">type(exc).__name__</span>
+            <span class="s0">raise </span><span class="s1">TypeError(msg.format(not_a))</span>
+
+    <span class="s1">message = </span><span class="s2">f&quot;DID NOT RAISE </span><span class="s0">{</span><span class="s1">expected_exception</span><span class="s0">}</span><span class="s2">&quot;</span>
+
+    <span class="s0">if not </span><span class="s1">args:</span>
+        <span class="s1">match: Optional[Union[str</span><span class="s0">, </span><span class="s1">Pattern[str]]] = kwargs.pop(</span><span class="s2">&quot;match&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">msg = </span><span class="s2">&quot;Unexpected keyword arguments passed to pytest.raises: &quot;</span>
+            <span class="s1">msg += </span><span class="s2">&quot;, &quot;</span><span class="s1">.join(sorted(kwargs))</span>
+            <span class="s1">msg += </span><span class="s2">&quot;</span><span class="s0">\n</span><span class="s2">Use context-manager form instead?&quot;</span>
+            <span class="s0">raise </span><span class="s1">TypeError(msg)</span>
+        <span class="s0">return </span><span class="s1">RaisesContext(expected_exception</span><span class="s0">, </span><span class="s1">message</span><span class="s0">, </span><span class="s1">match)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">func = args[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s0">if not </span><span class="s1">callable(func):</span>
+            <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">func</span><span class="s0">!r} </span><span class="s2">object (type: </span><span class="s0">{</span><span class="s1">type(func)</span><span class="s0">}</span><span class="s2">) must be callable&quot;</span><span class="s1">)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">func(*args[</span><span class="s3">1</span><span class="s1">:]</span><span class="s0">, </span><span class="s1">**kwargs)</span>
+        <span class="s0">except </span><span class="s1">expected_exception </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s4"># We just caught the exception - there is a traceback.</span>
+            <span class="s0">assert </span><span class="s1">e.__traceback__ </span><span class="s0">is not None</span>
+            <span class="s0">return </span><span class="s1">_pytest._code.ExceptionInfo.from_exc_info(</span>
+                <span class="s1">(type(e)</span><span class="s0">, </span><span class="s1">e</span><span class="s0">, </span><span class="s1">e.__traceback__)</span>
+            <span class="s1">)</span>
+    <span class="s1">fail(message)</span>
+
+
+<span class="s4"># This doesn't work with mypy for now. Use fail.Exception instead.</span>
+<span class="s1">raises.Exception = fail.Exception  </span><span class="s4"># type: ignore</span>
+
+
+<span class="s1">@final</span>
+<span class="s0">class </span><span class="s1">RaisesContext(Generic[E]):</span>
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">expected_exception: Union[Type[E]</span><span class="s0">, </span><span class="s1">Tuple[Type[E]</span><span class="s0">, </span><span class="s1">...]]</span><span class="s0">,</span>
+        <span class="s1">message: str</span><span class="s0">,</span>
+        <span class="s1">match_expr: Optional[Union[str</span><span class="s0">, </span><span class="s1">Pattern[str]]] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.expected_exception = expected_exception</span>
+        <span class="s1">self.message = message</span>
+        <span class="s1">self.match_expr = match_expr</span>
+        <span class="s1">self.excinfo: Optional[_pytest._code.ExceptionInfo[E]] = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__enter__(self) -&gt; _pytest._code.ExceptionInfo[E]:</span>
+        <span class="s1">self.excinfo = _pytest._code.ExceptionInfo.for_later()</span>
+        <span class="s0">return </span><span class="s1">self.excinfo</span>
+
+    <span class="s0">def </span><span class="s1">__exit__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">exc_type: Optional[Type[BaseException]]</span><span class="s0">,</span>
+        <span class="s1">exc_val: Optional[BaseException]</span><span class="s0">,</span>
+        <span class="s1">exc_tb: Optional[TracebackType]</span><span class="s0">,</span>
+    <span class="s1">) -&gt; bool:</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">exc_type </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">fail(self.message)</span>
+        <span class="s0">assert </span><span class="s1">self.excinfo </span><span class="s0">is not None</span>
+        <span class="s0">if not </span><span class="s1">issubclass(exc_type</span><span class="s0">, </span><span class="s1">self.expected_exception):</span>
+            <span class="s0">return False</span>
+        <span class="s4"># Cast to narrow the exception type now that it's verified.</span>
+        <span class="s1">exc_info = cast(Tuple[Type[E]</span><span class="s0">, </span><span class="s1">E</span><span class="s0">, </span><span class="s1">TracebackType]</span><span class="s0">, </span><span class="s1">(exc_type</span><span class="s0">, </span><span class="s1">exc_val</span><span class="s0">, </span><span class="s1">exc_tb))</span>
+        <span class="s1">self.excinfo.fill_unfilled(exc_info)</span>
+        <span class="s0">if </span><span class="s1">self.match_expr </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">self.excinfo.match(self.match_expr)</span>
+        <span class="s0">return True</span>
+</pre>
+</body>
+</html>

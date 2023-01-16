@@ -1,0 +1,145 @@
+<html>
+<head>
+<title>deprecated.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+deprecated.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Deprecation messages and bits of code used elsewhere in the codebase that 
+is planned to be removed in the next pytest release. 
+ 
+Keeping it in a central location makes it easy to track what is deprecated and should 
+be removed when the time comes. 
+ 
+All constants defined in this module should be either instances of 
+:class:`PytestWarning`, or :class:`UnformattedWarning` 
+in case of warnings which need to format their messages. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">warnings </span><span class="s2">import </span><span class="s1">warn</span>
+
+<span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestDeprecationWarning</span>
+<span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestRemovedIn8Warning</span>
+<span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">UnformattedWarning</span>
+
+<span class="s3"># set of plugins which have been integrated into the core; we use this list to ignore</span>
+<span class="s3"># them during registration to avoid conflicts</span>
+<span class="s1">DEPRECATED_EXTERNAL_PLUGINS = {</span>
+    <span class="s4">&quot;pytest_catchlog&quot;</span><span class="s2">,</span>
+    <span class="s4">&quot;pytest_capturelog&quot;</span><span class="s2">,</span>
+    <span class="s4">&quot;pytest_faulthandler&quot;</span><span class="s2">,</span>
+<span class="s1">}</span>
+
+
+<span class="s3"># This can be* removed pytest 8, but it's harmless and common, so no rush to remove.</span>
+<span class="s3"># * If you're in the future: &quot;could have been&quot;.</span>
+<span class="s1">YIELD_FIXTURE = PytestDeprecationWarning(</span>
+    <span class="s4">&quot;@pytest.yield_fixture is deprecated.</span><span class="s2">\n</span><span class="s4">&quot;</span>
+    <span class="s4">&quot;Use @pytest.fixture instead; they are the same.&quot;</span>
+<span class="s1">)</span>
+
+<span class="s1">WARNING_CMDLINE_PREPARSE_HOOK = PytestRemovedIn8Warning(</span>
+    <span class="s4">&quot;The pytest_cmdline_preparse hook is deprecated and will be removed in a future release. </span><span class="s2">\n</span><span class="s4">&quot;</span>
+    <span class="s4">&quot;Please use pytest_load_initial_conftests hook instead.&quot;</span>
+<span class="s1">)</span>
+
+<span class="s1">FSCOLLECTOR_GETHOOKPROXY_ISINITPATH = PytestRemovedIn8Warning(</span>
+    <span class="s4">&quot;The gethookproxy() and isinitpath() methods of FSCollector and Package are deprecated; &quot;</span>
+    <span class="s4">&quot;use self.session.gethookproxy() and self.session.isinitpath() instead. &quot;</span>
+<span class="s1">)</span>
+
+<span class="s1">STRICT_OPTION = PytestRemovedIn8Warning(</span>
+    <span class="s4">&quot;The --strict option is deprecated, use --strict-markers instead.&quot;</span>
+<span class="s1">)</span>
+
+<span class="s3"># This deprecation is never really meant to be removed.</span>
+<span class="s1">PRIVATE = PytestDeprecationWarning(</span><span class="s4">&quot;A private pytest class or function was used.&quot;</span><span class="s1">)</span>
+
+<span class="s1">ARGUMENT_PERCENT_DEFAULT = PytestRemovedIn8Warning(</span>
+    <span class="s4">'pytest now uses argparse. &quot;%default&quot; should be changed to &quot;%(default)s&quot;'</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s1">ARGUMENT_TYPE_STR_CHOICE = UnformattedWarning(</span>
+    <span class="s1">PytestRemovedIn8Warning</span><span class="s2">,</span>
+    <span class="s4">&quot;`type` argument to addoption() is the string {typ!r}.&quot;</span>
+    <span class="s4">&quot; For choices this is optional and can be omitted, &quot;</span>
+    <span class="s4">&quot; but when supplied should be a type (for example `str` or `int`).&quot;</span>
+    <span class="s4">&quot; (options: {names})&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s1">ARGUMENT_TYPE_STR = UnformattedWarning(</span>
+    <span class="s1">PytestRemovedIn8Warning</span><span class="s2">,</span>
+    <span class="s4">&quot;`type` argument to addoption() is the string {typ!r}, &quot;</span>
+    <span class="s4">&quot; but when supplied should be a type (for example `str` or `int`).&quot;</span>
+    <span class="s4">&quot; (options: {names})&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+
+<span class="s1">HOOK_LEGACY_PATH_ARG = UnformattedWarning(</span>
+    <span class="s1">PytestRemovedIn8Warning</span><span class="s2">,</span>
+    <span class="s4">&quot;The ({pylib_path_arg}: py.path.local) argument is deprecated, please use ({pathlib_path_arg}: pathlib.Path)</span><span class="s2">\n</span><span class="s4">&quot;</span>
+    <span class="s4">&quot;see https://docs.pytest.org/en/latest/deprecations.html&quot;</span>
+    <span class="s4">&quot;#py-path-local-arguments-for-hooks-replaced-with-pathlib-path&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s1">NODE_CTOR_FSPATH_ARG = UnformattedWarning(</span>
+    <span class="s1">PytestRemovedIn8Warning</span><span class="s2">,</span>
+    <span class="s4">&quot;The (fspath: py.path.local) argument to {node_type_name} is deprecated. &quot;</span>
+    <span class="s4">&quot;Please use the (path: pathlib.Path) argument instead.</span><span class="s2">\n</span><span class="s4">&quot;</span>
+    <span class="s4">&quot;See https://docs.pytest.org/en/latest/deprecations.html&quot;</span>
+    <span class="s4">&quot;#fspath-argument-for-node-constructors-replaced-with-pathlib-path&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s1">WARNS_NONE_ARG = PytestRemovedIn8Warning(</span>
+    <span class="s4">&quot;Passing None has been deprecated.</span><span class="s2">\n</span><span class="s4">&quot;</span>
+    <span class="s4">&quot;See https://docs.pytest.org/en/latest/how-to/capture-warnings.html&quot;</span>
+    <span class="s4">&quot;#additional-use-cases-of-warnings-in-tests&quot;</span>
+    <span class="s4">&quot; for alternatives in common use cases.&quot;</span>
+<span class="s1">)</span>
+
+<span class="s1">KEYWORD_MSG_ARG = UnformattedWarning(</span>
+    <span class="s1">PytestRemovedIn8Warning</span><span class="s2">,</span>
+    <span class="s4">&quot;pytest.{func}(msg=...) is now deprecated, use pytest.{func}(reason=...) instead&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s1">INSTANCE_COLLECTOR = PytestRemovedIn8Warning(</span>
+    <span class="s4">&quot;The pytest.Instance collector type is deprecated and is no longer used. &quot;</span>
+    <span class="s4">&quot;See https://docs.pytest.org/en/latest/deprecations.html#the-pytest-instance-collector&quot;</span><span class="s2">,</span>
+<span class="s1">)</span>
+
+<span class="s3"># You want to make some `__init__` or function &quot;private&quot;.</span>
+<span class="s3">#</span>
+<span class="s3">#   def my_private_function(some, args):</span>
+<span class="s3">#       ...</span>
+<span class="s3">#</span>
+<span class="s3"># Do this:</span>
+<span class="s3">#</span>
+<span class="s3">#   def my_private_function(some, args, *, _ispytest: bool = False):</span>
+<span class="s3">#       check_ispytest(_ispytest)</span>
+<span class="s3">#       ...</span>
+<span class="s3">#</span>
+<span class="s3"># Change all internal/allowed calls to</span>
+<span class="s3">#</span>
+<span class="s3">#   my_private_function(some, args, _ispytest=True)</span>
+<span class="s3">#</span>
+<span class="s3"># All other calls will get the default _ispytest=False and trigger</span>
+<span class="s3"># the warning (possibly error in the future).</span>
+
+
+<span class="s2">def </span><span class="s1">check_ispytest(ispytest: bool) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">if not </span><span class="s1">ispytest:</span>
+        <span class="s1">warn(PRIVATE</span><span class="s2">, </span><span class="s1">stacklevel=</span><span class="s5">3</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

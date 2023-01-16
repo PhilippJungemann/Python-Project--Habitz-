@@ -1,0 +1,60 @@
+<html>
+<head>
+<title>setupplan.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+setupplan.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+<span class="s0">import </span><span class="s1">pytest</span>
+<span class="s0">from </span><span class="s1">_pytest.config </span><span class="s0">import </span><span class="s1">Config</span>
+<span class="s0">from </span><span class="s1">_pytest.config </span><span class="s0">import </span><span class="s1">ExitCode</span>
+<span class="s0">from </span><span class="s1">_pytest.config.argparsing </span><span class="s0">import </span><span class="s1">Parser</span>
+<span class="s0">from </span><span class="s1">_pytest.fixtures </span><span class="s0">import </span><span class="s1">FixtureDef</span>
+<span class="s0">from </span><span class="s1">_pytest.fixtures </span><span class="s0">import </span><span class="s1">SubRequest</span>
+
+
+<span class="s0">def </span><span class="s1">pytest_addoption(parser: Parser) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s1">group = parser.getgroup(</span><span class="s2">&quot;debugconfig&quot;</span><span class="s1">)</span>
+    <span class="s1">group.addoption(</span>
+        <span class="s2">&quot;--setupplan&quot;</span><span class="s0">,</span>
+        <span class="s2">&quot;--setup-plan&quot;</span><span class="s0">,</span>
+        <span class="s1">action=</span><span class="s2">&quot;store_true&quot;</span><span class="s0">,</span>
+        <span class="s1">help=</span><span class="s2">&quot;show what fixtures and tests would be executed but &quot;</span>
+        <span class="s2">&quot;don't execute anything.&quot;</span><span class="s0">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s1">@pytest.hookimpl(tryfirst=</span><span class="s0">True</span><span class="s1">)</span>
+<span class="s0">def </span><span class="s1">pytest_fixture_setup(</span>
+    <span class="s1">fixturedef: FixtureDef[object]</span><span class="s0">, </span><span class="s1">request: SubRequest</span>
+<span class="s1">) -&gt; Optional[object]:</span>
+    <span class="s3"># Will return a dummy fixture if the setuponly option is provided.</span>
+    <span class="s0">if </span><span class="s1">request.config.option.setupplan:</span>
+        <span class="s1">my_cache_key = fixturedef.cache_key(request)</span>
+        <span class="s1">fixturedef.cached_result = (</span><span class="s0">None, </span><span class="s1">my_cache_key</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">fixturedef.cached_result</span>
+    <span class="s0">return None</span>
+
+
+<span class="s1">@pytest.hookimpl(tryfirst=</span><span class="s0">True</span><span class="s1">)</span>
+<span class="s0">def </span><span class="s1">pytest_cmdline_main(config: Config) -&gt; Optional[Union[int</span><span class="s0">, </span><span class="s1">ExitCode]]:</span>
+    <span class="s0">if </span><span class="s1">config.option.setupplan:</span>
+        <span class="s1">config.option.setuponly = </span><span class="s0">True</span>
+        <span class="s1">config.option.setupshow = </span><span class="s0">True</span>
+    <span class="s0">return None</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<html>
+<head>
+<title>_builtin.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_builtin.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+
+
+<span class="s2"># Passthrough for builtins supported with py27.</span>
+<span class="s1">BaseException = BaseException</span>
+<span class="s1">GeneratorExit = GeneratorExit</span>
+<span class="s1">_sysex = (KeyboardInterrupt</span><span class="s0">, </span><span class="s1">SystemExit</span><span class="s0">, </span><span class="s1">MemoryError</span><span class="s0">, </span><span class="s1">GeneratorExit)</span>
+<span class="s1">all = all</span>
+<span class="s1">any = any</span>
+<span class="s1">callable = callable</span>
+<span class="s1">enumerate = enumerate</span>
+<span class="s1">reversed = reversed</span>
+<span class="s1">set</span><span class="s0">, </span><span class="s1">frozenset = set</span><span class="s0">, </span><span class="s1">frozenset</span>
+<span class="s1">sorted = sorted</span>
+
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s0">, </span><span class="s3">0</span><span class="s1">):</span>
+    <span class="s1">exec(</span><span class="s4">&quot;print_ = print ; exec_=exec&quot;</span><span class="s1">)</span>
+    <span class="s0">import </span><span class="s1">builtins</span>
+
+    <span class="s2"># some backward compatibility helpers</span>
+    <span class="s1">_basestring = str</span>
+    <span class="s0">def </span><span class="s1">_totext(obj</span><span class="s0">, </span><span class="s1">encoding=</span><span class="s0">None, </span><span class="s1">errors=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">if </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">bytes):</span>
+            <span class="s0">if </span><span class="s1">errors </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s1">obj = obj.decode(encoding)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">obj = obj.decode(encoding</span><span class="s0">, </span><span class="s1">errors)</span>
+        <span class="s0">elif not </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s1">obj = str(obj)</span>
+        <span class="s0">return </span><span class="s1">obj</span>
+
+    <span class="s0">def </span><span class="s1">_isbytes(x):</span>
+        <span class="s0">return </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">bytes)</span>
+
+    <span class="s0">def </span><span class="s1">_istext(x):</span>
+        <span class="s0">return </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">str)</span>
+
+    <span class="s1">text = str</span>
+    <span class="s1">bytes = bytes</span>
+
+    <span class="s0">def </span><span class="s1">_getimself(function):</span>
+        <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">'__self__'</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_getfuncdict(function):</span>
+        <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">&quot;__dict__&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_getcode(function):</span>
+        <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">&quot;__code__&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">execfile(fn</span><span class="s0">, </span><span class="s1">globs=</span><span class="s0">None, </span><span class="s1">locs=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">if </span><span class="s1">globs </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">back = sys._getframe(</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s1">globs = back.f_globals</span>
+            <span class="s1">locs = back.f_locals</span>
+            <span class="s0">del </span><span class="s1">back</span>
+        <span class="s0">elif </span><span class="s1">locs </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">locs = globs</span>
+        <span class="s1">fp = open(fn</span><span class="s0">, </span><span class="s4">&quot;r&quot;</span><span class="s1">)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">source = fp.read()</span>
+        <span class="s0">finally</span><span class="s1">:</span>
+            <span class="s1">fp.close()</span>
+        <span class="s1">co = compile(source</span><span class="s0">, </span><span class="s1">fn</span><span class="s0">, </span><span class="s4">&quot;exec&quot;</span><span class="s0">, </span><span class="s1">dont_inherit=</span><span class="s0">True</span><span class="s1">)</span>
+        <span class="s1">exec_(co</span><span class="s0">, </span><span class="s1">globs</span><span class="s0">, </span><span class="s1">locs)</span>
+
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">__builtin__ </span><span class="s0">as </span><span class="s1">builtins</span>
+    <span class="s1">_totext = unicode</span>
+    <span class="s1">_basestring = basestring</span>
+    <span class="s1">text = unicode</span>
+    <span class="s1">bytes = str</span>
+    <span class="s1">execfile = execfile</span>
+    <span class="s1">callable = callable</span>
+    <span class="s0">def </span><span class="s1">_isbytes(x):</span>
+        <span class="s0">return </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">str)</span>
+    <span class="s0">def </span><span class="s1">_istext(x):</span>
+        <span class="s0">return </span><span class="s1">isinstance(x</span><span class="s0">, </span><span class="s1">unicode)</span>
+
+    <span class="s0">def </span><span class="s1">_getimself(function):</span>
+        <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">'im_self'</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_getfuncdict(function):</span>
+        <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">&quot;__dict__&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_getcode(function):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">&quot;__code__&quot;</span><span class="s1">)</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">return </span><span class="s1">getattr(function</span><span class="s0">, </span><span class="s4">&quot;func_code&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">print_(*args</span><span class="s0">, </span><span class="s1">**kwargs):</span>
+        <span class="s5">&quot;&quot;&quot; minimal backport of py3k print statement. &quot;&quot;&quot;</span>
+        <span class="s1">sep = </span><span class="s4">' '</span>
+        <span class="s0">if </span><span class="s4">'sep' </span><span class="s0">in </span><span class="s1">kwargs:</span>
+            <span class="s1">sep = kwargs.pop(</span><span class="s4">'sep'</span><span class="s1">)</span>
+        <span class="s1">end = </span><span class="s4">'</span><span class="s0">\n</span><span class="s4">'</span>
+        <span class="s0">if </span><span class="s4">'end' </span><span class="s0">in </span><span class="s1">kwargs:</span>
+            <span class="s1">end = kwargs.pop(</span><span class="s4">'end'</span><span class="s1">)</span>
+        <span class="s1">file = </span><span class="s4">'file' </span><span class="s0">in </span><span class="s1">kwargs </span><span class="s0">and </span><span class="s1">kwargs.pop(</span><span class="s4">'file'</span><span class="s1">) </span><span class="s0">or </span><span class="s1">sys.stdout</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">args = </span><span class="s4">&quot;, &quot;</span><span class="s1">.join([str(x) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">kwargs])</span>
+            <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s4">&quot;invalid keyword arguments: %s&quot; </span><span class="s1">% args)</span>
+        <span class="s1">at_start = </span><span class="s0">True</span>
+        <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">args:</span>
+            <span class="s0">if not </span><span class="s1">at_start:</span>
+                <span class="s1">file.write(sep)</span>
+            <span class="s1">file.write(str(x))</span>
+            <span class="s1">at_start = </span><span class="s0">False</span>
+        <span class="s1">file.write(end)</span>
+
+    <span class="s0">def </span><span class="s1">exec_(obj</span><span class="s0">, </span><span class="s1">globals=</span><span class="s0">None, </span><span class="s1">locals=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s5">&quot;&quot;&quot; minimal backport of py3k exec statement. &quot;&quot;&quot;</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">globals </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">frame = sys._getframe(</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s1">globals = frame.f_globals</span>
+            <span class="s0">if </span><span class="s1">locals </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s1">locals = frame.f_locals</span>
+        <span class="s0">elif </span><span class="s1">locals </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">locals = globals</span>
+        <span class="s1">exec2(obj</span><span class="s0">, </span><span class="s1">globals</span><span class="s0">, </span><span class="s1">locals)</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s0">, </span><span class="s3">0</span><span class="s1">):</span>
+    <span class="s0">def </span><span class="s1">_reraise(cls</span><span class="s0">, </span><span class="s1">val</span><span class="s0">, </span><span class="s1">tb):</span>
+        <span class="s1">__tracebackhide__ = </span><span class="s0">True</span>
+        <span class="s0">assert </span><span class="s1">hasattr(val</span><span class="s0">, </span><span class="s4">'__traceback__'</span><span class="s1">)</span>
+        <span class="s0">raise </span><span class="s1">cls.with_traceback(val</span><span class="s0">, </span><span class="s1">tb)</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">exec (</span><span class="s4">&quot;&quot;&quot; 
+def _reraise(cls, val, tb): 
+    __tracebackhide__ = True 
+    raise cls, val, tb 
+def exec2(obj, globals, locals): 
+    __tracebackhide__ = True 
+    exec obj in globals, locals 
+&quot;&quot;&quot;</span><span class="s1">)</span>
+
+<span class="s0">def </span><span class="s1">_tryimport(*names):</span>
+    <span class="s5">&quot;&quot;&quot; return the first successfully imported module. &quot;&quot;&quot;</span>
+    <span class="s0">assert </span><span class="s1">names</span>
+    <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">names:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">__import__(name)</span>
+        <span class="s0">except </span><span class="s1">ImportError:</span>
+            <span class="s1">excinfo = sys.exc_info()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">sys.modules[name]</span>
+    <span class="s1">_reraise(*excinfo)</span>
+</pre>
+</body>
+</html>

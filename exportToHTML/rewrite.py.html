@@ -1,0 +1,1152 @@
+<html>
+<head>
+<title>rewrite.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+.s6 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+rewrite.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Rewrite assertion AST to produce nice error messages.&quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">ast</span>
+<span class="s2">import </span><span class="s1">errno</span>
+<span class="s2">import </span><span class="s1">functools</span>
+<span class="s2">import </span><span class="s1">importlib.abc</span>
+<span class="s2">import </span><span class="s1">importlib.machinery</span>
+<span class="s2">import </span><span class="s1">importlib.util</span>
+<span class="s2">import </span><span class="s1">io</span>
+<span class="s2">import </span><span class="s1">itertools</span>
+<span class="s2">import </span><span class="s1">marshal</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">struct</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">tokenize</span>
+<span class="s2">import </span><span class="s1">types</span>
+<span class="s2">from </span><span class="s1">pathlib </span><span class="s2">import </span><span class="s1">Path</span>
+<span class="s2">from </span><span class="s1">pathlib </span><span class="s2">import </span><span class="s1">PurePath</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Callable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Dict</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">IO</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Iterable</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Iterator</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Sequence</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Set</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Tuple</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">TYPE_CHECKING</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Union</span>
+
+<span class="s2">from </span><span class="s1">_pytest._io.saferepr </span><span class="s2">import </span><span class="s1">DEFAULT_REPR_MAX_SIZE</span>
+<span class="s2">from </span><span class="s1">_pytest._io.saferepr </span><span class="s2">import </span><span class="s1">saferepr</span>
+<span class="s2">from </span><span class="s1">_pytest._version </span><span class="s2">import </span><span class="s1">version</span>
+<span class="s2">from </span><span class="s1">_pytest.assertion </span><span class="s2">import </span><span class="s1">util</span>
+<span class="s2">from </span><span class="s1">_pytest.assertion.util </span><span class="s2">import </span><span class="s1">(  </span><span class="s3"># noqa: F401</span>
+    <span class="s1">format_explanation </span><span class="s2">as </span><span class="s1">_format_explanation</span><span class="s2">,</span>
+<span class="s1">)</span>
+<span class="s2">from </span><span class="s1">_pytest.config </span><span class="s2">import </span><span class="s1">Config</span>
+<span class="s2">from </span><span class="s1">_pytest.main </span><span class="s2">import </span><span class="s1">Session</span>
+<span class="s2">from </span><span class="s1">_pytest.pathlib </span><span class="s2">import </span><span class="s1">absolutepath</span>
+<span class="s2">from </span><span class="s1">_pytest.pathlib </span><span class="s2">import </span><span class="s1">fnmatch_ex</span>
+<span class="s2">from </span><span class="s1">_pytest.stash </span><span class="s2">import </span><span class="s1">StashKey</span>
+
+<span class="s2">if </span><span class="s1">TYPE_CHECKING:</span>
+    <span class="s2">from </span><span class="s1">_pytest.assertion </span><span class="s2">import </span><span class="s1">AssertionState</span>
+
+
+<span class="s1">assertstate_key = StashKey[</span><span class="s4">&quot;AssertionState&quot;</span><span class="s1">]()</span>
+
+
+<span class="s3"># pytest caches rewritten pycs in pycache dirs</span>
+<span class="s1">PYTEST_TAG = </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">sys.implementation.cache_tag</span><span class="s2">}</span><span class="s4">-pytest-</span><span class="s2">{</span><span class="s1">version</span><span class="s2">}</span><span class="s4">&quot;</span>
+<span class="s1">PYC_EXT = </span><span class="s4">&quot;.py&quot; </span><span class="s1">+ (</span><span class="s2">__debug__ and </span><span class="s4">&quot;c&quot; </span><span class="s2">or </span><span class="s4">&quot;o&quot;</span><span class="s1">)</span>
+<span class="s1">PYC_TAIL = </span><span class="s4">&quot;.&quot; </span><span class="s1">+ PYTEST_TAG + PYC_EXT</span>
+
+
+<span class="s2">class </span><span class="s1">AssertionRewritingHook(importlib.abc.MetaPathFinder</span><span class="s2">, </span><span class="s1">importlib.abc.Loader):</span>
+    <span class="s0">&quot;&quot;&quot;PEP302/PEP451 import hook which rewrites asserts.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">config: Config) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.config = config</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.fnpats = config.getini(</span><span class="s4">&quot;python_files&quot;</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">ValueError:</span>
+            <span class="s1">self.fnpats = [</span><span class="s4">&quot;test_*.py&quot;</span><span class="s2">, </span><span class="s4">&quot;*_test.py&quot;</span><span class="s1">]</span>
+        <span class="s1">self.session: Optional[Session] = </span><span class="s2">None</span>
+        <span class="s1">self._rewritten_names: Dict[str</span><span class="s2">, </span><span class="s1">Path] = {}</span>
+        <span class="s1">self._must_rewrite: Set[str] = set()</span>
+        <span class="s3"># flag to guard against trying to rewrite a pyc file while we are already writing another pyc file,</span>
+        <span class="s3"># which might result in infinite recursion (#3506)</span>
+        <span class="s1">self._writing_pyc = </span><span class="s2">False</span>
+        <span class="s1">self._basenames_to_check_rewrite = {</span><span class="s4">&quot;conftest&quot;</span><span class="s1">}</span>
+        <span class="s1">self._marked_for_rewrite_cache: Dict[str</span><span class="s2">, </span><span class="s1">bool] = {}</span>
+        <span class="s1">self._session_paths_checked = </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">set_session(self</span><span class="s2">, </span><span class="s1">session: Optional[Session]) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">self.session = session</span>
+        <span class="s1">self._session_paths_checked = </span><span class="s2">False</span>
+
+    <span class="s3"># Indirection so we can mock calls to find_spec originated from the hook during testing</span>
+    <span class="s1">_find_spec = importlib.machinery.PathFinder.find_spec</span>
+
+    <span class="s2">def </span><span class="s1">find_spec(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">name: str</span><span class="s2">,</span>
+        <span class="s1">path: Optional[Sequence[Union[str</span><span class="s2">, </span><span class="s1">bytes]]] = </span><span class="s2">None,</span>
+        <span class="s1">target: Optional[types.ModuleType] = </span><span class="s2">None,</span>
+    <span class="s1">) -&gt; Optional[importlib.machinery.ModuleSpec]:</span>
+        <span class="s2">if </span><span class="s1">self._writing_pyc:</span>
+            <span class="s2">return None</span>
+        <span class="s1">state = self.config.stash[assertstate_key]</span>
+        <span class="s2">if </span><span class="s1">self._early_rewrite_bailout(name</span><span class="s2">, </span><span class="s1">state):</span>
+            <span class="s2">return None</span>
+        <span class="s1">state.trace(</span><span class="s4">&quot;find_module called for: %s&quot; </span><span class="s1">% name)</span>
+
+        <span class="s3"># Type ignored because mypy is confused about the `self` binding here.</span>
+        <span class="s1">spec = self._find_spec(name</span><span class="s2">, </span><span class="s1">path)  </span><span class="s3"># type: ignore</span>
+        <span class="s2">if </span><span class="s1">(</span>
+            <span class="s3"># the import machinery could not find a file to import</span>
+            <span class="s1">spec </span><span class="s2">is None</span>
+            <span class="s3"># this is a namespace package (without `__init__.py`)</span>
+            <span class="s3"># there's nothing to rewrite there</span>
+            <span class="s2">or </span><span class="s1">spec.origin </span><span class="s2">is None</span>
+            <span class="s3"># we can only rewrite source files</span>
+            <span class="s2">or not </span><span class="s1">isinstance(spec.loader</span><span class="s2">, </span><span class="s1">importlib.machinery.SourceFileLoader)</span>
+            <span class="s3"># if the file doesn't exist, we can't rewrite it</span>
+            <span class="s2">or not </span><span class="s1">os.path.exists(spec.origin)</span>
+        <span class="s1">):</span>
+            <span class="s2">return None</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">fn = spec.origin</span>
+
+        <span class="s2">if not </span><span class="s1">self._should_rewrite(name</span><span class="s2">, </span><span class="s1">fn</span><span class="s2">, </span><span class="s1">state):</span>
+            <span class="s2">return None</span>
+
+        <span class="s2">return </span><span class="s1">importlib.util.spec_from_file_location(</span>
+            <span class="s1">name</span><span class="s2">,</span>
+            <span class="s1">fn</span><span class="s2">,</span>
+            <span class="s1">loader=self</span><span class="s2">,</span>
+            <span class="s1">submodule_search_locations=spec.submodule_search_locations</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">create_module(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">spec: importlib.machinery.ModuleSpec</span>
+    <span class="s1">) -&gt; Optional[types.ModuleType]:</span>
+        <span class="s2">return None  </span><span class="s3"># default behaviour is fine</span>
+
+    <span class="s2">def </span><span class="s1">exec_module(self</span><span class="s2">, </span><span class="s1">module: types.ModuleType) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">assert </span><span class="s1">module.__spec__ </span><span class="s2">is not None</span>
+        <span class="s2">assert </span><span class="s1">module.__spec__.origin </span><span class="s2">is not None</span>
+        <span class="s1">fn = Path(module.__spec__.origin)</span>
+        <span class="s1">state = self.config.stash[assertstate_key]</span>
+
+        <span class="s1">self._rewritten_names[module.__name__] = fn</span>
+
+        <span class="s3"># The requested module looks like a test file, so rewrite it. This is</span>
+        <span class="s3"># the most magical part of the process: load the source, rewrite the</span>
+        <span class="s3"># asserts, and load the rewritten source. We also cache the rewritten</span>
+        <span class="s3"># module code in a special pyc. We must be aware of the possibility of</span>
+        <span class="s3"># concurrent pytest processes rewriting and loading pycs. To avoid</span>
+        <span class="s3"># tricky race conditions, we maintain the following invariant: The</span>
+        <span class="s3"># cached pyc is always a complete, valid pyc. Operations on it must be</span>
+        <span class="s3"># atomic. POSIX's atomic rename comes in handy.</span>
+        <span class="s1">write = </span><span class="s2">not </span><span class="s1">sys.dont_write_bytecode</span>
+        <span class="s1">cache_dir = get_cache_dir(fn)</span>
+        <span class="s2">if </span><span class="s1">write:</span>
+            <span class="s1">ok = try_makedirs(cache_dir)</span>
+            <span class="s2">if not </span><span class="s1">ok:</span>
+                <span class="s1">write = </span><span class="s2">False</span>
+                <span class="s1">state.trace(</span><span class="s4">f&quot;read only directory: </span><span class="s2">{</span><span class="s1">cache_dir</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+
+        <span class="s1">cache_name = fn.name[:-</span><span class="s5">3</span><span class="s1">] + PYC_TAIL</span>
+        <span class="s1">pyc = cache_dir / cache_name</span>
+        <span class="s3"># Notice that even if we're in a read-only directory, I'm going</span>
+        <span class="s3"># to check for a cached pyc. This may not be optimal...</span>
+        <span class="s1">co = _read_pyc(fn</span><span class="s2">, </span><span class="s1">pyc</span><span class="s2">, </span><span class="s1">state.trace)</span>
+        <span class="s2">if </span><span class="s1">co </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;rewriting </span><span class="s2">{</span><span class="s1">fn</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s1">source_stat</span><span class="s2">, </span><span class="s1">co = _rewrite_test(fn</span><span class="s2">, </span><span class="s1">self.config)</span>
+            <span class="s2">if </span><span class="s1">write:</span>
+                <span class="s1">self._writing_pyc = </span><span class="s2">True</span>
+                <span class="s2">try</span><span class="s1">:</span>
+                    <span class="s1">_write_pyc(state</span><span class="s2">, </span><span class="s1">co</span><span class="s2">, </span><span class="s1">source_stat</span><span class="s2">, </span><span class="s1">pyc)</span>
+                <span class="s2">finally</span><span class="s1">:</span>
+                    <span class="s1">self._writing_pyc = </span><span class="s2">False</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;found cached rewritten pyc for </span><span class="s2">{</span><span class="s1">fn</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+        <span class="s1">exec(co</span><span class="s2">, </span><span class="s1">module.__dict__)</span>
+
+    <span class="s2">def </span><span class="s1">_early_rewrite_bailout(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">state: </span><span class="s4">&quot;AssertionState&quot;</span><span class="s1">) -&gt; bool:</span>
+        <span class="s0">&quot;&quot;&quot;A fast way to get out of rewriting modules. 
+ 
+        Profiling has shown that the call to PathFinder.find_spec (inside of 
+        the find_spec from this class) is a major slowdown, so, this method 
+        tries to filter what we're sure won't be rewritten before getting to 
+        it. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self.session </span><span class="s2">is not None and not </span><span class="s1">self._session_paths_checked:</span>
+            <span class="s1">self._session_paths_checked = </span><span class="s2">True</span>
+            <span class="s2">for </span><span class="s1">initial_path </span><span class="s2">in </span><span class="s1">self.session._initialpaths:</span>
+                <span class="s3"># Make something as c:/projects/my_project/path.py -&gt;</span>
+                <span class="s3">#     ['c:', 'projects', 'my_project', 'path.py']</span>
+                <span class="s1">parts = str(initial_path).split(os.path.sep)</span>
+                <span class="s3"># add 'path' to basenames to be checked.</span>
+                <span class="s1">self._basenames_to_check_rewrite.add(os.path.splitext(parts[-</span><span class="s5">1</span><span class="s1">])[</span><span class="s5">0</span><span class="s1">])</span>
+
+        <span class="s3"># Note: conftest already by default in _basenames_to_check_rewrite.</span>
+        <span class="s1">parts = name.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">parts[-</span><span class="s5">1</span><span class="s1">] </span><span class="s2">in </span><span class="s1">self._basenames_to_check_rewrite:</span>
+            <span class="s2">return False</span>
+
+        <span class="s3"># For matching the name it must be as if it was a filename.</span>
+        <span class="s1">path = PurePath(os.path.sep.join(parts) + </span><span class="s4">&quot;.py&quot;</span><span class="s1">)</span>
+
+        <span class="s2">for </span><span class="s1">pat </span><span class="s2">in </span><span class="s1">self.fnpats:</span>
+            <span class="s3"># if the pattern contains subdirectories (&quot;tests/**.py&quot; for example) we can't bail out based</span>
+            <span class="s3"># on the name alone because we need to match against the full path</span>
+            <span class="s2">if </span><span class="s1">os.path.dirname(pat):</span>
+                <span class="s2">return False</span>
+            <span class="s2">if </span><span class="s1">fnmatch_ex(pat</span><span class="s2">, </span><span class="s1">path):</span>
+                <span class="s2">return False</span>
+
+        <span class="s2">if </span><span class="s1">self._is_marked_for_rewrite(name</span><span class="s2">, </span><span class="s1">state):</span>
+            <span class="s2">return False</span>
+
+        <span class="s1">state.trace(</span><span class="s4">f&quot;early skip of rewriting module: </span><span class="s2">{</span><span class="s1">name</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">_should_rewrite(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">fn: str</span><span class="s2">, </span><span class="s1">state: </span><span class="s4">&quot;AssertionState&quot;</span><span class="s1">) -&gt; bool:</span>
+        <span class="s3"># always rewrite conftest files</span>
+        <span class="s2">if </span><span class="s1">os.path.basename(fn) == </span><span class="s4">&quot;conftest.py&quot;</span><span class="s1">:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;rewriting conftest file: </span><span class="s2">{</span><span class="s1">fn</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s2">return True</span>
+
+        <span class="s2">if </span><span class="s1">self.session </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s2">if </span><span class="s1">self.session.isinitpath(absolutepath(fn)):</span>
+                <span class="s1">state.trace(</span><span class="s4">f&quot;matched test file (was specified on cmdline): </span><span class="s2">{</span><span class="s1">fn</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s1">)</span>
+                <span class="s2">return True</span>
+
+        <span class="s3"># modules not passed explicitly on the command line are only</span>
+        <span class="s3"># rewritten if they match the naming convention for test files</span>
+        <span class="s1">fn_path = PurePath(fn)</span>
+        <span class="s2">for </span><span class="s1">pat </span><span class="s2">in </span><span class="s1">self.fnpats:</span>
+            <span class="s2">if </span><span class="s1">fnmatch_ex(pat</span><span class="s2">, </span><span class="s1">fn_path):</span>
+                <span class="s1">state.trace(</span><span class="s4">f&quot;matched test file </span><span class="s2">{</span><span class="s1">fn</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s1">)</span>
+                <span class="s2">return True</span>
+
+        <span class="s2">return </span><span class="s1">self._is_marked_for_rewrite(name</span><span class="s2">, </span><span class="s1">state)</span>
+
+    <span class="s2">def </span><span class="s1">_is_marked_for_rewrite(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">state: </span><span class="s4">&quot;AssertionState&quot;</span><span class="s1">) -&gt; bool:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">self._marked_for_rewrite_cache[name]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">for </span><span class="s1">marked </span><span class="s2">in </span><span class="s1">self._must_rewrite:</span>
+                <span class="s2">if </span><span class="s1">name == marked </span><span class="s2">or </span><span class="s1">name.startswith(marked + </span><span class="s4">&quot;.&quot;</span><span class="s1">):</span>
+                    <span class="s1">state.trace(</span><span class="s4">f&quot;matched marked file </span><span class="s2">{</span><span class="s1">name</span><span class="s2">!r} </span><span class="s4">(from </span><span class="s2">{</span><span class="s1">marked</span><span class="s2">!r}</span><span class="s4">)&quot;</span><span class="s1">)</span>
+                    <span class="s1">self._marked_for_rewrite_cache[name] = </span><span class="s2">True</span>
+                    <span class="s2">return True</span>
+
+            <span class="s1">self._marked_for_rewrite_cache[name] = </span><span class="s2">False</span>
+            <span class="s2">return False</span>
+
+    <span class="s2">def </span><span class="s1">mark_rewrite(self</span><span class="s2">, </span><span class="s1">*names: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Mark import names as needing to be rewritten. 
+ 
+        The named module or package as well as any nested modules will 
+        be rewritten on import. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">already_imported = (</span>
+            <span class="s1">set(names).intersection(sys.modules).difference(self._rewritten_names)</span>
+        <span class="s1">)</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">already_imported:</span>
+            <span class="s1">mod = sys.modules[name]</span>
+            <span class="s2">if not </span><span class="s1">AssertionRewriter.is_rewrite_disabled(</span>
+                <span class="s1">mod.__doc__ </span><span class="s2">or </span><span class="s4">&quot;&quot;</span>
+            <span class="s1">) </span><span class="s2">and not </span><span class="s1">isinstance(mod.__loader__</span><span class="s2">, </span><span class="s1">type(self)):</span>
+                <span class="s1">self._warn_already_imported(name)</span>
+        <span class="s1">self._must_rewrite.update(names)</span>
+        <span class="s1">self._marked_for_rewrite_cache.clear()</span>
+
+    <span class="s2">def </span><span class="s1">_warn_already_imported(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestAssertRewriteWarning</span>
+
+        <span class="s1">self.config.issue_config_time_warning(</span>
+            <span class="s1">PytestAssertRewriteWarning(</span>
+                <span class="s4">&quot;Module already imported so cannot be rewritten: %s&quot; </span><span class="s1">% name</span>
+            <span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">stacklevel=</span><span class="s5">5</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">get_data(self</span><span class="s2">, </span><span class="s1">pathname: Union[str</span><span class="s2">, </span><span class="s1">bytes]) -&gt; bytes:</span>
+        <span class="s0">&quot;&quot;&quot;Optional PEP302 get_data API.&quot;&quot;&quot;</span>
+        <span class="s2">with </span><span class="s1">open(pathname</span><span class="s2">, </span><span class="s4">&quot;rb&quot;</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f:</span>
+            <span class="s2">return </span><span class="s1">f.read()</span>
+
+    <span class="s2">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s5">3</span><span class="s2">, </span><span class="s5">10</span><span class="s1">):</span>
+
+        <span class="s2">def </span><span class="s1">get_resource_reader(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; importlib.abc.TraversableResources:  </span><span class="s3"># type: ignore</span>
+            <span class="s2">if </span><span class="s1">sys.version_info &lt; (</span><span class="s5">3</span><span class="s2">, </span><span class="s5">11</span><span class="s1">):</span>
+                <span class="s2">from </span><span class="s1">importlib.readers </span><span class="s2">import </span><span class="s1">FileReader</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">from </span><span class="s1">importlib.resources.readers </span><span class="s2">import </span><span class="s1">FileReader</span>
+
+            <span class="s2">return </span><span class="s1">FileReader(types.SimpleNamespace(path=self._rewritten_names[name]))</span>
+
+
+<span class="s2">def </span><span class="s1">_write_pyc_fp(</span>
+    <span class="s1">fp: IO[bytes]</span><span class="s2">, </span><span class="s1">source_stat: os.stat_result</span><span class="s2">, </span><span class="s1">co: types.CodeType</span>
+<span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s3"># Technically, we don't have to have the same pyc format as</span>
+    <span class="s3"># (C)Python, since these &quot;pycs&quot; should never be seen by builtin</span>
+    <span class="s3"># import. However, there's little reason to deviate.</span>
+    <span class="s1">fp.write(importlib.util.MAGIC_NUMBER)</span>
+    <span class="s3"># https://www.python.org/dev/peps/pep-0552/</span>
+    <span class="s1">flags = </span><span class="s6">b&quot;</span><span class="s2">\x00\x00\x00\x00</span><span class="s6">&quot;</span>
+    <span class="s1">fp.write(flags)</span>
+    <span class="s3"># as of now, bytecode header expects 32-bit numbers for size and mtime (#4903)</span>
+    <span class="s1">mtime = int(source_stat.st_mtime) &amp; </span><span class="s5">0xFFFFFFFF</span>
+    <span class="s1">size = source_stat.st_size &amp; </span><span class="s5">0xFFFFFFFF</span>
+    <span class="s3"># &quot;&lt;LL&quot; stands for 2 unsigned longs, little-endian.</span>
+    <span class="s1">fp.write(struct.pack(</span><span class="s4">&quot;&lt;LL&quot;</span><span class="s2">, </span><span class="s1">mtime</span><span class="s2">, </span><span class="s1">size))</span>
+    <span class="s1">fp.write(marshal.dumps(co))</span>
+
+
+<span class="s2">if </span><span class="s1">sys.platform == </span><span class="s4">&quot;win32&quot;</span><span class="s1">:</span>
+    <span class="s2">from </span><span class="s1">atomicwrites </span><span class="s2">import </span><span class="s1">atomic_write</span>
+
+    <span class="s2">def </span><span class="s1">_write_pyc(</span>
+        <span class="s1">state: </span><span class="s4">&quot;AssertionState&quot;</span><span class="s2">,</span>
+        <span class="s1">co: types.CodeType</span><span class="s2">,</span>
+        <span class="s1">source_stat: os.stat_result</span><span class="s2">,</span>
+        <span class="s1">pyc: Path</span><span class="s2">,</span>
+    <span class="s1">) -&gt; bool:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">with </span><span class="s1">atomic_write(os.fspath(pyc)</span><span class="s2">, </span><span class="s1">mode=</span><span class="s4">&quot;wb&quot;</span><span class="s2">, </span><span class="s1">overwrite=</span><span class="s2">True</span><span class="s1">) </span><span class="s2">as </span><span class="s1">fp:</span>
+                <span class="s1">_write_pyc_fp(fp</span><span class="s2">, </span><span class="s1">source_stat</span><span class="s2">, </span><span class="s1">co)</span>
+        <span class="s2">except </span><span class="s1">OSError </span><span class="s2">as </span><span class="s1">e:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;error writing pyc file at </span><span class="s2">{</span><span class="s1">pyc</span><span class="s2">}</span><span class="s4">: </span><span class="s2">{</span><span class="s1">e</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s3"># we ignore any failure to write the cache file</span>
+            <span class="s3"># there are many reasons, permission-denied, pycache dir being a</span>
+            <span class="s3"># file etc.</span>
+            <span class="s2">return False</span>
+        <span class="s2">return True</span>
+
+<span class="s2">else</span><span class="s1">:</span>
+
+    <span class="s2">def </span><span class="s1">_write_pyc(</span>
+        <span class="s1">state: </span><span class="s4">&quot;AssertionState&quot;</span><span class="s2">,</span>
+        <span class="s1">co: types.CodeType</span><span class="s2">,</span>
+        <span class="s1">source_stat: os.stat_result</span><span class="s2">,</span>
+        <span class="s1">pyc: Path</span><span class="s2">,</span>
+    <span class="s1">) -&gt; bool:</span>
+        <span class="s1">proc_pyc = </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">pyc</span><span class="s2">}</span><span class="s4">.</span><span class="s2">{</span><span class="s1">os.getpid()</span><span class="s2">}</span><span class="s4">&quot;</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">fp = open(proc_pyc</span><span class="s2">, </span><span class="s4">&quot;wb&quot;</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">OSError </span><span class="s2">as </span><span class="s1">e:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;error writing pyc file at </span><span class="s2">{</span><span class="s1">proc_pyc</span><span class="s2">}</span><span class="s4">: errno=</span><span class="s2">{</span><span class="s1">e.errno</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s2">return False</span>
+
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">_write_pyc_fp(fp</span><span class="s2">, </span><span class="s1">source_stat</span><span class="s2">, </span><span class="s1">co)</span>
+            <span class="s1">os.rename(proc_pyc</span><span class="s2">, </span><span class="s1">pyc)</span>
+        <span class="s2">except </span><span class="s1">OSError </span><span class="s2">as </span><span class="s1">e:</span>
+            <span class="s1">state.trace(</span><span class="s4">f&quot;error writing pyc file at </span><span class="s2">{</span><span class="s1">pyc</span><span class="s2">}</span><span class="s4">: </span><span class="s2">{</span><span class="s1">e</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s3"># we ignore any failure to write the cache file</span>
+            <span class="s3"># there are many reasons, permission-denied, pycache dir being a</span>
+            <span class="s3"># file etc.</span>
+            <span class="s2">return False</span>
+        <span class="s2">finally</span><span class="s1">:</span>
+            <span class="s1">fp.close()</span>
+        <span class="s2">return True</span>
+
+
+<span class="s2">def </span><span class="s1">_rewrite_test(fn: Path</span><span class="s2">, </span><span class="s1">config: Config) -&gt; Tuple[os.stat_result</span><span class="s2">, </span><span class="s1">types.CodeType]:</span>
+    <span class="s0">&quot;&quot;&quot;Read and rewrite *fn* and return the code object.&quot;&quot;&quot;</span>
+    <span class="s1">stat = os.stat(fn)</span>
+    <span class="s1">source = fn.read_bytes()</span>
+    <span class="s1">strfn = str(fn)</span>
+    <span class="s1">tree = ast.parse(source</span><span class="s2">, </span><span class="s1">filename=strfn)</span>
+    <span class="s1">rewrite_asserts(tree</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">strfn</span><span class="s2">, </span><span class="s1">config)</span>
+    <span class="s1">co = compile(tree</span><span class="s2">, </span><span class="s1">strfn</span><span class="s2">, </span><span class="s4">&quot;exec&quot;</span><span class="s2">, </span><span class="s1">dont_inherit=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">stat</span><span class="s2">, </span><span class="s1">co</span>
+
+
+<span class="s2">def </span><span class="s1">_read_pyc(</span>
+    <span class="s1">source: Path</span><span class="s2">, </span><span class="s1">pyc: Path</span><span class="s2">, </span><span class="s1">trace: Callable[[str]</span><span class="s2">, None</span><span class="s1">] = </span><span class="s2">lambda </span><span class="s1">x: </span><span class="s2">None</span>
+<span class="s1">) -&gt; Optional[types.CodeType]:</span>
+    <span class="s0">&quot;&quot;&quot;Possibly read a pytest pyc containing rewritten code. 
+ 
+    Return rewritten code if successful or None if not. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">fp = open(pyc</span><span class="s2">, </span><span class="s4">&quot;rb&quot;</span><span class="s1">)</span>
+    <span class="s2">except </span><span class="s1">OSError:</span>
+        <span class="s2">return None</span>
+    <span class="s2">with </span><span class="s1">fp:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">stat_result = os.stat(source)</span>
+            <span class="s1">mtime = int(stat_result.st_mtime)</span>
+            <span class="s1">size = stat_result.st_size</span>
+            <span class="s1">data = fp.read(</span><span class="s5">16</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">OSError </span><span class="s2">as </span><span class="s1">e:</span>
+            <span class="s1">trace(</span><span class="s4">f&quot;_read_pyc(</span><span class="s2">{</span><span class="s1">source</span><span class="s2">}</span><span class="s4">): OSError </span><span class="s2">{</span><span class="s1">e</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s2">return None</span>
+        <span class="s3"># Check for invalid or out of date pyc file.</span>
+        <span class="s2">if </span><span class="s1">len(data) != (</span><span class="s5">16</span><span class="s1">):</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): invalid pyc (too short)&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s2">if </span><span class="s1">data[:</span><span class="s5">4</span><span class="s1">] != importlib.util.MAGIC_NUMBER:</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): invalid pyc (bad magic number)&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s2">if </span><span class="s1">data[</span><span class="s5">4</span><span class="s1">:</span><span class="s5">8</span><span class="s1">] != </span><span class="s6">b&quot;</span><span class="s2">\x00\x00\x00\x00</span><span class="s6">&quot;</span><span class="s1">:</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): invalid pyc (unsupported flags)&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s1">mtime_data = data[</span><span class="s5">8</span><span class="s1">:</span><span class="s5">12</span><span class="s1">]</span>
+        <span class="s2">if </span><span class="s1">int.from_bytes(mtime_data</span><span class="s2">, </span><span class="s4">&quot;little&quot;</span><span class="s1">) != mtime &amp; </span><span class="s5">0xFFFFFFFF</span><span class="s1">:</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): out of date&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s1">size_data = data[</span><span class="s5">12</span><span class="s1">:</span><span class="s5">16</span><span class="s1">]</span>
+        <span class="s2">if </span><span class="s1">int.from_bytes(size_data</span><span class="s2">, </span><span class="s4">&quot;little&quot;</span><span class="s1">) != size &amp; </span><span class="s5">0xFFFFFFFF</span><span class="s1">:</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): invalid pyc (incorrect size)&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">co = marshal.load(fp)</span>
+        <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">e:</span>
+            <span class="s1">trace(</span><span class="s4">f&quot;_read_pyc(</span><span class="s2">{</span><span class="s1">source</span><span class="s2">}</span><span class="s4">): marshal.load error </span><span class="s2">{</span><span class="s1">e</span><span class="s2">}</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s2">return None</span>
+        <span class="s2">if not </span><span class="s1">isinstance(co</span><span class="s2">, </span><span class="s1">types.CodeType):</span>
+            <span class="s1">trace(</span><span class="s4">&quot;_read_pyc(%s): not a code object&quot; </span><span class="s1">% source)</span>
+            <span class="s2">return None</span>
+        <span class="s2">return </span><span class="s1">co</span>
+
+
+<span class="s2">def </span><span class="s1">rewrite_asserts(</span>
+    <span class="s1">mod: ast.Module</span><span class="s2">,</span>
+    <span class="s1">source: bytes</span><span class="s2">,</span>
+    <span class="s1">module_path: Optional[str] = </span><span class="s2">None,</span>
+    <span class="s1">config: Optional[Config] = </span><span class="s2">None,</span>
+<span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s0">&quot;&quot;&quot;Rewrite the assert statements in mod.&quot;&quot;&quot;</span>
+    <span class="s1">AssertionRewriter(module_path</span><span class="s2">, </span><span class="s1">config</span><span class="s2">, </span><span class="s1">source).run(mod)</span>
+
+
+<span class="s2">def </span><span class="s1">_saferepr(obj: object) -&gt; str:</span>
+    <span class="s0">r&quot;&quot;&quot;Get a safe repr of an object for assertion error messages. 
+ 
+    The assertion formatting (util.format_explanation()) requires 
+    newlines to be escaped since they are a special character for it. 
+    Normally assertion.util.format_explanation() does this but for a 
+    custom repr it is possible to contain one of the special escape 
+    sequences, especially '\n{' and '\n}' are likely to be present in 
+    JSON reprs. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">maxsize = _get_maxsize_for_saferepr(util._config)</span>
+    <span class="s2">return </span><span class="s1">saferepr(obj</span><span class="s2">, </span><span class="s1">maxsize=maxsize).replace(</span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s2">, </span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">n&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_get_maxsize_for_saferepr(config: Optional[Config]) -&gt; Optional[int]:</span>
+    <span class="s0">&quot;&quot;&quot;Get `maxsize` configuration for saferepr based on the given config object.&quot;&quot;&quot;</span>
+    <span class="s1">verbosity = config.getoption(</span><span class="s4">&quot;verbose&quot;</span><span class="s1">) </span><span class="s2">if </span><span class="s1">config </span><span class="s2">is not None else </span><span class="s5">0</span>
+    <span class="s2">if </span><span class="s1">verbosity &gt;= </span><span class="s5">2</span><span class="s1">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">verbosity &gt;= </span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s2">return </span><span class="s1">DEFAULT_REPR_MAX_SIZE * </span><span class="s5">10</span>
+    <span class="s2">return </span><span class="s1">DEFAULT_REPR_MAX_SIZE</span>
+
+
+<span class="s2">def </span><span class="s1">_format_assertmsg(obj: object) -&gt; str:</span>
+    <span class="s0">r&quot;&quot;&quot;Format the custom assertion message given. 
+ 
+    For strings this simply replaces newlines with '\n~' so that 
+    util.format_explanation() will preserve them instead of escaping 
+    newlines.  For other objects saferepr() is used first. 
+    &quot;&quot;&quot;</span>
+    <span class="s3"># reprlib appears to have a bug which means that if a string</span>
+    <span class="s3"># contains a newline it gets escaped, however if an object has a</span>
+    <span class="s3"># .__repr__() which contains newlines it does not get escaped.</span>
+    <span class="s3"># However in either case we want to preserve the newline.</span>
+    <span class="s1">replaces = [(</span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s2">, </span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">~&quot;</span><span class="s1">)</span><span class="s2">, </span><span class="s1">(</span><span class="s4">&quot;%&quot;</span><span class="s2">, </span><span class="s4">&quot;%%&quot;</span><span class="s1">)]</span>
+    <span class="s2">if not </span><span class="s1">isinstance(obj</span><span class="s2">, </span><span class="s1">str):</span>
+        <span class="s1">obj = saferepr(obj)</span>
+        <span class="s1">replaces.append((</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">n&quot;</span><span class="s2">, </span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">~&quot;</span><span class="s1">))</span>
+
+    <span class="s2">for </span><span class="s1">r1</span><span class="s2">, </span><span class="s1">r2 </span><span class="s2">in </span><span class="s1">replaces:</span>
+        <span class="s1">obj = obj.replace(r1</span><span class="s2">, </span><span class="s1">r2)</span>
+
+    <span class="s2">return </span><span class="s1">obj</span>
+
+
+<span class="s2">def </span><span class="s1">_should_repr_global_name(obj: object) -&gt; bool:</span>
+    <span class="s2">if </span><span class="s1">callable(obj):</span>
+        <span class="s2">return False</span>
+
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">return not </span><span class="s1">hasattr(obj</span><span class="s2">, </span><span class="s4">&quot;__name__&quot;</span><span class="s1">)</span>
+    <span class="s2">except </span><span class="s1">Exception:</span>
+        <span class="s2">return True</span>
+
+
+<span class="s2">def </span><span class="s1">_format_boolop(explanations: Iterable[str]</span><span class="s2">, </span><span class="s1">is_or: bool) -&gt; str:</span>
+    <span class="s1">explanation = </span><span class="s4">&quot;(&quot; </span><span class="s1">+ (is_or </span><span class="s2">and </span><span class="s4">&quot; or &quot; </span><span class="s2">or </span><span class="s4">&quot; and &quot;</span><span class="s1">).join(explanations) + </span><span class="s4">&quot;)&quot;</span>
+    <span class="s2">return </span><span class="s1">explanation.replace(</span><span class="s4">&quot;%&quot;</span><span class="s2">, </span><span class="s4">&quot;%%&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_call_reprcompare(</span>
+    <span class="s1">ops: Sequence[str]</span><span class="s2">,</span>
+    <span class="s1">results: Sequence[bool]</span><span class="s2">,</span>
+    <span class="s1">expls: Sequence[str]</span><span class="s2">,</span>
+    <span class="s1">each_obj: Sequence[object]</span><span class="s2">,</span>
+<span class="s1">) -&gt; str:</span>
+    <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">res</span><span class="s2">, </span><span class="s1">expl </span><span class="s2">in </span><span class="s1">zip(range(len(ops))</span><span class="s2">, </span><span class="s1">results</span><span class="s2">, </span><span class="s1">expls):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">done = </span><span class="s2">not </span><span class="s1">res</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s1">done = </span><span class="s2">True</span>
+        <span class="s2">if </span><span class="s1">done:</span>
+            <span class="s2">break</span>
+    <span class="s2">if </span><span class="s1">util._reprcompare </span><span class="s2">is not None</span><span class="s1">:</span>
+        <span class="s1">custom = util._reprcompare(ops[i]</span><span class="s2">, </span><span class="s1">each_obj[i]</span><span class="s2">, </span><span class="s1">each_obj[i + </span><span class="s5">1</span><span class="s1">])</span>
+        <span class="s2">if </span><span class="s1">custom </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">custom</span>
+    <span class="s2">return </span><span class="s1">expl</span>
+
+
+<span class="s2">def </span><span class="s1">_call_assertion_pass(lineno: int</span><span class="s2">, </span><span class="s1">orig: str</span><span class="s2">, </span><span class="s1">expl: str) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+    <span class="s2">if </span><span class="s1">util._assertion_pass </span><span class="s2">is not None</span><span class="s1">:</span>
+        <span class="s1">util._assertion_pass(lineno</span><span class="s2">, </span><span class="s1">orig</span><span class="s2">, </span><span class="s1">expl)</span>
+
+
+<span class="s2">def </span><span class="s1">_check_if_assertion_pass_impl() -&gt; bool:</span>
+    <span class="s0">&quot;&quot;&quot;Check if any plugins implement the pytest_assertion_pass hook 
+    in order not to generate explanation unnecessarily (might be expensive).&quot;&quot;&quot;</span>
+    <span class="s2">return True if </span><span class="s1">util._assertion_pass </span><span class="s2">else False</span>
+
+
+<span class="s1">UNARY_MAP = {ast.Not: </span><span class="s4">&quot;not %s&quot;</span><span class="s2">, </span><span class="s1">ast.Invert: </span><span class="s4">&quot;~%s&quot;</span><span class="s2">, </span><span class="s1">ast.USub: </span><span class="s4">&quot;-%s&quot;</span><span class="s2">, </span><span class="s1">ast.UAdd: </span><span class="s4">&quot;+%s&quot;</span><span class="s1">}</span>
+
+<span class="s1">BINOP_MAP = {</span>
+    <span class="s1">ast.BitOr: </span><span class="s4">&quot;|&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.BitXor: </span><span class="s4">&quot;^&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.BitAnd: </span><span class="s4">&quot;&amp;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.LShift: </span><span class="s4">&quot;&lt;&lt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.RShift: </span><span class="s4">&quot;&gt;&gt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Add: </span><span class="s4">&quot;+&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Sub: </span><span class="s4">&quot;-&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Mult: </span><span class="s4">&quot;*&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Div: </span><span class="s4">&quot;/&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.FloorDiv: </span><span class="s4">&quot;//&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Mod: </span><span class="s4">&quot;%%&quot;</span><span class="s2">,  </span><span class="s3"># escaped for string formatting</span>
+    <span class="s1">ast.Eq: </span><span class="s4">&quot;==&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.NotEq: </span><span class="s4">&quot;!=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Lt: </span><span class="s4">&quot;&lt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.LtE: </span><span class="s4">&quot;&lt;=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Gt: </span><span class="s4">&quot;&gt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.GtE: </span><span class="s4">&quot;&gt;=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Pow: </span><span class="s4">&quot;**&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Is: </span><span class="s4">&quot;is&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.IsNot: </span><span class="s4">&quot;is not&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.In: </span><span class="s4">&quot;in&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.NotIn: </span><span class="s4">&quot;not in&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.MatMult: </span><span class="s4">&quot;@&quot;</span><span class="s2">,</span>
+<span class="s1">}</span>
+
+
+<span class="s2">def </span><span class="s1">traverse_node(node: ast.AST) -&gt; Iterator[ast.AST]:</span>
+    <span class="s0">&quot;&quot;&quot;Recursively yield node and all its children in depth-first order.&quot;&quot;&quot;</span>
+    <span class="s2">yield </span><span class="s1">node</span>
+    <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">ast.iter_child_nodes(node):</span>
+        <span class="s2">yield from </span><span class="s1">traverse_node(child)</span>
+
+
+<span class="s1">@functools.lru_cache(maxsize=</span><span class="s5">1</span><span class="s1">)</span>
+<span class="s2">def </span><span class="s1">_get_assertion_exprs(src: bytes) -&gt; Dict[int</span><span class="s2">, </span><span class="s1">str]:</span>
+    <span class="s0">&quot;&quot;&quot;Return a mapping from {lineno: &quot;assertion test expression&quot;}.&quot;&quot;&quot;</span>
+    <span class="s1">ret: Dict[int</span><span class="s2">, </span><span class="s1">str] = {}</span>
+
+    <span class="s1">depth = </span><span class="s5">0</span>
+    <span class="s1">lines: List[str] = []</span>
+    <span class="s1">assert_lineno: Optional[int] = </span><span class="s2">None</span>
+    <span class="s1">seen_lines: Set[int] = set()</span>
+
+    <span class="s2">def </span><span class="s1">_write_and_reset() -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s2">nonlocal </span><span class="s1">depth</span><span class="s2">, </span><span class="s1">lines</span><span class="s2">, </span><span class="s1">assert_lineno</span><span class="s2">, </span><span class="s1">seen_lines</span>
+        <span class="s2">assert </span><span class="s1">assert_lineno </span><span class="s2">is not None</span>
+        <span class="s1">ret[assert_lineno] = </span><span class="s4">&quot;&quot;</span><span class="s1">.join(lines).rstrip().rstrip(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s1">)</span>
+        <span class="s1">depth = </span><span class="s5">0</span>
+        <span class="s1">lines = []</span>
+        <span class="s1">assert_lineno = </span><span class="s2">None</span>
+        <span class="s1">seen_lines = set()</span>
+
+    <span class="s1">tokens = tokenize.tokenize(io.BytesIO(src).readline)</span>
+    <span class="s2">for </span><span class="s1">tp</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">(lineno</span><span class="s2">, </span><span class="s1">offset)</span><span class="s2">, </span><span class="s1">_</span><span class="s2">, </span><span class="s1">line </span><span class="s2">in </span><span class="s1">tokens:</span>
+        <span class="s2">if </span><span class="s1">tp == tokenize.NAME </span><span class="s2">and </span><span class="s1">source == </span><span class="s4">&quot;assert&quot;</span><span class="s1">:</span>
+            <span class="s1">assert_lineno = lineno</span>
+        <span class="s2">elif </span><span class="s1">assert_lineno </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s3"># keep track of depth for the assert-message `,` lookup</span>
+            <span class="s2">if </span><span class="s1">tp == tokenize.OP </span><span class="s2">and </span><span class="s1">source </span><span class="s2">in </span><span class="s4">&quot;([{&quot;</span><span class="s1">:</span>
+                <span class="s1">depth += </span><span class="s5">1</span>
+            <span class="s2">elif </span><span class="s1">tp == tokenize.OP </span><span class="s2">and </span><span class="s1">source </span><span class="s2">in </span><span class="s4">&quot;)]}&quot;</span><span class="s1">:</span>
+                <span class="s1">depth -= </span><span class="s5">1</span>
+
+            <span class="s2">if not </span><span class="s1">lines:</span>
+                <span class="s1">lines.append(line[offset:])</span>
+                <span class="s1">seen_lines.add(lineno)</span>
+            <span class="s3"># a non-nested comma separates the expression from the message</span>
+            <span class="s2">elif </span><span class="s1">depth == </span><span class="s5">0 </span><span class="s2">and </span><span class="s1">tp == tokenize.OP </span><span class="s2">and </span><span class="s1">source == </span><span class="s4">&quot;,&quot;</span><span class="s1">:</span>
+                <span class="s3"># one line assert with message</span>
+                <span class="s2">if </span><span class="s1">lineno </span><span class="s2">in </span><span class="s1">seen_lines </span><span class="s2">and </span><span class="s1">len(lines) == </span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s1">offset_in_trimmed = offset + len(lines[-</span><span class="s5">1</span><span class="s1">]) - len(line)</span>
+                    <span class="s1">lines[-</span><span class="s5">1</span><span class="s1">] = lines[-</span><span class="s5">1</span><span class="s1">][:offset_in_trimmed]</span>
+                <span class="s3"># multi-line assert with message</span>
+                <span class="s2">elif </span><span class="s1">lineno </span><span class="s2">in </span><span class="s1">seen_lines:</span>
+                    <span class="s1">lines[-</span><span class="s5">1</span><span class="s1">] = lines[-</span><span class="s5">1</span><span class="s1">][:offset]</span>
+                <span class="s3"># multi line assert with escapd newline before message</span>
+                <span class="s2">else</span><span class="s1">:</span>
+                    <span class="s1">lines.append(line[:offset])</span>
+                <span class="s1">_write_and_reset()</span>
+            <span class="s2">elif </span><span class="s1">tp </span><span class="s2">in </span><span class="s1">{tokenize.NEWLINE</span><span class="s2">, </span><span class="s1">tokenize.ENDMARKER}:</span>
+                <span class="s1">_write_and_reset()</span>
+            <span class="s2">elif </span><span class="s1">lines </span><span class="s2">and </span><span class="s1">lineno </span><span class="s2">not in </span><span class="s1">seen_lines:</span>
+                <span class="s1">lines.append(line)</span>
+                <span class="s1">seen_lines.add(lineno)</span>
+
+    <span class="s2">return </span><span class="s1">ret</span>
+
+
+<span class="s2">class </span><span class="s1">AssertionRewriter(ast.NodeVisitor):</span>
+    <span class="s0">&quot;&quot;&quot;Assertion rewriting implementation. 
+ 
+    The main entrypoint is to call .run() with an ast.Module instance, 
+    this will then find all the assert statements and rewrite them to 
+    provide intermediate values and a detailed assertion error.  See 
+    http://pybites.blogspot.be/2011/07/behind-scenes-of-pytests-new-assertion.html 
+    for an overview of how this works. 
+ 
+    The entry point here is .run() which will iterate over all the 
+    statements in an ast.Module and for each ast.Assert statement it 
+    finds call .visit() with it.  Then .visit_Assert() takes over and 
+    is responsible for creating new ast statements to replace the 
+    original assert statement: it rewrites the test of an assertion 
+    to provide intermediate values and replace it with an if statement 
+    which raises an assertion error with a detailed explanation in 
+    case the expression is false and calls pytest_assertion_pass hook 
+    if expression is true. 
+ 
+    For this .visit_Assert() uses the visitor pattern to visit all the 
+    AST nodes of the ast.Assert.test field, each visit call returning 
+    an AST node and the corresponding explanation string.  During this 
+    state is kept in several instance attributes: 
+ 
+    :statements: All the AST statements which will replace the assert 
+       statement. 
+ 
+    :variables: This is populated by .variable() with each variable 
+       used by the statements so that they can all be set to None at 
+       the end of the statements. 
+ 
+    :variable_counter: Counter to create new unique variables needed 
+       by statements.  Variables are created using .variable() and 
+       have the form of &quot;@py_assert0&quot;. 
+ 
+    :expl_stmts: The AST statements which will be executed to get 
+       data from the assertion.  This is the code which will construct 
+       the detailed assertion message that is used in the AssertionError 
+       or for the pytest_assertion_pass hook. 
+ 
+    :explanation_specifiers: A dict filled by .explanation_param() 
+       with %-formatting placeholders and their corresponding 
+       expressions to use in the building of an assertion message. 
+       This is used by .pop_format_context() to build a message. 
+ 
+    :stack: A stack of the explanation_specifiers dicts maintained by 
+       .push_format_context() and .pop_format_context() which allows 
+       to build another %-formatted string while already building one. 
+ 
+    This state is reset on every new assert statement visited and used 
+    by the other visitors. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">module_path: Optional[str]</span><span class="s2">, </span><span class="s1">config: Optional[Config]</span><span class="s2">, </span><span class="s1">source: bytes</span>
+    <span class="s1">) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s1">super().__init__()</span>
+        <span class="s1">self.module_path = module_path</span>
+        <span class="s1">self.config = config</span>
+        <span class="s2">if </span><span class="s1">config </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">self.enable_assertion_pass_hook = config.getini(</span>
+                <span class="s4">&quot;enable_assertion_pass_hook&quot;</span>
+            <span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">self.enable_assertion_pass_hook = </span><span class="s2">False</span>
+        <span class="s1">self.source = source</span>
+
+    <span class="s2">def </span><span class="s1">run(self</span><span class="s2">, </span><span class="s1">mod: ast.Module) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Find all assert statements in *mod* and rewrite them.&quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">mod.body:</span>
+            <span class="s3"># Nothing to do.</span>
+            <span class="s2">return</span>
+
+        <span class="s3"># We'll insert some special imports at the top of the module, but after any</span>
+        <span class="s3"># docstrings and __future__ imports, so first figure out where that is.</span>
+        <span class="s1">doc = getattr(mod</span><span class="s2">, </span><span class="s4">&quot;docstring&quot;</span><span class="s2">, None</span><span class="s1">)</span>
+        <span class="s1">expect_docstring = doc </span><span class="s2">is None</span>
+        <span class="s2">if </span><span class="s1">doc </span><span class="s2">is not None and </span><span class="s1">self.is_rewrite_disabled(doc):</span>
+            <span class="s2">return</span>
+        <span class="s1">pos = </span><span class="s5">0</span>
+        <span class="s1">lineno = </span><span class="s5">1</span>
+        <span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">mod.body:</span>
+            <span class="s2">if </span><span class="s1">(</span>
+                <span class="s1">expect_docstring</span>
+                <span class="s2">and </span><span class="s1">isinstance(item</span><span class="s2">, </span><span class="s1">ast.Expr)</span>
+                <span class="s2">and </span><span class="s1">isinstance(item.value</span><span class="s2">, </span><span class="s1">ast.Str)</span>
+            <span class="s1">):</span>
+                <span class="s1">doc = item.value.s</span>
+                <span class="s2">if </span><span class="s1">self.is_rewrite_disabled(doc):</span>
+                    <span class="s2">return</span>
+                <span class="s1">expect_docstring = </span><span class="s2">False</span>
+            <span class="s2">elif </span><span class="s1">(</span>
+                <span class="s1">isinstance(item</span><span class="s2">, </span><span class="s1">ast.ImportFrom)</span>
+                <span class="s2">and </span><span class="s1">item.level == </span><span class="s5">0</span>
+                <span class="s2">and </span><span class="s1">item.module == </span><span class="s4">&quot;__future__&quot;</span>
+            <span class="s1">):</span>
+                <span class="s2">pass</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s2">break</span>
+            <span class="s1">pos += </span><span class="s5">1</span>
+        <span class="s3"># Special case: for a decorated function, set the lineno to that of the</span>
+        <span class="s3"># first decorator, not the `def`. Issue #4984.</span>
+        <span class="s2">if </span><span class="s1">isinstance(item</span><span class="s2">, </span><span class="s1">ast.FunctionDef) </span><span class="s2">and </span><span class="s1">item.decorator_list:</span>
+            <span class="s1">lineno = item.decorator_list[</span><span class="s5">0</span><span class="s1">].lineno</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">lineno = item.lineno</span>
+        <span class="s3"># Now actually insert the special imports.</span>
+        <span class="s2">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s5">3</span><span class="s2">, </span><span class="s5">10</span><span class="s1">):</span>
+            <span class="s1">aliases = [</span>
+                <span class="s1">ast.alias(</span><span class="s4">&quot;builtins&quot;</span><span class="s2">, </span><span class="s4">&quot;@py_builtins&quot;</span><span class="s2">, </span><span class="s1">lineno=lineno</span><span class="s2">, </span><span class="s1">col_offset=</span><span class="s5">0</span><span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">ast.alias(</span>
+                    <span class="s4">&quot;_pytest.assertion.rewrite&quot;</span><span class="s2">,</span>
+                    <span class="s4">&quot;@pytest_ar&quot;</span><span class="s2">,</span>
+                    <span class="s1">lineno=lineno</span><span class="s2">,</span>
+                    <span class="s1">col_offset=</span><span class="s5">0</span><span class="s2">,</span>
+                <span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">]</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">aliases = [</span>
+                <span class="s1">ast.alias(</span><span class="s4">&quot;builtins&quot;</span><span class="s2">, </span><span class="s4">&quot;@py_builtins&quot;</span><span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">ast.alias(</span><span class="s4">&quot;_pytest.assertion.rewrite&quot;</span><span class="s2">, </span><span class="s4">&quot;@pytest_ar&quot;</span><span class="s1">)</span><span class="s2">,</span>
+            <span class="s1">]</span>
+        <span class="s1">imports = [</span>
+            <span class="s1">ast.Import([alias]</span><span class="s2">, </span><span class="s1">lineno=lineno</span><span class="s2">, </span><span class="s1">col_offset=</span><span class="s5">0</span><span class="s1">) </span><span class="s2">for </span><span class="s1">alias </span><span class="s2">in </span><span class="s1">aliases</span>
+        <span class="s1">]</span>
+        <span class="s1">mod.body[pos:pos] = imports</span>
+
+        <span class="s3"># Collect asserts.</span>
+        <span class="s1">nodes: List[ast.AST] = [mod]</span>
+        <span class="s2">while </span><span class="s1">nodes:</span>
+            <span class="s1">node = nodes.pop()</span>
+            <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field </span><span class="s2">in </span><span class="s1">ast.iter_fields(node):</span>
+                <span class="s2">if </span><span class="s1">isinstance(field</span><span class="s2">, </span><span class="s1">list):</span>
+                    <span class="s1">new: List[ast.AST] = []</span>
+                    <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">child </span><span class="s2">in </span><span class="s1">enumerate(field):</span>
+                        <span class="s2">if </span><span class="s1">isinstance(child</span><span class="s2">, </span><span class="s1">ast.Assert):</span>
+                            <span class="s3"># Transform assert.</span>
+                            <span class="s1">new.extend(self.visit(child))</span>
+                        <span class="s2">else</span><span class="s1">:</span>
+                            <span class="s1">new.append(child)</span>
+                            <span class="s2">if </span><span class="s1">isinstance(child</span><span class="s2">, </span><span class="s1">ast.AST):</span>
+                                <span class="s1">nodes.append(child)</span>
+                    <span class="s1">setattr(node</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">new)</span>
+                <span class="s2">elif </span><span class="s1">(</span>
+                    <span class="s1">isinstance(field</span><span class="s2">, </span><span class="s1">ast.AST)</span>
+                    <span class="s3"># Don't recurse into expressions as they can't contain</span>
+                    <span class="s3"># asserts.</span>
+                    <span class="s2">and not </span><span class="s1">isinstance(field</span><span class="s2">, </span><span class="s1">ast.expr)</span>
+                <span class="s1">):</span>
+                    <span class="s1">nodes.append(field)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s2">def </span><span class="s1">is_rewrite_disabled(docstring: str) -&gt; bool:</span>
+        <span class="s2">return </span><span class="s4">&quot;PYTEST_DONT_REWRITE&quot; </span><span class="s2">in </span><span class="s1">docstring</span>
+
+    <span class="s2">def </span><span class="s1">variable(self) -&gt; str:</span>
+        <span class="s0">&quot;&quot;&quot;Get a new variable.&quot;&quot;&quot;</span>
+        <span class="s3"># Use a character invalid in python identifiers to avoid clashing.</span>
+        <span class="s1">name = </span><span class="s4">&quot;@py_assert&quot; </span><span class="s1">+ str(next(self.variable_counter))</span>
+        <span class="s1">self.variables.append(name)</span>
+        <span class="s2">return </span><span class="s1">name</span>
+
+    <span class="s2">def </span><span class="s1">assign(self</span><span class="s2">, </span><span class="s1">expr: ast.expr) -&gt; ast.Name:</span>
+        <span class="s0">&quot;&quot;&quot;Give *expr* a name.&quot;&quot;&quot;</span>
+        <span class="s1">name = self.variable()</span>
+        <span class="s1">self.statements.append(ast.Assign([ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Store())]</span><span class="s2">, </span><span class="s1">expr))</span>
+        <span class="s2">return </span><span class="s1">ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+
+    <span class="s2">def </span><span class="s1">display(self</span><span class="s2">, </span><span class="s1">expr: ast.expr) -&gt; ast.expr:</span>
+        <span class="s0">&quot;&quot;&quot;Call saferepr on the expression.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.helper(</span><span class="s4">&quot;_saferepr&quot;</span><span class="s2">, </span><span class="s1">expr)</span>
+
+    <span class="s2">def </span><span class="s1">helper(self</span><span class="s2">, </span><span class="s1">name: str</span><span class="s2">, </span><span class="s1">*args: ast.expr) -&gt; ast.expr:</span>
+        <span class="s0">&quot;&quot;&quot;Call a helper in this module.&quot;&quot;&quot;</span>
+        <span class="s1">py_name = ast.Name(</span><span class="s4">&quot;@pytest_ar&quot;</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+        <span class="s1">attr = ast.Attribute(py_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+        <span class="s2">return </span><span class="s1">ast.Call(attr</span><span class="s2">, </span><span class="s1">list(args)</span><span class="s2">, </span><span class="s1">[])</span>
+
+    <span class="s2">def </span><span class="s1">builtin(self</span><span class="s2">, </span><span class="s1">name: str) -&gt; ast.Attribute:</span>
+        <span class="s0">&quot;&quot;&quot;Return the builtin called *name*.&quot;&quot;&quot;</span>
+        <span class="s1">builtin_name = ast.Name(</span><span class="s4">&quot;@py_builtins&quot;</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+        <span class="s2">return </span><span class="s1">ast.Attribute(builtin_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+
+    <span class="s2">def </span><span class="s1">explanation_param(self</span><span class="s2">, </span><span class="s1">expr: ast.expr) -&gt; str:</span>
+        <span class="s0">&quot;&quot;&quot;Return a new named %-formatting placeholder for expr. 
+ 
+        This creates a %-formatting placeholder for expr in the 
+        current formatting context, e.g. ``%(py0)s``.  The placeholder 
+        and expr are placed in the current format context so that it 
+        can be used on the next call to .pop_format_context(). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">specifier = </span><span class="s4">&quot;py&quot; </span><span class="s1">+ str(next(self.variable_counter))</span>
+        <span class="s1">self.explanation_specifiers[specifier] = expr</span>
+        <span class="s2">return </span><span class="s4">&quot;%(&quot; </span><span class="s1">+ specifier + </span><span class="s4">&quot;)s&quot;</span>
+
+    <span class="s2">def </span><span class="s1">push_format_context(self) -&gt; </span><span class="s2">None</span><span class="s1">:</span>
+        <span class="s0">&quot;&quot;&quot;Create a new formatting context. 
+ 
+        The format context is used for when an explanation wants to 
+        have a variable value formatted in the assertion message.  In 
+        this case the value required can be added using 
+        .explanation_param().  Finally .pop_format_context() is used 
+        to format a string of %-formatted values as added by 
+        .explanation_param(). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self.explanation_specifiers: Dict[str</span><span class="s2">, </span><span class="s1">ast.expr] = {}</span>
+        <span class="s1">self.stack.append(self.explanation_specifiers)</span>
+
+    <span class="s2">def </span><span class="s1">pop_format_context(self</span><span class="s2">, </span><span class="s1">expl_expr: ast.expr) -&gt; ast.Name:</span>
+        <span class="s0">&quot;&quot;&quot;Format the %-formatted string with current format context. 
+ 
+        The expl_expr should be an str ast.expr instance constructed from 
+        the %-placeholders created by .explanation_param().  This will 
+        add the required code to format said string to .expl_stmts and 
+        return the ast.Name instance of the formatted string. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">current = self.stack.pop()</span>
+        <span class="s2">if </span><span class="s1">self.stack:</span>
+            <span class="s1">self.explanation_specifiers = self.stack[-</span><span class="s5">1</span><span class="s1">]</span>
+        <span class="s1">keys = [ast.Str(key) </span><span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">current.keys()]</span>
+        <span class="s1">format_dict = ast.Dict(keys</span><span class="s2">, </span><span class="s1">list(current.values()))</span>
+        <span class="s1">form = ast.BinOp(expl_expr</span><span class="s2">, </span><span class="s1">ast.Mod()</span><span class="s2">, </span><span class="s1">format_dict)</span>
+        <span class="s1">name = </span><span class="s4">&quot;@py_format&quot; </span><span class="s1">+ str(next(self.variable_counter))</span>
+        <span class="s2">if </span><span class="s1">self.enable_assertion_pass_hook:</span>
+            <span class="s1">self.format_variables.append(name)</span>
+        <span class="s1">self.expl_stmts.append(ast.Assign([ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Store())]</span><span class="s2">, </span><span class="s1">form))</span>
+        <span class="s2">return </span><span class="s1">ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+
+    <span class="s2">def </span><span class="s1">generic_visit(self</span><span class="s2">, </span><span class="s1">node: ast.AST) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s0">&quot;&quot;&quot;Handle expressions we don't have custom code for.&quot;&quot;&quot;</span>
+        <span class="s2">assert </span><span class="s1">isinstance(node</span><span class="s2">, </span><span class="s1">ast.expr)</span>
+        <span class="s1">res = self.assign(node)</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">self.explanation_param(self.display(res))</span>
+
+    <span class="s2">def </span><span class="s1">visit_Assert(self</span><span class="s2">, </span><span class="s1">assert_: ast.Assert) -&gt; List[ast.stmt]:</span>
+        <span class="s0">&quot;&quot;&quot;Return the AST statements to replace the ast.Assert instance. 
+ 
+        This rewrites the test of an assertion to provide 
+        intermediate values and replace it with an if statement which 
+        raises an assertion error with a detailed explanation in case 
+        the expression is false. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance(assert_.test</span><span class="s2">, </span><span class="s1">ast.Tuple) </span><span class="s2">and </span><span class="s1">len(assert_.test.elts) &gt;= </span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s2">from </span><span class="s1">_pytest.warning_types </span><span class="s2">import </span><span class="s1">PytestAssertRewriteWarning</span>
+            <span class="s2">import </span><span class="s1">warnings</span>
+
+            <span class="s3"># TODO: This assert should not be needed.</span>
+            <span class="s2">assert </span><span class="s1">self.module_path </span><span class="s2">is not None</span>
+            <span class="s1">warnings.warn_explicit(</span>
+                <span class="s1">PytestAssertRewriteWarning(</span>
+                    <span class="s4">&quot;assertion is always true, perhaps remove parentheses?&quot;</span>
+                <span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">category=</span><span class="s2">None,</span>
+                <span class="s1">filename=self.module_path</span><span class="s2">,</span>
+                <span class="s1">lineno=assert_.lineno</span><span class="s2">,</span>
+            <span class="s1">)</span>
+
+        <span class="s1">self.statements: List[ast.stmt] = []</span>
+        <span class="s1">self.variables: List[str] = []</span>
+        <span class="s1">self.variable_counter = itertools.count()</span>
+
+        <span class="s2">if </span><span class="s1">self.enable_assertion_pass_hook:</span>
+            <span class="s1">self.format_variables: List[str] = []</span>
+
+        <span class="s1">self.stack: List[Dict[str</span><span class="s2">, </span><span class="s1">ast.expr]] = []</span>
+        <span class="s1">self.expl_stmts: List[ast.stmt] = []</span>
+        <span class="s1">self.push_format_context()</span>
+        <span class="s3"># Rewrite assert into a bunch of statements.</span>
+        <span class="s1">top_condition</span><span class="s2">, </span><span class="s1">explanation = self.visit(assert_.test)</span>
+
+        <span class="s1">negation = ast.UnaryOp(ast.Not()</span><span class="s2">, </span><span class="s1">top_condition)</span>
+
+        <span class="s2">if </span><span class="s1">self.enable_assertion_pass_hook:  </span><span class="s3"># Experimental pytest_assertion_pass hook</span>
+            <span class="s1">msg = self.pop_format_context(ast.Str(explanation))</span>
+
+            <span class="s3"># Failed</span>
+            <span class="s2">if </span><span class="s1">assert_.msg:</span>
+                <span class="s1">assertmsg = self.helper(</span><span class="s4">&quot;_format_assertmsg&quot;</span><span class="s2">, </span><span class="s1">assert_.msg)</span>
+                <span class="s1">gluestr = </span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&gt;assert &quot;</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">assertmsg = ast.Str(</span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s1">gluestr = </span><span class="s4">&quot;assert &quot;</span>
+            <span class="s1">err_explanation = ast.BinOp(ast.Str(gluestr)</span><span class="s2">, </span><span class="s1">ast.Add()</span><span class="s2">, </span><span class="s1">msg)</span>
+            <span class="s1">err_msg = ast.BinOp(assertmsg</span><span class="s2">, </span><span class="s1">ast.Add()</span><span class="s2">, </span><span class="s1">err_explanation)</span>
+            <span class="s1">err_name = ast.Name(</span><span class="s4">&quot;AssertionError&quot;</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+            <span class="s1">fmt = self.helper(</span><span class="s4">&quot;_format_explanation&quot;</span><span class="s2">, </span><span class="s1">err_msg)</span>
+            <span class="s1">exc = ast.Call(err_name</span><span class="s2">, </span><span class="s1">[fmt]</span><span class="s2">, </span><span class="s1">[])</span>
+            <span class="s1">raise_ = ast.Raise(exc</span><span class="s2">, None</span><span class="s1">)</span>
+            <span class="s1">statements_fail = []</span>
+            <span class="s1">statements_fail.extend(self.expl_stmts)</span>
+            <span class="s1">statements_fail.append(raise_)</span>
+
+            <span class="s3"># Passed</span>
+            <span class="s1">fmt_pass = self.helper(</span><span class="s4">&quot;_format_explanation&quot;</span><span class="s2">, </span><span class="s1">msg)</span>
+            <span class="s1">orig = _get_assertion_exprs(self.source)[assert_.lineno]</span>
+            <span class="s1">hook_call_pass = ast.Expr(</span>
+                <span class="s1">self.helper(</span>
+                    <span class="s4">&quot;_call_assertion_pass&quot;</span><span class="s2">,</span>
+                    <span class="s1">ast.Num(assert_.lineno)</span><span class="s2">,</span>
+                    <span class="s1">ast.Str(orig)</span><span class="s2">,</span>
+                    <span class="s1">fmt_pass</span><span class="s2">,</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+            <span class="s3"># If any hooks implement assert_pass hook</span>
+            <span class="s1">hook_impl_test = ast.If(</span>
+                <span class="s1">self.helper(</span><span class="s4">&quot;_check_if_assertion_pass_impl&quot;</span><span class="s1">)</span><span class="s2">,</span>
+                <span class="s1">self.expl_stmts + [hook_call_pass]</span><span class="s2">,</span>
+                <span class="s1">[]</span><span class="s2">,</span>
+            <span class="s1">)</span>
+            <span class="s1">statements_pass = [hook_impl_test]</span>
+
+            <span class="s3"># Test for assertion condition</span>
+            <span class="s1">main_test = ast.If(negation</span><span class="s2">, </span><span class="s1">statements_fail</span><span class="s2">, </span><span class="s1">statements_pass)</span>
+            <span class="s1">self.statements.append(main_test)</span>
+            <span class="s2">if </span><span class="s1">self.format_variables:</span>
+                <span class="s1">variables = [</span>
+                    <span class="s1">ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Store()) </span><span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">self.format_variables</span>
+                <span class="s1">]</span>
+                <span class="s1">clear_format = ast.Assign(variables</span><span class="s2">, </span><span class="s1">ast.NameConstant(</span><span class="s2">None</span><span class="s1">))</span>
+                <span class="s1">self.statements.append(clear_format)</span>
+
+        <span class="s2">else</span><span class="s1">:  </span><span class="s3"># Original assertion rewriting</span>
+            <span class="s3"># Create failure message.</span>
+            <span class="s1">body = self.expl_stmts</span>
+            <span class="s1">self.statements.append(ast.If(negation</span><span class="s2">, </span><span class="s1">body</span><span class="s2">, </span><span class="s1">[]))</span>
+            <span class="s2">if </span><span class="s1">assert_.msg:</span>
+                <span class="s1">assertmsg = self.helper(</span><span class="s4">&quot;_format_assertmsg&quot;</span><span class="s2">, </span><span class="s1">assert_.msg)</span>
+                <span class="s1">explanation = </span><span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&gt;assert &quot; </span><span class="s1">+ explanation</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s1">assertmsg = ast.Str(</span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s1">explanation = </span><span class="s4">&quot;assert &quot; </span><span class="s1">+ explanation</span>
+            <span class="s1">template = ast.BinOp(assertmsg</span><span class="s2">, </span><span class="s1">ast.Add()</span><span class="s2">, </span><span class="s1">ast.Str(explanation))</span>
+            <span class="s1">msg = self.pop_format_context(template)</span>
+            <span class="s1">fmt = self.helper(</span><span class="s4">&quot;_format_explanation&quot;</span><span class="s2">, </span><span class="s1">msg)</span>
+            <span class="s1">err_name = ast.Name(</span><span class="s4">&quot;AssertionError&quot;</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+            <span class="s1">exc = ast.Call(err_name</span><span class="s2">, </span><span class="s1">[fmt]</span><span class="s2">, </span><span class="s1">[])</span>
+            <span class="s1">raise_ = ast.Raise(exc</span><span class="s2">, None</span><span class="s1">)</span>
+
+            <span class="s1">body.append(raise_)</span>
+
+        <span class="s3"># Clear temporary variables by setting them to None.</span>
+        <span class="s2">if </span><span class="s1">self.variables:</span>
+            <span class="s1">variables = [ast.Name(name</span><span class="s2">, </span><span class="s1">ast.Store()) </span><span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">self.variables]</span>
+            <span class="s1">clear = ast.Assign(variables</span><span class="s2">, </span><span class="s1">ast.NameConstant(</span><span class="s2">None</span><span class="s1">))</span>
+            <span class="s1">self.statements.append(clear)</span>
+        <span class="s3"># Fix locations (line numbers/column offsets).</span>
+        <span class="s2">for </span><span class="s1">stmt </span><span class="s2">in </span><span class="s1">self.statements:</span>
+            <span class="s2">for </span><span class="s1">node </span><span class="s2">in </span><span class="s1">traverse_node(stmt):</span>
+                <span class="s1">ast.copy_location(node</span><span class="s2">, </span><span class="s1">assert_)</span>
+        <span class="s2">return </span><span class="s1">self.statements</span>
+
+    <span class="s2">def </span><span class="s1">visit_Name(self</span><span class="s2">, </span><span class="s1">name: ast.Name) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s3"># Display the repr of the name if it's a local variable or</span>
+        <span class="s3"># _should_repr_global_name() thinks it's acceptable.</span>
+        <span class="s1">locs = ast.Call(self.builtin(</span><span class="s4">&quot;locals&quot;</span><span class="s1">)</span><span class="s2">, </span><span class="s1">[]</span><span class="s2">, </span><span class="s1">[])</span>
+        <span class="s1">inlocs = ast.Compare(ast.Str(name.id)</span><span class="s2">, </span><span class="s1">[ast.In()]</span><span class="s2">, </span><span class="s1">[locs])</span>
+        <span class="s1">dorepr = self.helper(</span><span class="s4">&quot;_should_repr_global_name&quot;</span><span class="s2">, </span><span class="s1">name)</span>
+        <span class="s1">test = ast.BoolOp(ast.Or()</span><span class="s2">, </span><span class="s1">[inlocs</span><span class="s2">, </span><span class="s1">dorepr])</span>
+        <span class="s1">expr = ast.IfExp(test</span><span class="s2">, </span><span class="s1">self.display(name)</span><span class="s2">, </span><span class="s1">ast.Str(name.id))</span>
+        <span class="s2">return </span><span class="s1">name</span><span class="s2">, </span><span class="s1">self.explanation_param(expr)</span>
+
+    <span class="s2">def </span><span class="s1">visit_BoolOp(self</span><span class="s2">, </span><span class="s1">boolop: ast.BoolOp) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s1">res_var = self.variable()</span>
+        <span class="s1">expl_list = self.assign(ast.List([]</span><span class="s2">, </span><span class="s1">ast.Load()))</span>
+        <span class="s1">app = ast.Attribute(expl_list</span><span class="s2">, </span><span class="s4">&quot;append&quot;</span><span class="s2">, </span><span class="s1">ast.Load())</span>
+        <span class="s1">is_or = int(isinstance(boolop.op</span><span class="s2">, </span><span class="s1">ast.Or))</span>
+        <span class="s1">body = save = self.statements</span>
+        <span class="s1">fail_save = self.expl_stmts</span>
+        <span class="s1">levels = len(boolop.values) - </span><span class="s5">1</span>
+        <span class="s1">self.push_format_context()</span>
+        <span class="s3"># Process each operand, short-circuiting if needed.</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">enumerate(boolop.values):</span>
+            <span class="s2">if </span><span class="s1">i:</span>
+                <span class="s1">fail_inner: List[ast.stmt] = []</span>
+                <span class="s3"># cond is set in a prior loop iteration below</span>
+                <span class="s1">self.expl_stmts.append(ast.If(cond</span><span class="s2">, </span><span class="s1">fail_inner</span><span class="s2">, </span><span class="s1">[]))  </span><span class="s3"># noqa</span>
+                <span class="s1">self.expl_stmts = fail_inner</span>
+            <span class="s1">self.push_format_context()</span>
+            <span class="s1">res</span><span class="s2">, </span><span class="s1">expl = self.visit(v)</span>
+            <span class="s1">body.append(ast.Assign([ast.Name(res_var</span><span class="s2">, </span><span class="s1">ast.Store())]</span><span class="s2">, </span><span class="s1">res))</span>
+            <span class="s1">expl_format = self.pop_format_context(ast.Str(expl))</span>
+            <span class="s1">call = ast.Call(app</span><span class="s2">, </span><span class="s1">[expl_format]</span><span class="s2">, </span><span class="s1">[])</span>
+            <span class="s1">self.expl_stmts.append(ast.Expr(call))</span>
+            <span class="s2">if </span><span class="s1">i &lt; levels:</span>
+                <span class="s1">cond: ast.expr = res</span>
+                <span class="s2">if </span><span class="s1">is_or:</span>
+                    <span class="s1">cond = ast.UnaryOp(ast.Not()</span><span class="s2">, </span><span class="s1">cond)</span>
+                <span class="s1">inner: List[ast.stmt] = []</span>
+                <span class="s1">self.statements.append(ast.If(cond</span><span class="s2">, </span><span class="s1">inner</span><span class="s2">, </span><span class="s1">[]))</span>
+                <span class="s1">self.statements = body = inner</span>
+        <span class="s1">self.statements = save</span>
+        <span class="s1">self.expl_stmts = fail_save</span>
+        <span class="s1">expl_template = self.helper(</span><span class="s4">&quot;_format_boolop&quot;</span><span class="s2">, </span><span class="s1">expl_list</span><span class="s2">, </span><span class="s1">ast.Num(is_or))</span>
+        <span class="s1">expl = self.pop_format_context(expl_template)</span>
+        <span class="s2">return </span><span class="s1">ast.Name(res_var</span><span class="s2">, </span><span class="s1">ast.Load())</span><span class="s2">, </span><span class="s1">self.explanation_param(expl)</span>
+
+    <span class="s2">def </span><span class="s1">visit_UnaryOp(self</span><span class="s2">, </span><span class="s1">unary: ast.UnaryOp) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s1">pattern = UNARY_MAP[unary.op.__class__]</span>
+        <span class="s1">operand_res</span><span class="s2">, </span><span class="s1">operand_expl = self.visit(unary.operand)</span>
+        <span class="s1">res = self.assign(ast.UnaryOp(unary.op</span><span class="s2">, </span><span class="s1">operand_res))</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">pattern % (operand_expl</span><span class="s2">,</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">visit_BinOp(self</span><span class="s2">, </span><span class="s1">binop: ast.BinOp) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s1">symbol = BINOP_MAP[binop.op.__class__]</span>
+        <span class="s1">left_expr</span><span class="s2">, </span><span class="s1">left_expl = self.visit(binop.left)</span>
+        <span class="s1">right_expr</span><span class="s2">, </span><span class="s1">right_expl = self.visit(binop.right)</span>
+        <span class="s1">explanation = </span><span class="s4">f&quot;(</span><span class="s2">{</span><span class="s1">left_expl</span><span class="s2">} {</span><span class="s1">symbol</span><span class="s2">} {</span><span class="s1">right_expl</span><span class="s2">}</span><span class="s4">)&quot;</span>
+        <span class="s1">res = self.assign(ast.BinOp(left_expr</span><span class="s2">, </span><span class="s1">binop.op</span><span class="s2">, </span><span class="s1">right_expr))</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">explanation</span>
+
+    <span class="s2">def </span><span class="s1">visit_Call(self</span><span class="s2">, </span><span class="s1">call: ast.Call) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s1">new_func</span><span class="s2">, </span><span class="s1">func_expl = self.visit(call.func)</span>
+        <span class="s1">arg_expls = []</span>
+        <span class="s1">new_args = []</span>
+        <span class="s1">new_kwargs = []</span>
+        <span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">call.args:</span>
+            <span class="s1">res</span><span class="s2">, </span><span class="s1">expl = self.visit(arg)</span>
+            <span class="s1">arg_expls.append(expl)</span>
+            <span class="s1">new_args.append(res)</span>
+        <span class="s2">for </span><span class="s1">keyword </span><span class="s2">in </span><span class="s1">call.keywords:</span>
+            <span class="s1">res</span><span class="s2">, </span><span class="s1">expl = self.visit(keyword.value)</span>
+            <span class="s1">new_kwargs.append(ast.keyword(keyword.arg</span><span class="s2">, </span><span class="s1">res))</span>
+            <span class="s2">if </span><span class="s1">keyword.arg:</span>
+                <span class="s1">arg_expls.append(keyword.arg + </span><span class="s4">&quot;=&quot; </span><span class="s1">+ expl)</span>
+            <span class="s2">else</span><span class="s1">:  </span><span class="s3"># **args have `arg` keywords with an .arg of None</span>
+                <span class="s1">arg_expls.append(</span><span class="s4">&quot;**&quot; </span><span class="s1">+ expl)</span>
+
+        <span class="s1">expl = </span><span class="s4">&quot;{}({})&quot;</span><span class="s1">.format(func_expl</span><span class="s2">, </span><span class="s4">&quot;, &quot;</span><span class="s1">.join(arg_expls))</span>
+        <span class="s1">new_call = ast.Call(new_func</span><span class="s2">, </span><span class="s1">new_args</span><span class="s2">, </span><span class="s1">new_kwargs)</span>
+        <span class="s1">res = self.assign(new_call)</span>
+        <span class="s1">res_expl = self.explanation_param(self.display(res))</span>
+        <span class="s1">outer_expl = </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">res_expl</span><span class="s2">}\n{{{</span><span class="s1">res_expl</span><span class="s2">} </span><span class="s4">= </span><span class="s2">{</span><span class="s1">expl</span><span class="s2">}\n}}</span><span class="s4">&quot;</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">outer_expl</span>
+
+    <span class="s2">def </span><span class="s1">visit_Starred(self</span><span class="s2">, </span><span class="s1">starred: ast.Starred) -&gt; Tuple[ast.Starred</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s3"># A Starred node can appear in a function call.</span>
+        <span class="s1">res</span><span class="s2">, </span><span class="s1">expl = self.visit(starred.value)</span>
+        <span class="s1">new_starred = ast.Starred(res</span><span class="s2">, </span><span class="s1">starred.ctx)</span>
+        <span class="s2">return </span><span class="s1">new_starred</span><span class="s2">, </span><span class="s4">&quot;*&quot; </span><span class="s1">+ expl</span>
+
+    <span class="s2">def </span><span class="s1">visit_Attribute(self</span><span class="s2">, </span><span class="s1">attr: ast.Attribute) -&gt; Tuple[ast.Name</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s2">if not </span><span class="s1">isinstance(attr.ctx</span><span class="s2">, </span><span class="s1">ast.Load):</span>
+            <span class="s2">return </span><span class="s1">self.generic_visit(attr)</span>
+        <span class="s1">value</span><span class="s2">, </span><span class="s1">value_expl = self.visit(attr.value)</span>
+        <span class="s1">res = self.assign(ast.Attribute(value</span><span class="s2">, </span><span class="s1">attr.attr</span><span class="s2">, </span><span class="s1">ast.Load()))</span>
+        <span class="s1">res_expl = self.explanation_param(self.display(res))</span>
+        <span class="s1">pat = </span><span class="s4">&quot;%s</span><span class="s2">\n</span><span class="s4">{%s = %s.%s</span><span class="s2">\n</span><span class="s4">}&quot;</span>
+        <span class="s1">expl = pat % (res_expl</span><span class="s2">, </span><span class="s1">res_expl</span><span class="s2">, </span><span class="s1">value_expl</span><span class="s2">, </span><span class="s1">attr.attr)</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">expl</span>
+
+    <span class="s2">def </span><span class="s1">visit_Compare(self</span><span class="s2">, </span><span class="s1">comp: ast.Compare) -&gt; Tuple[ast.expr</span><span class="s2">, </span><span class="s1">str]:</span>
+        <span class="s1">self.push_format_context()</span>
+        <span class="s1">left_res</span><span class="s2">, </span><span class="s1">left_expl = self.visit(comp.left)</span>
+        <span class="s2">if </span><span class="s1">isinstance(comp.left</span><span class="s2">, </span><span class="s1">(ast.Compare</span><span class="s2">, </span><span class="s1">ast.BoolOp)):</span>
+            <span class="s1">left_expl = </span><span class="s4">f&quot;(</span><span class="s2">{</span><span class="s1">left_expl</span><span class="s2">}</span><span class="s4">)&quot;</span>
+        <span class="s1">res_variables = [self.variable() </span><span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range(len(comp.ops))]</span>
+        <span class="s1">load_names = [ast.Name(v</span><span class="s2">, </span><span class="s1">ast.Load()) </span><span class="s2">for </span><span class="s1">v </span><span class="s2">in </span><span class="s1">res_variables]</span>
+        <span class="s1">store_names = [ast.Name(v</span><span class="s2">, </span><span class="s1">ast.Store()) </span><span class="s2">for </span><span class="s1">v </span><span class="s2">in </span><span class="s1">res_variables]</span>
+        <span class="s1">it = zip(range(len(comp.ops))</span><span class="s2">, </span><span class="s1">comp.ops</span><span class="s2">, </span><span class="s1">comp.comparators)</span>
+        <span class="s1">expls = []</span>
+        <span class="s1">syms = []</span>
+        <span class="s1">results = [left_res]</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">op</span><span class="s2">, </span><span class="s1">next_operand </span><span class="s2">in </span><span class="s1">it:</span>
+            <span class="s1">next_res</span><span class="s2">, </span><span class="s1">next_expl = self.visit(next_operand)</span>
+            <span class="s2">if </span><span class="s1">isinstance(next_operand</span><span class="s2">, </span><span class="s1">(ast.Compare</span><span class="s2">, </span><span class="s1">ast.BoolOp)):</span>
+                <span class="s1">next_expl = </span><span class="s4">f&quot;(</span><span class="s2">{</span><span class="s1">next_expl</span><span class="s2">}</span><span class="s4">)&quot;</span>
+            <span class="s1">results.append(next_res)</span>
+            <span class="s1">sym = BINOP_MAP[op.__class__]</span>
+            <span class="s1">syms.append(ast.Str(sym))</span>
+            <span class="s1">expl = </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">left_expl</span><span class="s2">} {</span><span class="s1">sym</span><span class="s2">} {</span><span class="s1">next_expl</span><span class="s2">}</span><span class="s4">&quot;</span>
+            <span class="s1">expls.append(ast.Str(expl))</span>
+            <span class="s1">res_expr = ast.Compare(left_res</span><span class="s2">, </span><span class="s1">[op]</span><span class="s2">, </span><span class="s1">[next_res])</span>
+            <span class="s1">self.statements.append(ast.Assign([store_names[i]]</span><span class="s2">, </span><span class="s1">res_expr))</span>
+            <span class="s1">left_res</span><span class="s2">, </span><span class="s1">left_expl = next_res</span><span class="s2">, </span><span class="s1">next_expl</span>
+        <span class="s3"># Use pytest.assertion.util._reprcompare if that's available.</span>
+        <span class="s1">expl_call = self.helper(</span>
+            <span class="s4">&quot;_call_reprcompare&quot;</span><span class="s2">,</span>
+            <span class="s1">ast.Tuple(syms</span><span class="s2">, </span><span class="s1">ast.Load())</span><span class="s2">,</span>
+            <span class="s1">ast.Tuple(load_names</span><span class="s2">, </span><span class="s1">ast.Load())</span><span class="s2">,</span>
+            <span class="s1">ast.Tuple(expls</span><span class="s2">, </span><span class="s1">ast.Load())</span><span class="s2">,</span>
+            <span class="s1">ast.Tuple(results</span><span class="s2">, </span><span class="s1">ast.Load())</span><span class="s2">,</span>
+        <span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">len(comp.ops) &gt; </span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s1">res: ast.expr = ast.BoolOp(ast.And()</span><span class="s2">, </span><span class="s1">load_names)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">res = load_names[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s2">return </span><span class="s1">res</span><span class="s2">, </span><span class="s1">self.explanation_param(self.pop_format_context(expl_call))</span>
+
+
+<span class="s2">def </span><span class="s1">try_makedirs(cache_dir: Path) -&gt; bool:</span>
+    <span class="s0">&quot;&quot;&quot;Attempt to create the given directory and sub-directories exist. 
+ 
+    Returns True if successful or if it already exists. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">os.makedirs(cache_dir</span><span class="s2">, </span><span class="s1">exist_ok=</span><span class="s2">True</span><span class="s1">)</span>
+    <span class="s2">except </span><span class="s1">(FileNotFoundError</span><span class="s2">, </span><span class="s1">NotADirectoryError</span><span class="s2">, </span><span class="s1">FileExistsError):</span>
+        <span class="s3"># One of the path components was not a directory:</span>
+        <span class="s3"># - we're in a zip file</span>
+        <span class="s3"># - it is a file</span>
+        <span class="s2">return False</span>
+    <span class="s2">except </span><span class="s1">PermissionError:</span>
+        <span class="s2">return False</span>
+    <span class="s2">except </span><span class="s1">OSError </span><span class="s2">as </span><span class="s1">e:</span>
+        <span class="s3"># as of now, EROFS doesn't have an equivalent OSError-subclass</span>
+        <span class="s2">if </span><span class="s1">e.errno == errno.EROFS:</span>
+            <span class="s2">return False</span>
+        <span class="s2">raise</span>
+    <span class="s2">return True</span>
+
+
+<span class="s2">def </span><span class="s1">get_cache_dir(file_path: Path) -&gt; Path:</span>
+    <span class="s0">&quot;&quot;&quot;Return the cache directory to write .pyc files for the given .py file path.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s5">3</span><span class="s2">, </span><span class="s5">8</span><span class="s1">) </span><span class="s2">and </span><span class="s1">sys.pycache_prefix:</span>
+        <span class="s3"># given:</span>
+        <span class="s3">#   prefix = '/tmp/pycs'</span>
+        <span class="s3">#   path = '/home/user/proj/test_app.py'</span>
+        <span class="s3"># we want:</span>
+        <span class="s3">#   '/tmp/pycs/home/user/proj'</span>
+        <span class="s2">return </span><span class="s1">Path(sys.pycache_prefix) / Path(*file_path.parts[</span><span class="s5">1</span><span class="s1">:-</span><span class="s5">1</span><span class="s1">])</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s3"># classic pycache directory</span>
+        <span class="s2">return </span><span class="s1">file_path.parent / </span><span class="s4">&quot;__pycache__&quot;</span>
+</pre>
+</body>
+</html>

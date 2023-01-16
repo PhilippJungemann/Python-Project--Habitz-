@@ -1,0 +1,172 @@
+<html>
+<head>
+<title>providers.py.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #e8bf6a;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #bababa;}
+.s3 { color: #a5c261;}
+.s4 { color: #6d9cbe;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+providers.py.html</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;html&gt;</span>
+<span class="s0">&lt;head&gt;</span>
+<span class="s0">&lt;title&gt;</span><span class="s1">providers.py</span><span class="s0">&lt;/title&gt;</span>
+<span class="s0">&lt;meta </span><span class="s2">http-equiv</span><span class="s3">=&quot;Content-Type&quot; </span><span class="s2">content</span><span class="s3">=&quot;text/html; charset=utf-8&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;style </span><span class="s2">type</span><span class="s3">=&quot;text/css&quot;</span><span class="s0">&gt;</span>
+<span class="s1">.s0 { color: #cc7832;}</span>
+<span class="s1">.s1 { color: #a9b7c6;}</span>
+<span class="s1">.s2 { color: #629755; font-style: italic;}</span>
+<span class="s0">&lt;/style&gt;</span>
+<span class="s0">&lt;/head&gt;</span>
+<span class="s0">&lt;body </span><span class="s2">bgcolor</span><span class="s3">=&quot;#2b2b2b&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;table </span><span class="s2">CELLSPACING</span><span class="s3">=0 </span><span class="s2">CELLPADDING</span><span class="s3">=5 </span><span class="s2">COLS</span><span class="s3">=1 </span><span class="s2">WIDTH</span><span class="s3">=&quot;100%&quot; </span><span class="s2">BGCOLOR</span><span class="s3">=&quot;#606060&quot; </span><span class="s0">&gt;</span>
+<span class="s0">&lt;tr&gt;&lt;td&gt;&lt;center&gt;</span>
+<span class="s0">&lt;font </span><span class="s2">face</span><span class="s3">=&quot;Arial, Helvetica&quot; </span><span class="s2">color</span><span class="s3">=&quot;#000000&quot;</span><span class="s0">&gt;</span>
+<span class="s1">providers.py</span><span class="s0">&lt;/font&gt;</span>
+<span class="s0">&lt;/center&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</span>
+<span class="s0">&lt;pre&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">AbstractProvider(object):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Delegate class to provide requirement interface for the resolver.</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">identify(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">requirement_or_candidate):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Given a requirement, return an identifier for it. </span>
+ 
+        <span class="s1">This is used to identify a requirement, e.g. whether two requirements </span>
+        <span class="s1">should have their specifier parts merged. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_preference(</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">identifier</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">resolutions</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">candidates</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">information</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">backtrack_causes</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">,</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Produce a sort key for given requirement based on preference. </span>
+ 
+        <span class="s1">The preference is defined as </span><span class="s4">&amp;quot;</span><span class="s1">I think this requirement should be </span>
+        <span class="s1">resolved first</span><span class="s4">&amp;quot;</span><span class="s1">. The lower the return value is, the more preferred </span>
+        <span class="s1">this group of arguments is. </span>
+ 
+        <span class="s1">:param identifier: An identifier as returned by ``identify()``. This </span>
+            <span class="s1">identifies the dependency matches of which should be returned. </span>
+        <span class="s1">:param resolutions: Mapping of candidates currently pinned by the </span>
+            <span class="s1">resolver. Each key is an identifier, and the value a candidate. </span>
+            <span class="s1">The candidate may conflict with requirements from ``information``. </span>
+        <span class="s1">:param candidates: Mapping of each dependency's possible candidates. </span>
+            <span class="s1">Each value is an iterator of candidates. </span>
+        <span class="s1">:param information: Mapping of requirement information of each package. </span>
+            <span class="s1">Each value is an iterator of *requirement information*. </span>
+        <span class="s1">:param backtrack_causes: Sequence of requirement information that were </span>
+            <span class="s1">the requirements that caused the resolver to most recently backtrack. </span>
+ 
+        <span class="s1">A *requirement information* instance is a named tuple with two members: </span>
+ 
+        <span class="s1">* ``requirement`` specifies a requirement contributing to the current </span>
+          <span class="s1">list of candidates. </span>
+        <span class="s1">* ``parent`` specifies the candidate that provides (dependend on) the </span>
+          <span class="s1">requirement, or ``None`` to indicate a root requirement. </span>
+ 
+        <span class="s1">The preference could depend on a various of issues, including (not </span>
+        <span class="s1">necessarily in this order): </span>
+ 
+        <span class="s1">* Is this package pinned in the current resolution result? </span>
+        <span class="s1">* How relaxed is the requirement? Stricter ones should probably be </span>
+          <span class="s1">worked on first? (I don't know, actually.) </span>
+        <span class="s1">* How many possibilities are there to satisfy this requirement? Those </span>
+          <span class="s1">with few left should likely be worked on first, I guess? </span>
+        <span class="s1">* Are there any known conflicts for this requirement? We should </span>
+          <span class="s1">probably work on those with the most known conflicts. </span>
+ 
+        <span class="s1">A sortable value should be returned (this will be used as the ``key`` </span>
+        <span class="s1">parameter of the built-in sorting function). The smaller the value is, </span>
+        <span class="s1">the more preferred this requirement is (i.e. the sorting function </span>
+        <span class="s1">is called with ``reverse=False``). </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">find_matches(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">identifier</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">requirements</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">incompatibilities):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Find all possible candidates that satisfy given constraints. </span>
+ 
+        <span class="s1">:param identifier: An identifier as returned by ``identify()``. This </span>
+            <span class="s1">identifies the dependency matches of which should be returned. </span>
+        <span class="s1">:param requirements: A mapping of requirements that all returned </span>
+            <span class="s1">candidates must satisfy. Each key is an identifier, and the value </span>
+            <span class="s1">an iterator of requirements for that dependency. </span>
+        <span class="s1">:param incompatibilities: A mapping of known incompatibilities of </span>
+            <span class="s1">each dependency. Each key is an identifier, and the value an </span>
+            <span class="s1">iterator of incompatibilities known to the resolver. All </span>
+            <span class="s1">incompatibilities *must* be excluded from the return value. </span>
+ 
+        <span class="s1">This should try to get candidates based on the requirements' types. </span>
+        <span class="s1">For VCS, local, and archive requirements, the one-and-only match is </span>
+        <span class="s1">returned, and for a </span><span class="s4">&amp;quot;</span><span class="s1">named</span><span class="s4">&amp;quot; </span><span class="s1">requirement, the index(es) should be </span>
+        <span class="s1">consulted to find concrete candidates for this requirement. </span>
+ 
+        <span class="s1">The return value should produce candidates ordered by preference; the </span>
+        <span class="s1">most preferred candidate should come first. The return type may be one </span>
+        <span class="s1">of the following: </span>
+ 
+        <span class="s1">* A callable that returns an iterator that yields candidates. </span>
+        <span class="s1">* An collection of candidates. </span>
+        <span class="s1">* An iterable of candidates. This will be consumed immediately into a </span>
+          <span class="s1">list of candidates. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">is_satisfied_by(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">requirement</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">candidate):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Whether the given requirement can be satisfied by a candidate. </span>
+ 
+        <span class="s1">The candidate is guarenteed to have been generated from the </span>
+        <span class="s1">requirement. </span>
+ 
+        <span class="s1">A boolean should be returned to indicate whether ``candidate`` is a </span>
+        <span class="s1">viable solution to the requirement. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_dependencies(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">candidate):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Get dependencies of a candidate. </span>
+ 
+        <span class="s1">This should return a collection of requirements that `candidate` </span>
+        <span class="s1">specifies as its dependencies. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">AbstractResolver(object):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">The thing that performs the actual resolution work.</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">base_exception = Exception</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__init__(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">provider</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">reporter):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.provider = provider</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.reporter = reporter</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">resolve(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">requirements</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">**kwargs):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s1">Take a collection of constraints, spit out the resolution result. </span>
+ 
+        <span class="s1">This returns a representation of the final resolution state, with one </span>
+        <span class="s1">guarenteed attribute ``mapping`` that contains resolved candidates as </span>
+        <span class="s1">values. The keys are their respective identifiers. </span>
+ 
+        <span class="s1">:param requirements: A collection of constraints. </span>
+        <span class="s1">:param kwargs: Additional keyword arguments that subclasses may accept. </span>
+ 
+        <span class="s1">:raises: ``self.base_exception`` or its subclass. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s1">raise </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">NotImplementedError</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;/pre&gt;</span>
+<span class="s0">&lt;/body&gt;</span>
+<span class="s0">&lt;/html&gt;</span></pre>
+</body>
+</html>

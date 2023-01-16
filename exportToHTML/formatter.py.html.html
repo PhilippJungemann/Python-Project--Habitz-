@@ -1,0 +1,136 @@
+<html>
+<head>
+<title>formatter.py.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #e8bf6a;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #bababa;}
+.s3 { color: #a5c261;}
+.s4 { color: #6d9cbe;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+formatter.py.html</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;html&gt;</span>
+<span class="s0">&lt;head&gt;</span>
+<span class="s0">&lt;title&gt;</span><span class="s1">formatter.py</span><span class="s0">&lt;/title&gt;</span>
+<span class="s0">&lt;meta </span><span class="s2">http-equiv</span><span class="s3">=&quot;Content-Type&quot; </span><span class="s2">content</span><span class="s3">=&quot;text/html; charset=utf-8&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;style </span><span class="s2">type</span><span class="s3">=&quot;text/css&quot;</span><span class="s0">&gt;</span>
+<span class="s1">.s0 { color: #629755; font-style: italic;}</span>
+<span class="s1">.s1 { color: #a9b7c6;}</span>
+<span class="s1">.s2 { color: #cc7832;}</span>
+<span class="s1">.s3 { color: #6a8759;}</span>
+<span class="s1">.s4 { color: #808080;}</span>
+<span class="s1">.s5 { color: #6897bb;}</span>
+<span class="s0">&lt;/style&gt;</span>
+<span class="s0">&lt;/head&gt;</span>
+<span class="s0">&lt;body </span><span class="s2">bgcolor</span><span class="s3">=&quot;#2b2b2b&quot;</span><span class="s0">&gt;</span>
+<span class="s0">&lt;table </span><span class="s2">CELLSPACING</span><span class="s3">=0 </span><span class="s2">CELLPADDING</span><span class="s3">=5 </span><span class="s2">COLS</span><span class="s3">=1 </span><span class="s2">WIDTH</span><span class="s3">=&quot;100%&quot; </span><span class="s2">BGCOLOR</span><span class="s3">=&quot;#606060&quot; </span><span class="s0">&gt;</span>
+<span class="s0">&lt;tr&gt;&lt;td&gt;&lt;center&gt;</span>
+<span class="s0">&lt;font </span><span class="s2">face</span><span class="s3">=&quot;Arial, Helvetica&quot; </span><span class="s2">color</span><span class="s3">=&quot;#000000&quot;</span><span class="s0">&gt;</span>
+<span class="s1">formatter.py</span><span class="s0">&lt;/font&gt;</span>
+<span class="s0">&lt;/center&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</span>
+<span class="s0">&lt;pre&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">pygments.formatter </span>
+    <span class="s1">~~~~~~~~~~~~~~~~~~ </span>
+ 
+    <span class="s1">Base formatter class. </span>
+ 
+    <span class="s1">:copyright: Copyright 2006-2022 by the Pygments team, see AUTHORS. </span>
+    <span class="s1">:license: BSD, see LICENSE for details. </span>
+<span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">codecs</span><span class="s0">&lt;/span&gt;</span>
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">from </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">pip._vendor.pygments.util </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_bool_opt</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">from </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">pip._vendor.pygments.styles </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">import </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_style_by_name</span><span class="s0">&lt;/span&gt;</span>
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__all__ = [</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'Formatter'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">]</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">_lookup_style(style):</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">if </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">isinstance(style</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">str):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_style_by_name(style)</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">style</span><span class="s0">&lt;/span&gt;</span>
+
+
+<span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">class </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">Formatter:</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+    <span class="s1">Converts a token stream to text. </span>
+ 
+    <span class="s1">Options accepted: </span>
+ 
+    <span class="s1">``style`` </span>
+        <span class="s1">The style to use, can be a string or a Style subclass </span>
+        <span class="s1">(default: </span><span class="s4">&amp;quot;</span><span class="s1">default</span><span class="s4">&amp;quot;</span><span class="s1">). Not used by e.g. the </span>
+        <span class="s1">TerminalFormatter. </span>
+    <span class="s1">``full`` </span>
+        <span class="s1">Tells the formatter to output a </span><span class="s4">&amp;quot;</span><span class="s1">full</span><span class="s4">&amp;quot; </span><span class="s1">document, i.e. </span>
+        <span class="s1">a complete self-contained document. This doesn't have </span>
+        <span class="s1">any effect for some formatters (default: false). </span>
+    <span class="s1">``title`` </span>
+        <span class="s1">If ``full`` is true, the title that should be used to </span>
+        <span class="s1">caption the document (default: ''). </span>
+    <span class="s1">``encoding`` </span>
+        <span class="s1">If given, must be an encoding name. This will be used to </span>
+        <span class="s1">convert the Unicode token strings to byte strings in the </span>
+        <span class="s1">output. If it is </span><span class="s4">&amp;quot;&amp;quot; </span><span class="s1">or None, Unicode strings will be written </span>
+        <span class="s1">to the output file, which most file-like objects do not </span>
+        <span class="s1">support (default: None). </span>
+    <span class="s1">``outencoding`` </span>
+        <span class="s1">Overrides ``encoding`` if given. </span>
+    <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1">#: Name of the formatter</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">name = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">None</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1">#: Shortcuts for the formatter</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">aliases = []</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1">#: fn match rules</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">filenames = []</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1">#: If True, this formatter outputs Unicode strings when no encoding</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1">#: option is given.</span><span class="s0">&lt;/span&gt;</span>
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">unicodeoutput = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">True</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">__init__(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">**options):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.style = _lookup_style(options.get(</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'style'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'default'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">))</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.full = get_bool_opt(options</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'full'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, False</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">)</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.title = options.get(</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'title'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">''</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">)</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding = options.get(</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'encoding'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, None</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">) </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">or None</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">if </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">in </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">(</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'guess'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'chardet'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">):</span><span class="s0">&lt;/span&gt;</span>
+            <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># can happen for e.g. pygmentize -O encoding=guess</span><span class="s0">&lt;/span&gt;</span>
+            <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding = </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'utf-8'</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding = options.get(</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">'outencoding'</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">) </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">or </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.options = options</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">get_style_defs(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">arg=</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">''</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+        <span class="s1">Return the style definitions for the current style as a string. </span>
+ 
+        <span class="s1">``arg`` is an additional argument whose meaning depends on the </span>
+        <span class="s1">formatter used. Note that ``arg`` can also be a list or tuple </span>
+        <span class="s1">for some formatters like the html formatter. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s3&quot;</span><span class="s0">&gt;</span><span class="s1">''</span><span class="s0">&lt;/span&gt;</span>
+
+    <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">def </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">format(self</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">tokensource</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">outfile):</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s0&quot;</span><span class="s0">&gt;</span><span class="s4">&amp;quot;&amp;quot;&amp;quot; </span>
+        <span class="s1">Format ``tokensource``, an iterable of ``(tokentype, tokenstring)`` </span>
+        <span class="s1">tuples and write it into ``outfile``. </span>
+        <span class="s4">&amp;quot;&amp;quot;&amp;quot;</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">if </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.encoding:</span><span class="s0">&lt;/span&gt;</span>
+            <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s4&quot;</span><span class="s0">&gt;</span><span class="s1"># wrap the outfile in a StreamWriter</span><span class="s0">&lt;/span&gt;</span>
+            <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">outfile = codecs.lookup(self.encoding)[</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s5&quot;</span><span class="s0">&gt;</span><span class="s1">3</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">](outfile)</span><span class="s0">&lt;/span&gt;</span>
+        <span class="s0">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">return </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">self.format_unencoded(tokensource</span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s2&quot;</span><span class="s0">&gt;</span><span class="s1">, </span><span class="s0">&lt;/span&gt;&lt;span </span><span class="s2">class</span><span class="s3">=&quot;s1&quot;</span><span class="s0">&gt;</span><span class="s1">outfile)</span><span class="s0">&lt;/span&gt;</span>
+<span class="s0">&lt;/pre&gt;</span>
+<span class="s0">&lt;/body&gt;</span>
+<span class="s0">&lt;/html&gt;</span></pre>
+</body>
+</html>

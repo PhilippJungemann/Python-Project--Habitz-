@@ -1,0 +1,69 @@
+<html>
+<head>
+<title>constants.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+constants.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">questionary </span><span class="s0">import </span><span class="s1">Style</span>
+
+<span class="s2"># Value to display as an answer when &quot;affirming&quot; a confirmation question</span>
+<span class="s1">YES = </span><span class="s3">&quot;Yes&quot;</span>
+
+<span class="s2"># Value to display as an answer when &quot;denying&quot; a confirmation question</span>
+<span class="s1">NO = </span><span class="s3">&quot;No&quot;</span>
+
+<span class="s2"># Instruction text for a confirmation question (yes is default)</span>
+<span class="s1">YES_OR_NO = </span><span class="s3">&quot;(Y/n)&quot;</span>
+
+<span class="s2"># Instruction text for a confirmation question (no is default)</span>
+<span class="s1">NO_OR_YES = </span><span class="s3">&quot;(y/N)&quot;</span>
+
+<span class="s2"># Instruction for multiline input</span>
+<span class="s1">INSTRUCTION_MULTILINE = </span><span class="s3">&quot;(Finish with 'Alt+Enter' or 'Esc then Enter')</span><span class="s0">\n</span><span class="s3">&gt;&quot;</span>
+
+<span class="s2"># Selection token used to indicate the selection cursor in a list</span>
+<span class="s1">DEFAULT_SELECTED_POINTER = </span><span class="s3">&quot;»&quot;</span>
+
+<span class="s2"># Item prefix to identify selected items in a checkbox list</span>
+<span class="s1">INDICATOR_SELECTED = </span><span class="s3">&quot;●&quot;</span>
+
+<span class="s2"># Item prefix to identify unselected items in a checkbox list</span>
+<span class="s1">INDICATOR_UNSELECTED = </span><span class="s3">&quot;○&quot;</span>
+
+<span class="s2"># Prefix displayed in front of questions</span>
+<span class="s1">DEFAULT_QUESTION_PREFIX = </span><span class="s3">&quot;?&quot;</span>
+
+<span class="s2"># Message shown when a user aborts a question prompt using CTRL-C</span>
+<span class="s1">DEFAULT_KBI_MESSAGE = </span><span class="s3">&quot;Cancelled by user&quot;</span>
+
+<span class="s2"># Default text shown when the input is invalid</span>
+<span class="s1">INVALID_INPUT = </span><span class="s3">&quot;Invalid input&quot;</span>
+
+<span class="s2"># Default message style</span>
+<span class="s1">DEFAULT_STYLE = Style(</span>
+    <span class="s1">[</span>
+        <span class="s1">(</span><span class="s3">&quot;qmark&quot;</span><span class="s0">, </span><span class="s3">&quot;fg:#5f819d&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># token in front of the question</span>
+        <span class="s1">(</span><span class="s3">&quot;question&quot;</span><span class="s0">, </span><span class="s3">&quot;bold&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># question text</span>
+        <span class="s1">(</span><span class="s3">&quot;answer&quot;</span><span class="s0">, </span><span class="s3">&quot;fg:#FF9D00 bold&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># submitted answer text behind the question</span>
+        <span class="s1">(</span><span class="s3">&quot;pointer&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># pointer used in select and checkbox prompts</span>
+        <span class="s1">(</span><span class="s3">&quot;selected&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># style for a selected item of a checkbox</span>
+        <span class="s1">(</span><span class="s3">&quot;separator&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># separator in lists</span>
+        <span class="s1">(</span><span class="s3">&quot;instruction&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># user instructions for select, rawselect, checkbox</span>
+        <span class="s1">(</span><span class="s3">&quot;text&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># any other text</span>
+        <span class="s1">(</span><span class="s3">&quot;instruction&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span><span class="s0">,  </span><span class="s2"># user instructions for select, rawselect, checkbox</span>
+    <span class="s1">]</span>
+<span class="s1">)</span>
+</pre>
+</body>
+</html>

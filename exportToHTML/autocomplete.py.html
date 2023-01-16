@@ -1,0 +1,235 @@
+<html>
+<head>
+<title>autocomplete.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+autocomplete.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">Any</span><span class="s0">,</span>
+    <span class="s1">Callable</span><span class="s0">,</span>
+    <span class="s1">Dict</span><span class="s0">,</span>
+    <span class="s1">List</span><span class="s0">,</span>
+    <span class="s1">Optional</span><span class="s0">,</span>
+    <span class="s1">Tuple</span><span class="s0">,</span>
+    <span class="s1">Union</span><span class="s0">,</span>
+    <span class="s1">Iterable</span><span class="s0">,</span>
+<span class="s1">)</span>
+
+<span class="s0">from </span><span class="s1">prompt_toolkit.completion </span><span class="s0">import </span><span class="s1">CompleteEvent</span><span class="s0">, </span><span class="s1">Completer</span><span class="s0">, </span><span class="s1">Completion</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.document </span><span class="s0">import </span><span class="s1">Document</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.formatted_text </span><span class="s0">import </span><span class="s1">HTML</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.shortcuts.prompt </span><span class="s0">import </span><span class="s1">PromptSession</span><span class="s0">, </span><span class="s1">CompleteStyle</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.styles </span><span class="s0">import </span><span class="s1">Style</span><span class="s0">, </span><span class="s1">merge_styles</span>
+<span class="s0">from </span><span class="s1">prompt_toolkit.lexers </span><span class="s0">import </span><span class="s1">SimpleLexer</span>
+
+<span class="s0">from </span><span class="s1">questionary.constants </span><span class="s0">import </span><span class="s1">DEFAULT_QUESTION_PREFIX</span><span class="s0">, </span><span class="s1">DEFAULT_STYLE</span>
+<span class="s0">from </span><span class="s1">questionary.prompts.common </span><span class="s0">import </span><span class="s1">build_validator</span>
+<span class="s0">from </span><span class="s1">questionary.question </span><span class="s0">import </span><span class="s1">Question</span>
+
+
+<span class="s0">class </span><span class="s1">WordCompleter(Completer):</span>
+    <span class="s1">choices_source: Union[List[str]</span><span class="s0">, </span><span class="s1">Callable[[]</span><span class="s0">, </span><span class="s1">List[str]]]</span>
+    <span class="s1">ignore_case: bool</span>
+    <span class="s1">meta_information: Dict[str</span><span class="s0">, </span><span class="s1">Any]</span>
+    <span class="s1">match_middle: bool</span>
+
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">choices: Union[List[str]</span><span class="s0">, </span><span class="s1">Callable[[]</span><span class="s0">, </span><span class="s1">List[str]]]</span><span class="s0">,</span>
+        <span class="s1">ignore_case: bool = </span><span class="s0">True,</span>
+        <span class="s1">meta_information: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+        <span class="s1">match_middle: bool = </span><span class="s0">True,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self.choices_source = choices</span>
+        <span class="s1">self.ignore_case = ignore_case</span>
+        <span class="s1">self.meta_information = meta_information </span><span class="s0">or </span><span class="s1">{}</span>
+        <span class="s1">self.match_middle = match_middle</span>
+
+    <span class="s0">def </span><span class="s1">_choices(self) -&gt; Iterable[str]:</span>
+        <span class="s0">return </span><span class="s1">(</span>
+            <span class="s1">self.choices_source()</span>
+            <span class="s0">if </span><span class="s1">callable(self.choices_source)</span>
+            <span class="s0">else </span><span class="s1">self.choices_source</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_choice_matches(self</span><span class="s0">, </span><span class="s1">word_before_cursor: str</span><span class="s0">, </span><span class="s1">choice: str) -&gt; int:</span>
+        <span class="s2">&quot;&quot;&quot;Match index if found, -1 if not. &quot;&quot;&quot;</span>
+
+        <span class="s0">if </span><span class="s1">self.ignore_case:</span>
+            <span class="s1">choice = choice.lower()</span>
+
+        <span class="s0">if </span><span class="s1">self.match_middle:</span>
+            <span class="s0">return </span><span class="s1">choice.find(word_before_cursor)</span>
+        <span class="s0">elif </span><span class="s1">choice.startswith(word_before_cursor):</span>
+            <span class="s0">return </span><span class="s3">0</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">-</span><span class="s3">1</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_display_for_choice(choice: str</span><span class="s0">, </span><span class="s1">index: int</span><span class="s0">, </span><span class="s1">word_before_cursor: str) -&gt; HTML:</span>
+        <span class="s0">return </span><span class="s1">HTML(</span><span class="s4">&quot;{}&lt;b&gt;&lt;u&gt;{}&lt;/u&gt;&lt;/b&gt;{}&quot;</span><span class="s1">).format(</span>
+            <span class="s1">choice[:index]</span><span class="s0">,</span>
+            <span class="s1">choice[index : index + len(word_before_cursor)]</span><span class="s0">,</span>
+            <span class="s1">choice[index + len(word_before_cursor) : len(choice)]</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">get_completions(</span>
+        <span class="s1">self</span><span class="s0">, </span><span class="s1">document: Document</span><span class="s0">, </span><span class="s1">complete_event: CompleteEvent</span>
+    <span class="s1">) -&gt; Iterable[Completion]:</span>
+        <span class="s1">choices = self._choices()</span>
+
+        <span class="s5"># Get word/text before cursor.</span>
+        <span class="s1">word_before_cursor = document.text_before_cursor</span>
+
+        <span class="s0">if </span><span class="s1">self.ignore_case:</span>
+            <span class="s1">word_before_cursor = word_before_cursor.lower()</span>
+
+        <span class="s0">for </span><span class="s1">choice </span><span class="s0">in </span><span class="s1">choices:</span>
+            <span class="s1">index = self._choice_matches(word_before_cursor</span><span class="s0">, </span><span class="s1">choice)</span>
+            <span class="s0">if </span><span class="s1">index == -</span><span class="s3">1</span><span class="s1">:</span>
+                <span class="s5"># didn't find a match</span>
+                <span class="s0">continue</span>
+
+            <span class="s1">display_meta = self.meta_information.get(choice</span><span class="s0">, </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s1">display = self._display_for_choice(choice</span><span class="s0">, </span><span class="s1">index</span><span class="s0">, </span><span class="s1">word_before_cursor)</span>
+
+            <span class="s0">yield </span><span class="s1">Completion(</span>
+                <span class="s1">choice</span><span class="s0">,</span>
+                <span class="s1">start_position=-len(choice)</span><span class="s0">,</span>
+                <span class="s1">display=display.formatted_text</span><span class="s0">,</span>
+                <span class="s1">display_meta=display_meta</span><span class="s0">,</span>
+                <span class="s1">style=</span><span class="s4">&quot;class:answer&quot;</span><span class="s0">,</span>
+                <span class="s1">selected_style=</span><span class="s4">&quot;class:selected&quot;</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">autocomplete(</span>
+    <span class="s1">message: str</span><span class="s0">,</span>
+    <span class="s1">choices: List[str]</span><span class="s0">,</span>
+    <span class="s1">default: str = </span><span class="s4">&quot;&quot;</span><span class="s0">,</span>
+    <span class="s1">qmark: str = DEFAULT_QUESTION_PREFIX</span><span class="s0">,</span>
+    <span class="s1">completer: Optional[Completer] = </span><span class="s0">None,</span>
+    <span class="s1">meta_information: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+    <span class="s1">ignore_case: bool = </span><span class="s0">True,</span>
+    <span class="s1">match_middle: bool = </span><span class="s0">True,</span>
+    <span class="s1">complete_style: CompleteStyle = CompleteStyle.COLUMN</span><span class="s0">,</span>
+    <span class="s1">validate: Any = </span><span class="s0">None,</span>
+    <span class="s1">style: Optional[Style] = </span><span class="s0">None,</span>
+    <span class="s1">**kwargs: Any</span><span class="s0">,</span>
+<span class="s1">) -&gt; Question:</span>
+    <span class="s2">&quot;&quot;&quot;Prompt the user to enter a message with autocomplete help. 
+ 
+    Example: 
+        &gt;&gt;&gt; import questionary 
+        &gt;&gt;&gt; questionary.autocomplete( 
+        ...    'Choose ant specie', 
+        ...    choices=[ 
+        ...         'Camponotus pennsylvanicus', 
+        ...         'Linepithema humile', 
+        ...         'Eciton burchellii', 
+        ...         &quot;Atta colombica&quot;, 
+        ...         'Polyergus lucidus', 
+        ...         'Polyergus rufescens', 
+        ...    ]).ask() 
+        ? Choose ant specie Atta colombica 
+        'Atta colombica' 
+ 
+    .. image:: ../images/autocomplete.gif 
+ 
+    This is just a really basic example, the prompt can be customised using the 
+    parameters. 
+ 
+ 
+    Args: 
+        message: Question text 
+ 
+        choices: Items shown in the selection, this contains items as strings 
+ 
+        default: Default return value (single value). 
+ 
+        qmark: Question prefix displayed in front of the question. 
+               By default this is a ``?`` 
+ 
+        completer: A prompt_toolkit :class:`prompt_toolkit.completion.Completion` 
+                   implementation. If not set, a questionary completer implementation 
+                   will be used. 
+ 
+        meta_information: A dictionary with information/anything about choices. 
+ 
+        ignore_case: If true autocomplete would ignore case. 
+ 
+        match_middle: If true autocomplete would search in every string position 
+                      not only in string begin. 
+ 
+        complete_style: How autocomplete menu would be shown, it could be ``COLUMN`` 
+                        ``MULTI_COLUMN`` or ``READLINE_LIKE`` from 
+                        :class:`prompt_toolkit.shortcuts.CompleteStyle`. 
+ 
+        validate: Require the entered value to pass a validation. The 
+                  value can not be submitted until the validator accepts 
+                  it (e.g. to check minimum password length). 
+ 
+                  This can either be a function accepting the input and 
+                  returning a boolean, or an class reference to a 
+                  subclass of the prompt toolkit Validator class. 
+ 
+        style: A custom color and style for the question parts. You can 
+               configure colors as well as font types for different elements. 
+ 
+    Returns: 
+        :class:`Question`: Question instance, ready to be prompted (using ``.ask()``). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">merged_style = merge_styles([DEFAULT_STYLE</span><span class="s0">, </span><span class="s1">style])</span>
+
+    <span class="s0">def </span><span class="s1">get_prompt_tokens() -&gt; List[Tuple[str</span><span class="s0">, </span><span class="s1">str]]:</span>
+        <span class="s0">return </span><span class="s1">[(</span><span class="s4">&quot;class:qmark&quot;</span><span class="s0">, </span><span class="s1">qmark)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">&quot;class:question&quot;</span><span class="s0">, </span><span class="s4">&quot; {} &quot;</span><span class="s1">.format(message))]</span>
+
+    <span class="s0">def </span><span class="s1">get_meta_style(meta: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]]) -&gt; Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]]:</span>
+        <span class="s0">if </span><span class="s1">meta:</span>
+            <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">meta:</span>
+                <span class="s1">meta[key] = HTML(</span><span class="s4">&quot;&lt;text&gt;{}&lt;/text&gt;&quot;</span><span class="s1">).format(meta[key])</span>
+
+        <span class="s0">return </span><span class="s1">meta</span>
+
+    <span class="s1">validator = build_validator(validate)</span>
+
+    <span class="s0">if </span><span class="s1">completer </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">choices:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;No choices is given, you should use Text question.&quot;</span><span class="s1">)</span>
+        <span class="s5"># use the default completer</span>
+        <span class="s1">completer = WordCompleter(</span>
+            <span class="s1">choices</span><span class="s0">,</span>
+            <span class="s1">ignore_case=ignore_case</span><span class="s0">,</span>
+            <span class="s1">meta_information=get_meta_style(meta_information)</span><span class="s0">,</span>
+            <span class="s1">match_middle=match_middle</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+    <span class="s1">p = PromptSession(</span>
+        <span class="s1">get_prompt_tokens</span><span class="s0">,</span>
+        <span class="s1">lexer=SimpleLexer(</span><span class="s4">&quot;class:answer&quot;</span><span class="s1">)</span><span class="s0">,</span>
+        <span class="s1">style=merged_style</span><span class="s0">,</span>
+        <span class="s1">completer=completer</span><span class="s0">,</span>
+        <span class="s1">validator=validator</span><span class="s0">,</span>
+        <span class="s1">complete_style=complete_style</span><span class="s0">,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s1">p.default_buffer.reset(Document(default))</span>
+
+    <span class="s0">return </span><span class="s1">Question(p.app)</span>
+</pre>
+</body>
+</html>

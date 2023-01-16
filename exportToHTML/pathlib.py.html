@@ -1,0 +1,757 @@
+<html>
+<head>
+<title>pathlib.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pathlib.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">atexit</span>
+<span class="s0">import </span><span class="s1">contextlib</span>
+<span class="s0">import </span><span class="s1">fnmatch</span>
+<span class="s0">import </span><span class="s1">importlib.util</span>
+<span class="s0">import </span><span class="s1">itertools</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">shutil</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">uuid</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">enum </span><span class="s0">import </span><span class="s1">Enum</span>
+<span class="s0">from </span><span class="s1">errno </span><span class="s0">import </span><span class="s1">EBADF</span>
+<span class="s0">from </span><span class="s1">errno </span><span class="s0">import </span><span class="s1">ELOOP</span>
+<span class="s0">from </span><span class="s1">errno </span><span class="s0">import </span><span class="s1">ENOENT</span>
+<span class="s0">from </span><span class="s1">errno </span><span class="s0">import </span><span class="s1">ENOTDIR</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">partial</span>
+<span class="s0">from </span><span class="s1">os.path </span><span class="s0">import </span><span class="s1">expanduser</span>
+<span class="s0">from </span><span class="s1">os.path </span><span class="s0">import </span><span class="s1">expandvars</span>
+<span class="s0">from </span><span class="s1">os.path </span><span class="s0">import </span><span class="s1">isabs</span>
+<span class="s0">from </span><span class="s1">os.path </span><span class="s0">import </span><span class="s1">sep</span>
+<span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+<span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">PurePath</span>
+<span class="s0">from </span><span class="s1">posixpath </span><span class="s0">import </span><span class="s1">sep </span><span class="s0">as </span><span class="s1">posix_sep</span>
+<span class="s0">from </span><span class="s1">types </span><span class="s0">import </span><span class="s1">ModuleType</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Callable</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Dict</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Iterable</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Iterator</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Set</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TypeVar</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+<span class="s0">from </span><span class="s1">_pytest.compat </span><span class="s0">import </span><span class="s1">assert_never</span>
+<span class="s0">from </span><span class="s1">_pytest.outcomes </span><span class="s0">import </span><span class="s1">skip</span>
+<span class="s0">from </span><span class="s1">_pytest.warning_types </span><span class="s0">import </span><span class="s1">PytestWarning</span>
+
+<span class="s1">LOCK_TIMEOUT = </span><span class="s2">60 </span><span class="s1">* </span><span class="s2">60 </span><span class="s1">* </span><span class="s2">24 </span><span class="s1">* </span><span class="s2">3</span>
+
+
+<span class="s1">_AnyPurePath = TypeVar(</span><span class="s3">&quot;_AnyPurePath&quot;</span><span class="s0">, </span><span class="s1">bound=PurePath)</span>
+
+<span class="s4"># The following function, variables and comments were</span>
+<span class="s4"># copied from cpython 3.9 Lib/pathlib.py file.</span>
+
+<span class="s4"># EBADF - guard against macOS `stat` throwing EBADF</span>
+<span class="s1">_IGNORED_ERRORS = (ENOENT</span><span class="s0">, </span><span class="s1">ENOTDIR</span><span class="s0">, </span><span class="s1">EBADF</span><span class="s0">, </span><span class="s1">ELOOP)</span>
+
+<span class="s1">_IGNORED_WINERRORS = (</span>
+    <span class="s2">21</span><span class="s0">,  </span><span class="s4"># ERROR_NOT_READY - drive exists but is not accessible</span>
+    <span class="s2">1921</span><span class="s0">,  </span><span class="s4"># ERROR_CANT_RESOLVE_FILENAME - fix for broken symlink pointing to itself</span>
+<span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">_ignore_error(exception):</span>
+    <span class="s0">return </span><span class="s1">(</span>
+        <span class="s1">getattr(exception</span><span class="s0">, </span><span class="s3">&quot;errno&quot;</span><span class="s0">, None</span><span class="s1">) </span><span class="s0">in </span><span class="s1">_IGNORED_ERRORS</span>
+        <span class="s0">or </span><span class="s1">getattr(exception</span><span class="s0">, </span><span class="s3">&quot;winerror&quot;</span><span class="s0">, None</span><span class="s1">) </span><span class="s0">in </span><span class="s1">_IGNORED_WINERRORS</span>
+    <span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">get_lock_path(path: _AnyPurePath) -&gt; _AnyPurePath:</span>
+    <span class="s0">return </span><span class="s1">path.joinpath(</span><span class="s3">&quot;.lock&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">on_rm_rf_error(func</span><span class="s0">, </span><span class="s1">path: str</span><span class="s0">, </span><span class="s1">exc</span><span class="s0">, </span><span class="s1">*</span><span class="s0">, </span><span class="s1">start_path: Path) -&gt; bool:</span>
+    <span class="s5">&quot;&quot;&quot;Handle known read-only errors during rmtree. 
+ 
+    The returned value is used only by our own tests. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">exctype</span><span class="s0">, </span><span class="s1">excvalue = exc[:</span><span class="s2">2</span><span class="s1">]</span>
+
+    <span class="s4"># Another process removed the file in the middle of the &quot;rm_rf&quot; (xdist for example).</span>
+    <span class="s4"># More context: https://github.com/pytest-dev/pytest/issues/5974#issuecomment-543799018</span>
+    <span class="s0">if </span><span class="s1">isinstance(excvalue</span><span class="s0">, </span><span class="s1">FileNotFoundError):</span>
+        <span class="s0">return False</span>
+
+    <span class="s0">if not </span><span class="s1">isinstance(excvalue</span><span class="s0">, </span><span class="s1">PermissionError):</span>
+        <span class="s1">warnings.warn(</span>
+            <span class="s1">PytestWarning(</span><span class="s3">f&quot;(rm_rf) error removing </span><span class="s0">{</span><span class="s1">path</span><span class="s0">}\n{</span><span class="s1">exctype</span><span class="s0">}</span><span class="s3">: </span><span class="s0">{</span><span class="s1">excvalue</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s1">)</span>
+        <span class="s0">return False</span>
+
+    <span class="s0">if </span><span class="s1">func </span><span class="s0">not in </span><span class="s1">(os.rmdir</span><span class="s0">, </span><span class="s1">os.remove</span><span class="s0">, </span><span class="s1">os.unlink):</span>
+        <span class="s0">if </span><span class="s1">func </span><span class="s0">not in </span><span class="s1">(os.open</span><span class="s0">,</span><span class="s1">):</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s1">PytestWarning(</span>
+                    <span class="s3">&quot;(rm_rf) unknown function {} when removing {}:</span><span class="s0">\n</span><span class="s3">{}: {}&quot;</span><span class="s1">.format(</span>
+                        <span class="s1">func</span><span class="s0">, </span><span class="s1">path</span><span class="s0">, </span><span class="s1">exctype</span><span class="s0">, </span><span class="s1">excvalue</span>
+                    <span class="s1">)</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s0">return False</span>
+
+    <span class="s4"># Chmod + retry.</span>
+    <span class="s0">import </span><span class="s1">stat</span>
+
+    <span class="s0">def </span><span class="s1">chmod_rw(p: str) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">mode = os.stat(p).st_mode</span>
+        <span class="s1">os.chmod(p</span><span class="s0">, </span><span class="s1">mode | stat.S_IRUSR | stat.S_IWUSR)</span>
+
+    <span class="s4"># For files, we need to recursively go upwards in the directories to</span>
+    <span class="s4"># ensure they all are also writable.</span>
+    <span class="s1">p = Path(path)</span>
+    <span class="s0">if </span><span class="s1">p.is_file():</span>
+        <span class="s0">for </span><span class="s1">parent </span><span class="s0">in </span><span class="s1">p.parents:</span>
+            <span class="s1">chmod_rw(str(parent))</span>
+            <span class="s4"># Stop when we reach the original path passed to rm_rf.</span>
+            <span class="s0">if </span><span class="s1">parent == start_path:</span>
+                <span class="s0">break</span>
+    <span class="s1">chmod_rw(str(path))</span>
+
+    <span class="s1">func(path)</span>
+    <span class="s0">return True</span>
+
+
+<span class="s0">def </span><span class="s1">ensure_extended_length_path(path: Path) -&gt; Path:</span>
+    <span class="s5">&quot;&quot;&quot;Get the extended-length version of a path (Windows). 
+ 
+    On Windows, by default, the maximum length of a path (MAX_PATH) is 260 
+    characters, and operations on paths longer than that fail. But it is possible 
+    to overcome this by converting the path to &quot;extended-length&quot; form before 
+    performing the operation: 
+    https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation 
+ 
+    On Windows, this function returns the extended-length absolute version of path. 
+    On other platforms it returns path unchanged. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">sys.platform.startswith(</span><span class="s3">&quot;win32&quot;</span><span class="s1">):</span>
+        <span class="s1">path = path.resolve()</span>
+        <span class="s1">path = Path(get_extended_length_path_str(str(path)))</span>
+    <span class="s0">return </span><span class="s1">path</span>
+
+
+<span class="s0">def </span><span class="s1">get_extended_length_path_str(path: str) -&gt; str:</span>
+    <span class="s5">&quot;&quot;&quot;Convert a path to a Windows extended length path.&quot;&quot;&quot;</span>
+    <span class="s1">long_path_prefix = </span><span class="s3">&quot;</span><span class="s0">\\\\</span><span class="s3">?</span><span class="s0">\\</span><span class="s3">&quot;</span>
+    <span class="s1">unc_long_path_prefix = </span><span class="s3">&quot;</span><span class="s0">\\\\</span><span class="s3">?</span><span class="s0">\\</span><span class="s3">UNC</span><span class="s0">\\</span><span class="s3">&quot;</span>
+    <span class="s0">if </span><span class="s1">path.startswith((long_path_prefix</span><span class="s0">, </span><span class="s1">unc_long_path_prefix)):</span>
+        <span class="s0">return </span><span class="s1">path</span>
+    <span class="s4"># UNC</span>
+    <span class="s0">if </span><span class="s1">path.startswith(</span><span class="s3">&quot;</span><span class="s0">\\\\</span><span class="s3">&quot;</span><span class="s1">):</span>
+        <span class="s0">return </span><span class="s1">unc_long_path_prefix + path[</span><span class="s2">2</span><span class="s1">:]</span>
+    <span class="s0">return </span><span class="s1">long_path_prefix + path</span>
+
+
+<span class="s0">def </span><span class="s1">rm_rf(path: Path) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Remove the path contents recursively, even if some elements 
+    are read-only.&quot;&quot;&quot;</span>
+    <span class="s1">path = ensure_extended_length_path(path)</span>
+    <span class="s1">onerror = partial(on_rm_rf_error</span><span class="s0">, </span><span class="s1">start_path=path)</span>
+    <span class="s1">shutil.rmtree(str(path)</span><span class="s0">, </span><span class="s1">onerror=onerror)</span>
+
+
+<span class="s0">def </span><span class="s1">find_prefixed(root: Path</span><span class="s0">, </span><span class="s1">prefix: str) -&gt; Iterator[Path]:</span>
+    <span class="s5">&quot;&quot;&quot;Find all elements in root that begin with the prefix, case insensitive.&quot;&quot;&quot;</span>
+    <span class="s1">l_prefix = prefix.lower()</span>
+    <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">root.iterdir():</span>
+        <span class="s0">if </span><span class="s1">x.name.lower().startswith(l_prefix):</span>
+            <span class="s0">yield </span><span class="s1">x</span>
+
+
+<span class="s0">def </span><span class="s1">extract_suffixes(iter: Iterable[PurePath]</span><span class="s0">, </span><span class="s1">prefix: str) -&gt; Iterator[str]:</span>
+    <span class="s5">&quot;&quot;&quot;Return the parts of the paths following the prefix. 
+ 
+    :param iter: Iterator over path names. 
+    :param prefix: Expected prefix of the path names. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">p_len = len(prefix)</span>
+    <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">iter:</span>
+        <span class="s0">yield </span><span class="s1">p.name[p_len:]</span>
+
+
+<span class="s0">def </span><span class="s1">find_suffixes(root: Path</span><span class="s0">, </span><span class="s1">prefix: str) -&gt; Iterator[str]:</span>
+    <span class="s5">&quot;&quot;&quot;Combine find_prefixes and extract_suffixes.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">extract_suffixes(find_prefixed(root</span><span class="s0">, </span><span class="s1">prefix)</span><span class="s0">, </span><span class="s1">prefix)</span>
+
+
+<span class="s0">def </span><span class="s1">parse_num(maybe_num) -&gt; int:</span>
+    <span class="s5">&quot;&quot;&quot;Parse number path suffixes, returns -1 on error.&quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">int(maybe_num)</span>
+    <span class="s0">except </span><span class="s1">ValueError:</span>
+        <span class="s0">return </span><span class="s1">-</span><span class="s2">1</span>
+
+
+<span class="s0">def </span><span class="s1">_force_symlink(</span>
+    <span class="s1">root: Path</span><span class="s0">, </span><span class="s1">target: Union[str</span><span class="s0">, </span><span class="s1">PurePath]</span><span class="s0">, </span><span class="s1">link_to: Union[str</span><span class="s0">, </span><span class="s1">Path]</span>
+<span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Helper to create the current symlink. 
+ 
+    It's full of race conditions that are reasonably OK to ignore 
+    for the context of best effort linking to the latest test run. 
+ 
+    The presumption being that in case of much parallelism 
+    the inaccuracy is going to be acceptable. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">current_symlink = root.joinpath(target)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">current_symlink.unlink()</span>
+    <span class="s0">except </span><span class="s1">OSError:</span>
+        <span class="s0">pass</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">current_symlink.symlink_to(link_to)</span>
+    <span class="s0">except </span><span class="s1">Exception:</span>
+        <span class="s0">pass</span>
+
+
+<span class="s0">def </span><span class="s1">make_numbered_dir(root: Path</span><span class="s0">, </span><span class="s1">prefix: str</span><span class="s0">, </span><span class="s1">mode: int = </span><span class="s2">0o700</span><span class="s1">) -&gt; Path:</span>
+    <span class="s5">&quot;&quot;&quot;Create a directory with an increased number as suffix for the given prefix.&quot;&quot;&quot;</span>
+    <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s2">10</span><span class="s1">):</span>
+        <span class="s4"># try up to 10 times to create the folder</span>
+        <span class="s1">max_existing = max(map(parse_num</span><span class="s0">, </span><span class="s1">find_suffixes(root</span><span class="s0">, </span><span class="s1">prefix))</span><span class="s0">, </span><span class="s1">default=-</span><span class="s2">1</span><span class="s1">)</span>
+        <span class="s1">new_number = max_existing + </span><span class="s2">1</span>
+        <span class="s1">new_path = root.joinpath(</span><span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">prefix</span><span class="s0">}{</span><span class="s1">new_number</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">new_path.mkdir(mode=mode)</span>
+        <span class="s0">except </span><span class="s1">Exception:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">_force_symlink(root</span><span class="s0">, </span><span class="s1">prefix + </span><span class="s3">&quot;current&quot;</span><span class="s0">, </span><span class="s1">new_path)</span>
+            <span class="s0">return </span><span class="s1">new_path</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">raise </span><span class="s1">OSError(</span>
+            <span class="s3">&quot;could not create numbered dir with prefix &quot;</span>
+            <span class="s3">&quot;{prefix} in {root} after 10 tries&quot;</span><span class="s1">.format(prefix=prefix</span><span class="s0">, </span><span class="s1">root=root)</span>
+        <span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">create_cleanup_lock(p: Path) -&gt; Path:</span>
+    <span class="s5">&quot;&quot;&quot;Create a lock to prevent premature folder cleanup.&quot;&quot;&quot;</span>
+    <span class="s1">lock_path = get_lock_path(p)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">fd = os.open(str(lock_path)</span><span class="s0">, </span><span class="s1">os.O_WRONLY | os.O_CREAT | os.O_EXCL</span><span class="s0">, </span><span class="s2">0o644</span><span class="s1">)</span>
+    <span class="s0">except </span><span class="s1">FileExistsError </span><span class="s0">as </span><span class="s1">e:</span>
+        <span class="s0">raise </span><span class="s1">OSError(</span><span class="s3">f&quot;cannot create lockfile in </span><span class="s0">{</span><span class="s1">p</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">pid = os.getpid()</span>
+        <span class="s1">spid = str(pid).encode()</span>
+        <span class="s1">os.write(fd</span><span class="s0">, </span><span class="s1">spid)</span>
+        <span class="s1">os.close(fd)</span>
+        <span class="s0">if not </span><span class="s1">lock_path.is_file():</span>
+            <span class="s0">raise </span><span class="s1">OSError(</span><span class="s3">&quot;lock path got renamed after successful creation&quot;</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">lock_path</span>
+
+
+<span class="s0">def </span><span class="s1">register_cleanup_lock_removal(lock_path: Path</span><span class="s0">, </span><span class="s1">register=atexit.register):</span>
+    <span class="s5">&quot;&quot;&quot;Register a cleanup function for removing a lock, by default on atexit.&quot;&quot;&quot;</span>
+    <span class="s1">pid = os.getpid()</span>
+
+    <span class="s0">def </span><span class="s1">cleanup_on_exit(lock_path: Path = lock_path</span><span class="s0">, </span><span class="s1">original_pid: int = pid) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">current_pid = os.getpid()</span>
+        <span class="s0">if </span><span class="s1">current_pid != original_pid:</span>
+            <span class="s4"># fork</span>
+            <span class="s0">return</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">lock_path.unlink()</span>
+        <span class="s0">except </span><span class="s1">OSError:</span>
+            <span class="s0">pass</span>
+
+    <span class="s0">return </span><span class="s1">register(cleanup_on_exit)</span>
+
+
+<span class="s0">def </span><span class="s1">maybe_delete_a_numbered_dir(path: Path) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Remove a numbered directory if its lock can be obtained and it does 
+    not seem to be in use.&quot;&quot;&quot;</span>
+    <span class="s1">path = ensure_extended_length_path(path)</span>
+    <span class="s1">lock_path = </span><span class="s0">None</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">lock_path = create_cleanup_lock(path)</span>
+        <span class="s1">parent = path.parent</span>
+
+        <span class="s1">garbage = parent.joinpath(</span><span class="s3">f&quot;garbage-</span><span class="s0">{</span><span class="s1">uuid.uuid4()</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s1">path.rename(garbage)</span>
+        <span class="s1">rm_rf(garbage)</span>
+    <span class="s0">except </span><span class="s1">OSError:</span>
+        <span class="s4">#  known races:</span>
+        <span class="s4">#  * other process did a cleanup at the same time</span>
+        <span class="s4">#  * deletable folder was found</span>
+        <span class="s4">#  * process cwd (Windows)</span>
+        <span class="s0">return</span>
+    <span class="s0">finally</span><span class="s1">:</span>
+        <span class="s4"># If we created the lock, ensure we remove it even if we failed</span>
+        <span class="s4"># to properly remove the numbered dir.</span>
+        <span class="s0">if </span><span class="s1">lock_path </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">lock_path.unlink()</span>
+            <span class="s0">except </span><span class="s1">OSError:</span>
+                <span class="s0">pass</span>
+
+
+<span class="s0">def </span><span class="s1">ensure_deletable(path: Path</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before: float) -&gt; bool:</span>
+    <span class="s5">&quot;&quot;&quot;Check if `path` is deletable based on whether the lock file is expired.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">path.is_symlink():</span>
+        <span class="s0">return False</span>
+    <span class="s1">lock = get_lock_path(path)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">lock.is_file():</span>
+            <span class="s0">return True</span>
+    <span class="s0">except </span><span class="s1">OSError:</span>
+        <span class="s4"># we might not have access to the lock file at all, in this case assume</span>
+        <span class="s4"># we don't have access to the entire directory (#7491).</span>
+        <span class="s0">return False</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">lock_time = lock.stat().st_mtime</span>
+    <span class="s0">except </span><span class="s1">Exception:</span>
+        <span class="s0">return False</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">lock_time &lt; consider_lock_dead_if_created_before:</span>
+            <span class="s4"># We want to ignore any errors while trying to remove the lock such as:</span>
+            <span class="s4"># - PermissionDenied, like the file permissions have changed since the lock creation;</span>
+            <span class="s4"># - FileNotFoundError, in case another pytest process got here first;</span>
+            <span class="s4"># and any other cause of failure.</span>
+            <span class="s0">with </span><span class="s1">contextlib.suppress(OSError):</span>
+                <span class="s1">lock.unlink()</span>
+                <span class="s0">return True</span>
+        <span class="s0">return False</span>
+
+
+<span class="s0">def </span><span class="s1">try_cleanup(path: Path</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before: float) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Try to cleanup a folder if we can ensure it's deletable.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">ensure_deletable(path</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before):</span>
+        <span class="s1">maybe_delete_a_numbered_dir(path)</span>
+
+
+<span class="s0">def </span><span class="s1">cleanup_candidates(root: Path</span><span class="s0">, </span><span class="s1">prefix: str</span><span class="s0">, </span><span class="s1">keep: int) -&gt; Iterator[Path]:</span>
+    <span class="s5">&quot;&quot;&quot;List candidates for numbered directories to be removed - follows py.path.&quot;&quot;&quot;</span>
+    <span class="s1">max_existing = max(map(parse_num</span><span class="s0">, </span><span class="s1">find_suffixes(root</span><span class="s0">, </span><span class="s1">prefix))</span><span class="s0">, </span><span class="s1">default=-</span><span class="s2">1</span><span class="s1">)</span>
+    <span class="s1">max_delete = max_existing - keep</span>
+    <span class="s1">paths = find_prefixed(root</span><span class="s0">, </span><span class="s1">prefix)</span>
+    <span class="s1">paths</span><span class="s0">, </span><span class="s1">paths2 = itertools.tee(paths)</span>
+    <span class="s1">numbers = map(parse_num</span><span class="s0">, </span><span class="s1">extract_suffixes(paths2</span><span class="s0">, </span><span class="s1">prefix))</span>
+    <span class="s0">for </span><span class="s1">path</span><span class="s0">, </span><span class="s1">number </span><span class="s0">in </span><span class="s1">zip(paths</span><span class="s0">, </span><span class="s1">numbers):</span>
+        <span class="s0">if </span><span class="s1">number &lt;= max_delete:</span>
+            <span class="s0">yield </span><span class="s1">path</span>
+
+
+<span class="s0">def </span><span class="s1">cleanup_numbered_dir(</span>
+    <span class="s1">root: Path</span><span class="s0">, </span><span class="s1">prefix: str</span><span class="s0">, </span><span class="s1">keep: int</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before: float</span>
+<span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Cleanup for lock driven numbered directories.&quot;&quot;&quot;</span>
+    <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">cleanup_candidates(root</span><span class="s0">, </span><span class="s1">prefix</span><span class="s0">, </span><span class="s1">keep):</span>
+        <span class="s1">try_cleanup(path</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before)</span>
+    <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">root.glob(</span><span class="s3">&quot;garbage-*&quot;</span><span class="s1">):</span>
+        <span class="s1">try_cleanup(path</span><span class="s0">, </span><span class="s1">consider_lock_dead_if_created_before)</span>
+
+
+<span class="s0">def </span><span class="s1">make_numbered_dir_with_cleanup(</span>
+    <span class="s1">root: Path</span><span class="s0">,</span>
+    <span class="s1">prefix: str</span><span class="s0">,</span>
+    <span class="s1">keep: int</span><span class="s0">,</span>
+    <span class="s1">lock_timeout: float</span><span class="s0">,</span>
+    <span class="s1">mode: int</span><span class="s0">,</span>
+<span class="s1">) -&gt; Path:</span>
+    <span class="s5">&quot;&quot;&quot;Create a numbered dir with a cleanup lock and remove old ones.&quot;&quot;&quot;</span>
+    <span class="s1">e = </span><span class="s0">None</span>
+    <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s2">10</span><span class="s1">):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">p = make_numbered_dir(root</span><span class="s0">, </span><span class="s1">prefix</span><span class="s0">, </span><span class="s1">mode)</span>
+            <span class="s1">lock_path = create_cleanup_lock(p)</span>
+            <span class="s1">register_cleanup_lock_removal(lock_path)</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc:</span>
+            <span class="s1">e = exc</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">consider_lock_dead_if_created_before = p.stat().st_mtime - lock_timeout</span>
+            <span class="s4"># Register a cleanup for program exit</span>
+            <span class="s1">atexit.register(</span>
+                <span class="s1">cleanup_numbered_dir</span><span class="s0">,</span>
+                <span class="s1">root</span><span class="s0">,</span>
+                <span class="s1">prefix</span><span class="s0">,</span>
+                <span class="s1">keep</span><span class="s0">,</span>
+                <span class="s1">consider_lock_dead_if_created_before</span><span class="s0">,</span>
+            <span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">p</span>
+    <span class="s0">assert </span><span class="s1">e </span><span class="s0">is not None</span>
+    <span class="s0">raise </span><span class="s1">e</span>
+
+
+<span class="s0">def </span><span class="s1">resolve_from_str(input: str</span><span class="s0">, </span><span class="s1">rootpath: Path) -&gt; Path:</span>
+    <span class="s1">input = expanduser(input)</span>
+    <span class="s1">input = expandvars(input)</span>
+    <span class="s0">if </span><span class="s1">isabs(input):</span>
+        <span class="s0">return </span><span class="s1">Path(input)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">rootpath.joinpath(input)</span>
+
+
+<span class="s0">def </span><span class="s1">fnmatch_ex(pattern: str</span><span class="s0">, </span><span class="s1">path: Union[str</span><span class="s0">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]) -&gt; bool:</span>
+    <span class="s5">&quot;&quot;&quot;A port of FNMatcher from py.path.common which works with PurePath() instances. 
+ 
+    The difference between this algorithm and PurePath.match() is that the 
+    latter matches &quot;**&quot; glob expressions for each part of the path, while 
+    this algorithm uses the whole path instead. 
+ 
+    For example: 
+        &quot;tests/foo/bar/doc/test_foo.py&quot; matches pattern &quot;tests/**/doc/test*.py&quot; 
+        with this algorithm, but not with PurePath.match(). 
+ 
+    This algorithm was ported to keep backward-compatibility with existing 
+    settings which assume paths match according this logic. 
+ 
+    References: 
+    * https://bugs.python.org/issue29249 
+    * https://bugs.python.org/issue34731 
+    &quot;&quot;&quot;</span>
+    <span class="s1">path = PurePath(path)</span>
+    <span class="s1">iswin32 = sys.platform.startswith(</span><span class="s3">&quot;win&quot;</span><span class="s1">)</span>
+
+    <span class="s0">if </span><span class="s1">iswin32 </span><span class="s0">and </span><span class="s1">sep </span><span class="s0">not in </span><span class="s1">pattern </span><span class="s0">and </span><span class="s1">posix_sep </span><span class="s0">in </span><span class="s1">pattern:</span>
+        <span class="s4"># Running on Windows, the pattern has no Windows path separators,</span>
+        <span class="s4"># and the pattern has one or more Posix path separators. Replace</span>
+        <span class="s4"># the Posix path separators with the Windows path separator.</span>
+        <span class="s1">pattern = pattern.replace(posix_sep</span><span class="s0">, </span><span class="s1">sep)</span>
+
+    <span class="s0">if </span><span class="s1">sep </span><span class="s0">not in </span><span class="s1">pattern:</span>
+        <span class="s1">name = path.name</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">name = str(path)</span>
+        <span class="s0">if </span><span class="s1">path.is_absolute() </span><span class="s0">and not </span><span class="s1">os.path.isabs(pattern):</span>
+            <span class="s1">pattern = </span><span class="s3">f&quot;*</span><span class="s0">{</span><span class="s1">os.sep</span><span class="s0">}{</span><span class="s1">pattern</span><span class="s0">}</span><span class="s3">&quot;</span>
+    <span class="s0">return </span><span class="s1">fnmatch.fnmatch(name</span><span class="s0">, </span><span class="s1">pattern)</span>
+
+
+<span class="s0">def </span><span class="s1">parts(s: str) -&gt; Set[str]:</span>
+    <span class="s1">parts = s.split(sep)</span>
+    <span class="s0">return </span><span class="s1">{sep.join(parts[: i + </span><span class="s2">1</span><span class="s1">]) </span><span class="s0">or </span><span class="s1">sep </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(len(parts))}</span>
+
+
+<span class="s0">def </span><span class="s1">symlink_or_skip(src</span><span class="s0">, </span><span class="s1">dst</span><span class="s0">, </span><span class="s1">**kwargs):</span>
+    <span class="s5">&quot;&quot;&quot;Make a symlink, or skip the test in case symlinks are not supported.&quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">os.symlink(str(src)</span><span class="s0">, </span><span class="s1">str(dst)</span><span class="s0">, </span><span class="s1">**kwargs)</span>
+    <span class="s0">except </span><span class="s1">OSError </span><span class="s0">as </span><span class="s1">e:</span>
+        <span class="s1">skip(</span><span class="s3">f&quot;symlinks not supported: </span><span class="s0">{</span><span class="s1">e</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">ImportMode(Enum):</span>
+    <span class="s5">&quot;&quot;&quot;Possible values for `mode` parameter of `import_path`.&quot;&quot;&quot;</span>
+
+    <span class="s1">prepend = </span><span class="s3">&quot;prepend&quot;</span>
+    <span class="s1">append = </span><span class="s3">&quot;append&quot;</span>
+    <span class="s1">importlib = </span><span class="s3">&quot;importlib&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ImportPathMismatchError(ImportError):</span>
+    <span class="s5">&quot;&quot;&quot;Raised on import_path() if there is a mismatch of __file__'s. 
+ 
+    This can happen when `import_path` is called multiple times with different filenames that has 
+    the same basename but reside in packages 
+    (for example &quot;/tests1/test_foo.py&quot; and &quot;/tests2/test_foo.py&quot;). 
+    &quot;&quot;&quot;</span>
+
+
+<span class="s0">def </span><span class="s1">import_path(</span>
+    <span class="s1">p: Union[str</span><span class="s0">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s0">,</span>
+    <span class="s1">*</span><span class="s0">,</span>
+    <span class="s1">mode: Union[str</span><span class="s0">, </span><span class="s1">ImportMode] = ImportMode.prepend</span><span class="s0">,</span>
+    <span class="s1">root: Path</span><span class="s0">,</span>
+<span class="s1">) -&gt; ModuleType:</span>
+    <span class="s5">&quot;&quot;&quot;Import and return a module from the given path, which can be a file (a module) or 
+    a directory (a package). 
+ 
+    The import mechanism used is controlled by the `mode` parameter: 
+ 
+    * `mode == ImportMode.prepend`: the directory containing the module (or package, taking 
+      `__init__.py` files into account) will be put at the *start* of `sys.path` before 
+      being imported with `__import__. 
+ 
+    * `mode == ImportMode.append`: same as `prepend`, but the directory will be appended 
+      to the end of `sys.path`, if not already in `sys.path`. 
+ 
+    * `mode == ImportMode.importlib`: uses more fine control mechanisms provided by `importlib` 
+      to import the module, which avoids having to use `__import__` and muck with `sys.path` 
+      at all. It effectively allows having same-named test modules in different places. 
+ 
+    :param root: 
+        Used as an anchor when mode == ImportMode.importlib to obtain 
+        a unique name for the module being imported so it can safely be stored 
+        into ``sys.modules``. 
+ 
+    :raises ImportPathMismatchError: 
+        If after importing the given `path` and the module `__file__` 
+        are different. Only raised in `prepend` and `append` modes. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">mode = ImportMode(mode)</span>
+
+    <span class="s1">path = Path(p)</span>
+
+    <span class="s0">if not </span><span class="s1">path.exists():</span>
+        <span class="s0">raise </span><span class="s1">ImportError(path)</span>
+
+    <span class="s0">if </span><span class="s1">mode </span><span class="s0">is </span><span class="s1">ImportMode.importlib:</span>
+        <span class="s1">module_name = module_name_from_path(path</span><span class="s0">, </span><span class="s1">root)</span>
+
+        <span class="s0">for </span><span class="s1">meta_importer </span><span class="s0">in </span><span class="s1">sys.meta_path:</span>
+            <span class="s1">spec = meta_importer.find_spec(module_name</span><span class="s0">, </span><span class="s1">[str(path.parent)])</span>
+            <span class="s0">if </span><span class="s1">spec </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s0">break</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">spec = importlib.util.spec_from_file_location(module_name</span><span class="s0">, </span><span class="s1">str(path))</span>
+
+        <span class="s0">if </span><span class="s1">spec </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">ImportError(</span><span class="s3">f&quot;Can't find module </span><span class="s0">{</span><span class="s1">module_name</span><span class="s0">} </span><span class="s3">at location </span><span class="s0">{</span><span class="s1">path</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s1">mod = importlib.util.module_from_spec(spec)</span>
+        <span class="s1">sys.modules[module_name] = mod</span>
+        <span class="s1">spec.loader.exec_module(mod)  </span><span class="s4"># type: ignore[union-attr]</span>
+        <span class="s1">insert_missing_modules(sys.modules</span><span class="s0">, </span><span class="s1">module_name)</span>
+        <span class="s0">return </span><span class="s1">mod</span>
+
+    <span class="s1">pkg_path = resolve_package_path(path)</span>
+    <span class="s0">if </span><span class="s1">pkg_path </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s1">pkg_root = pkg_path.parent</span>
+        <span class="s1">names = list(path.with_suffix(</span><span class="s3">&quot;&quot;</span><span class="s1">).relative_to(pkg_root).parts)</span>
+        <span class="s0">if </span><span class="s1">names[-</span><span class="s2">1</span><span class="s1">] == </span><span class="s3">&quot;__init__&quot;</span><span class="s1">:</span>
+            <span class="s1">names.pop()</span>
+        <span class="s1">module_name = </span><span class="s3">&quot;.&quot;</span><span class="s1">.join(names)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">pkg_root = path.parent</span>
+        <span class="s1">module_name = path.stem</span>
+
+    <span class="s4"># Change sys.path permanently: restoring it at the end of this function would cause surprising</span>
+    <span class="s4"># problems because of delayed imports: for example, a conftest.py file imported by this function</span>
+    <span class="s4"># might have local imports, which would fail at runtime if we restored sys.path.</span>
+    <span class="s0">if </span><span class="s1">mode </span><span class="s0">is </span><span class="s1">ImportMode.append:</span>
+        <span class="s0">if </span><span class="s1">str(pkg_root) </span><span class="s0">not in </span><span class="s1">sys.path:</span>
+            <span class="s1">sys.path.append(str(pkg_root))</span>
+    <span class="s0">elif </span><span class="s1">mode </span><span class="s0">is </span><span class="s1">ImportMode.prepend:</span>
+        <span class="s0">if </span><span class="s1">str(pkg_root) != sys.path[</span><span class="s2">0</span><span class="s1">]:</span>
+            <span class="s1">sys.path.insert(</span><span class="s2">0</span><span class="s0">, </span><span class="s1">str(pkg_root))</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">assert_never(mode)</span>
+
+    <span class="s1">importlib.import_module(module_name)</span>
+
+    <span class="s1">mod = sys.modules[module_name]</span>
+    <span class="s0">if </span><span class="s1">path.name == </span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">mod</span>
+
+    <span class="s1">ignore = os.environ.get(</span><span class="s3">&quot;PY_IGNORE_IMPORTMISMATCH&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)</span>
+    <span class="s0">if </span><span class="s1">ignore != </span><span class="s3">&quot;1&quot;</span><span class="s1">:</span>
+        <span class="s1">module_file = mod.__file__</span>
+        <span class="s0">if </span><span class="s1">module_file </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">ImportPathMismatchError(module_name</span><span class="s0">, </span><span class="s1">module_file</span><span class="s0">, </span><span class="s1">path)</span>
+
+        <span class="s0">if </span><span class="s1">module_file.endswith((</span><span class="s3">&quot;.pyc&quot;</span><span class="s0">, </span><span class="s3">&quot;.pyo&quot;</span><span class="s1">)):</span>
+            <span class="s1">module_file = module_file[:-</span><span class="s2">1</span><span class="s1">]</span>
+        <span class="s0">if </span><span class="s1">module_file.endswith(os.path.sep + </span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">):</span>
+            <span class="s1">module_file = module_file[: -(len(os.path.sep + </span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">))]</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">is_same = _is_same(str(path)</span><span class="s0">, </span><span class="s1">module_file)</span>
+        <span class="s0">except </span><span class="s1">FileNotFoundError:</span>
+            <span class="s1">is_same = </span><span class="s0">False</span>
+
+        <span class="s0">if not </span><span class="s1">is_same:</span>
+            <span class="s0">raise </span><span class="s1">ImportPathMismatchError(module_name</span><span class="s0">, </span><span class="s1">module_file</span><span class="s0">, </span><span class="s1">path)</span>
+
+    <span class="s0">return </span><span class="s1">mod</span>
+
+
+<span class="s4"># Implement a special _is_same function on Windows which returns True if the two filenames</span>
+<span class="s4"># compare equal, to circumvent os.path.samefile returning False for mounts in UNC (#7678).</span>
+<span class="s0">if </span><span class="s1">sys.platform.startswith(</span><span class="s3">&quot;win&quot;</span><span class="s1">):</span>
+
+    <span class="s0">def </span><span class="s1">_is_same(f1: str</span><span class="s0">, </span><span class="s1">f2: str) -&gt; bool:</span>
+        <span class="s0">return </span><span class="s1">Path(f1) == Path(f2) </span><span class="s0">or </span><span class="s1">os.path.samefile(f1</span><span class="s0">, </span><span class="s1">f2)</span>
+
+<span class="s0">else</span><span class="s1">:</span>
+
+    <span class="s0">def </span><span class="s1">_is_same(f1: str</span><span class="s0">, </span><span class="s1">f2: str) -&gt; bool:</span>
+        <span class="s0">return </span><span class="s1">os.path.samefile(f1</span><span class="s0">, </span><span class="s1">f2)</span>
+
+
+<span class="s0">def </span><span class="s1">module_name_from_path(path: Path</span><span class="s0">, </span><span class="s1">root: Path) -&gt; str:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return a dotted module name based on the given path, anchored on root. 
+ 
+    For example: path=&quot;projects/src/tests/test_foo.py&quot; and root=&quot;/projects&quot;, the 
+    resulting module name will be &quot;src.tests.test_foo&quot;. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">path = path.with_suffix(</span><span class="s3">&quot;&quot;</span><span class="s1">)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">relative_path = path.relative_to(root)</span>
+    <span class="s0">except </span><span class="s1">ValueError:</span>
+        <span class="s4"># If we can't get a relative path to root, use the full path, except</span>
+        <span class="s4"># for the first part (&quot;d:\\&quot; or &quot;/&quot; depending on the platform, for example).</span>
+        <span class="s1">path_parts = path.parts[</span><span class="s2">1</span><span class="s1">:]</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s4"># Use the parts for the relative path to the root path.</span>
+        <span class="s1">path_parts = relative_path.parts</span>
+
+    <span class="s0">return </span><span class="s3">&quot;.&quot;</span><span class="s1">.join(path_parts)</span>
+
+
+<span class="s0">def </span><span class="s1">insert_missing_modules(modules: Dict[str</span><span class="s0">, </span><span class="s1">ModuleType]</span><span class="s0">, </span><span class="s1">module_name: str) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Used by ``import_path`` to create intermediate modules when using mode=importlib. 
+ 
+    When we want to import a module as &quot;src.tests.test_foo&quot; for example, we need 
+    to create empty modules &quot;src&quot; and &quot;src.tests&quot; after inserting &quot;src.tests.test_foo&quot;, 
+    otherwise &quot;src.tests.test_foo&quot; is not importable by ``__import__``. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">module_parts = module_name.split(</span><span class="s3">&quot;.&quot;</span><span class="s1">)</span>
+    <span class="s0">while </span><span class="s1">module_name:</span>
+        <span class="s0">if </span><span class="s1">module_name </span><span class="s0">not in </span><span class="s1">modules:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s4"># If sys.meta_path is empty, calling import_module will issue</span>
+                <span class="s4"># a warning and raise ModuleNotFoundError. To avoid the</span>
+                <span class="s4"># warning, we check sys.meta_path explicitly and raise the error</span>
+                <span class="s4"># ourselves to fall back to creating a dummy module.</span>
+                <span class="s0">if not </span><span class="s1">sys.meta_path:</span>
+                    <span class="s0">raise </span><span class="s1">ModuleNotFoundError</span>
+                <span class="s1">importlib.import_module(module_name)</span>
+            <span class="s0">except </span><span class="s1">ModuleNotFoundError:</span>
+                <span class="s1">module = ModuleType(</span>
+                    <span class="s1">module_name</span><span class="s0">,</span>
+                    <span class="s1">doc=</span><span class="s3">&quot;Empty module created by pytest's importmode=importlib.&quot;</span><span class="s0">,</span>
+                <span class="s1">)</span>
+                <span class="s1">modules[module_name] = module</span>
+        <span class="s1">module_parts.pop(-</span><span class="s2">1</span><span class="s1">)</span>
+        <span class="s1">module_name = </span><span class="s3">&quot;.&quot;</span><span class="s1">.join(module_parts)</span>
+
+
+<span class="s0">def </span><span class="s1">resolve_package_path(path: Path) -&gt; Optional[Path]:</span>
+    <span class="s5">&quot;&quot;&quot;Return the Python package path by looking for the last 
+    directory upwards which still contains an __init__.py. 
+ 
+    Returns None if it can not be determined. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">result = </span><span class="s0">None</span>
+    <span class="s0">for </span><span class="s1">parent </span><span class="s0">in </span><span class="s1">itertools.chain((path</span><span class="s0">,</span><span class="s1">)</span><span class="s0">, </span><span class="s1">path.parents):</span>
+        <span class="s0">if </span><span class="s1">parent.is_dir():</span>
+            <span class="s0">if not </span><span class="s1">parent.joinpath(</span><span class="s3">&quot;__init__.py&quot;</span><span class="s1">).is_file():</span>
+                <span class="s0">break</span>
+            <span class="s0">if not </span><span class="s1">parent.name.isidentifier():</span>
+                <span class="s0">break</span>
+            <span class="s1">result = parent</span>
+    <span class="s0">return </span><span class="s1">result</span>
+
+
+<span class="s0">def </span><span class="s1">visit(</span>
+    <span class="s1">path: Union[str</span><span class="s0">, </span><span class="s3">&quot;os.PathLike[str]&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s1">recurse: Callable[[</span><span class="s3">&quot;os.DirEntry[str]&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s1">bool]</span>
+<span class="s1">) -&gt; Iterator[</span><span class="s3">&quot;os.DirEntry[str]&quot;</span><span class="s1">]:</span>
+    <span class="s5">&quot;&quot;&quot;Walk a directory recursively, in breadth-first order. 
+ 
+    Entries at each directory level are sorted. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Skip entries with symlink loops and other brokenness, so the caller doesn't</span>
+    <span class="s4"># have to deal with it.</span>
+    <span class="s1">entries = []</span>
+    <span class="s0">for </span><span class="s1">entry </span><span class="s0">in </span><span class="s1">os.scandir(path):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">entry.is_file()</span>
+        <span class="s0">except </span><span class="s1">OSError </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s0">if </span><span class="s1">_ignore_error(err):</span>
+                <span class="s0">continue</span>
+            <span class="s0">raise</span>
+        <span class="s1">entries.append(entry)</span>
+
+    <span class="s1">entries.sort(key=</span><span class="s0">lambda </span><span class="s1">entry: entry.name)</span>
+
+    <span class="s0">yield from </span><span class="s1">entries</span>
+
+    <span class="s0">for </span><span class="s1">entry </span><span class="s0">in </span><span class="s1">entries:</span>
+        <span class="s0">if </span><span class="s1">entry.is_dir() </span><span class="s0">and </span><span class="s1">recurse(entry):</span>
+            <span class="s0">yield from </span><span class="s1">visit(entry.path</span><span class="s0">, </span><span class="s1">recurse)</span>
+
+
+<span class="s0">def </span><span class="s1">absolutepath(path: Union[Path</span><span class="s0">, </span><span class="s1">str]) -&gt; Path:</span>
+    <span class="s5">&quot;&quot;&quot;Convert a path to an absolute path using os.path.abspath. 
+ 
+    Prefer this over Path.resolve() (see #6523). 
+    Prefer this over Path.absolute() (not public, doesn't normalize). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">Path(os.path.abspath(str(path)))</span>
+
+
+<span class="s0">def </span><span class="s1">commonpath(path1: Path</span><span class="s0">, </span><span class="s1">path2: Path) -&gt; Optional[Path]:</span>
+    <span class="s5">&quot;&quot;&quot;Return the common part shared with the other path, or None if there is 
+    no common part. 
+ 
+    If one path is relative and one is absolute, returns None. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">Path(os.path.commonpath((str(path1)</span><span class="s0">, </span><span class="s1">str(path2))))</span>
+    <span class="s0">except </span><span class="s1">ValueError:</span>
+        <span class="s0">return None</span>
+
+
+<span class="s0">def </span><span class="s1">bestrelpath(directory: Path</span><span class="s0">, </span><span class="s1">dest: Path) -&gt; str:</span>
+    <span class="s5">&quot;&quot;&quot;Return a string which is a relative path from directory to dest such 
+    that directory/bestrelpath == dest. 
+ 
+    The paths must be either both absolute or both relative. 
+ 
+    If no such path can be determined, returns dest. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">assert </span><span class="s1">isinstance(directory</span><span class="s0">, </span><span class="s1">Path)</span>
+    <span class="s0">assert </span><span class="s1">isinstance(dest</span><span class="s0">, </span><span class="s1">Path)</span>
+    <span class="s0">if </span><span class="s1">dest == directory:</span>
+        <span class="s0">return </span><span class="s1">os.curdir</span>
+    <span class="s4"># Find the longest common directory.</span>
+    <span class="s1">base = commonpath(directory</span><span class="s0">, </span><span class="s1">dest)</span>
+    <span class="s4"># Can be the case on Windows for two absolute paths on different drives.</span>
+    <span class="s4"># Can be the case for two relative paths without common prefix.</span>
+    <span class="s4"># Can be the case for a relative path and an absolute path.</span>
+    <span class="s0">if not </span><span class="s1">base:</span>
+        <span class="s0">return </span><span class="s1">str(dest)</span>
+    <span class="s1">reldirectory = directory.relative_to(base)</span>
+    <span class="s1">reldest = dest.relative_to(base)</span>
+    <span class="s0">return </span><span class="s1">os.path.join(</span>
+        <span class="s4"># Back from directory to base.</span>
+        <span class="s1">*([os.pardir] * len(reldirectory.parts))</span><span class="s0">,</span>
+        <span class="s4"># Forward from base to dest.</span>
+        <span class="s1">*reldest.parts</span><span class="s0">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s4"># Originates from py. path.local.copy(), with siginficant trims and adjustments.</span>
+<span class="s4"># TODO(py38): Replace with shutil.copytree(..., symlinks=True, dirs_exist_ok=True)</span>
+<span class="s0">def </span><span class="s1">copytree(source: Path</span><span class="s0">, </span><span class="s1">target: Path) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s5">&quot;&quot;&quot;Recursively copy a source directory to target.&quot;&quot;&quot;</span>
+    <span class="s0">assert </span><span class="s1">source.is_dir()</span>
+    <span class="s0">for </span><span class="s1">entry </span><span class="s0">in </span><span class="s1">visit(source</span><span class="s0">, </span><span class="s1">recurse=</span><span class="s0">lambda </span><span class="s1">entry: </span><span class="s0">not </span><span class="s1">entry.is_symlink()):</span>
+        <span class="s1">x = Path(entry)</span>
+        <span class="s1">relpath = x.relative_to(source)</span>
+        <span class="s1">newx = target / relpath</span>
+        <span class="s1">newx.parent.mkdir(exist_ok=</span><span class="s0">True</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">x.is_symlink():</span>
+            <span class="s1">newx.symlink_to(os.readlink(x))</span>
+        <span class="s0">elif </span><span class="s1">x.is_file():</span>
+            <span class="s1">shutil.copyfile(x</span><span class="s0">, </span><span class="s1">newx)</span>
+        <span class="s0">elif </span><span class="s1">x.is_dir():</span>
+            <span class="s1">newx.mkdir(exist_ok=</span><span class="s0">True</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

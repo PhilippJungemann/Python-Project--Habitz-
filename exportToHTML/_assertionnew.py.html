@@ -1,0 +1,344 @@
+<html>
+<head>
+<title>_assertionnew.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_assertionnew.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Find intermediate evalutation results in assert statements through builtin AST. 
+This should replace _assertionold.py eventually. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">ast</span>
+
+<span class="s2">import </span><span class="s1">py</span>
+<span class="s2">from </span><span class="s1">py._code.assertion </span><span class="s2">import </span><span class="s1">_format_explanation</span><span class="s2">, </span><span class="s1">BuiltinAssertionError</span>
+
+
+<span class="s2">def </span><span class="s1">_is_ast_expr(node):</span>
+    <span class="s2">return </span><span class="s1">isinstance(node</span><span class="s2">, </span><span class="s1">ast.expr)</span>
+<span class="s2">def </span><span class="s1">_is_ast_stmt(node):</span>
+    <span class="s2">return </span><span class="s1">isinstance(node</span><span class="s2">, </span><span class="s1">ast.stmt)</span>
+
+
+<span class="s2">class </span><span class="s1">Failure(Exception):</span>
+    <span class="s0">&quot;&quot;&quot;Error found while interpreting AST.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">explanation=</span><span class="s3">&quot;&quot;</span><span class="s1">):</span>
+        <span class="s1">self.cause = sys.exc_info()</span>
+        <span class="s1">self.explanation = explanation</span>
+
+
+<span class="s2">def </span><span class="s1">interpret(source</span><span class="s2">, </span><span class="s1">frame</span><span class="s2">, </span><span class="s1">should_fail=</span><span class="s2">False</span><span class="s1">):</span>
+    <span class="s1">mod = ast.parse(source)</span>
+    <span class="s1">visitor = DebugInterpreter(frame)</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">visitor.visit(mod)</span>
+    <span class="s2">except </span><span class="s1">Failure:</span>
+        <span class="s1">failure = sys.exc_info()[</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s2">return </span><span class="s1">getfailure(failure)</span>
+    <span class="s2">if </span><span class="s1">should_fail:</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s3">&quot;(assertion failed, but when it was re-run for &quot;</span>
+                <span class="s3">&quot;printing intermediate values, it did not fail.  Suggestions: &quot;</span>
+                <span class="s3">&quot;compute assert expression before the assert or use --no-assert)&quot;</span><span class="s1">)</span>
+
+<span class="s2">def </span><span class="s1">run(offending_line</span><span class="s2">, </span><span class="s1">frame=</span><span class="s2">None</span><span class="s1">):</span>
+    <span class="s2">if </span><span class="s1">frame </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s1">frame = py.code.Frame(sys._getframe(</span><span class="s4">1</span><span class="s1">))</span>
+    <span class="s2">return </span><span class="s1">interpret(offending_line</span><span class="s2">, </span><span class="s1">frame)</span>
+
+<span class="s2">def </span><span class="s1">getfailure(failure):</span>
+    <span class="s1">explanation = _format_explanation(failure.explanation)</span>
+    <span class="s1">value = failure.cause[</span><span class="s4">1</span><span class="s1">]</span>
+    <span class="s2">if </span><span class="s1">str(value):</span>
+        <span class="s1">lines = explanation.splitlines()</span>
+        <span class="s2">if not </span><span class="s1">lines:</span>
+            <span class="s1">lines.append(</span><span class="s3">&quot;&quot;</span><span class="s1">)</span>
+        <span class="s1">lines[</span><span class="s4">0</span><span class="s1">] += </span><span class="s3">&quot; &lt;&lt; %s&quot; </span><span class="s1">% (value</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">.join(lines)</span>
+    <span class="s1">text = </span><span class="s3">&quot;%s: %s&quot; </span><span class="s1">% (failure.cause[</span><span class="s4">0</span><span class="s1">].__name__</span><span class="s2">, </span><span class="s1">explanation)</span>
+    <span class="s2">if </span><span class="s1">text.startswith(</span><span class="s3">&quot;AssertionError: assert &quot;</span><span class="s1">):</span>
+        <span class="s1">text = text[</span><span class="s4">16</span><span class="s1">:]</span>
+    <span class="s2">return </span><span class="s1">text</span>
+
+
+<span class="s1">operator_map = {</span>
+    <span class="s1">ast.BitOr : </span><span class="s3">&quot;|&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.BitXor : </span><span class="s3">&quot;^&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.BitAnd : </span><span class="s3">&quot;&amp;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.LShift : </span><span class="s3">&quot;&lt;&lt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.RShift : </span><span class="s3">&quot;&gt;&gt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Add : </span><span class="s3">&quot;+&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Sub : </span><span class="s3">&quot;-&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Mult : </span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Div : </span><span class="s3">&quot;/&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.FloorDiv : </span><span class="s3">&quot;//&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Mod : </span><span class="s3">&quot;%&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Eq : </span><span class="s3">&quot;==&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.NotEq : </span><span class="s3">&quot;!=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Lt : </span><span class="s3">&quot;&lt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.LtE : </span><span class="s3">&quot;&lt;=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Gt : </span><span class="s3">&quot;&gt;&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.GtE : </span><span class="s3">&quot;&gt;=&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Pow : </span><span class="s3">&quot;**&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Is : </span><span class="s3">&quot;is&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.IsNot : </span><span class="s3">&quot;is not&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.In : </span><span class="s3">&quot;in&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.NotIn : </span><span class="s3">&quot;not in&quot;</span>
+<span class="s1">}</span>
+
+<span class="s1">unary_map = {</span>
+    <span class="s1">ast.Not : </span><span class="s3">&quot;not %s&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.Invert : </span><span class="s3">&quot;~%s&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.USub : </span><span class="s3">&quot;-%s&quot;</span><span class="s2">,</span>
+    <span class="s1">ast.UAdd : </span><span class="s3">&quot;+%s&quot;</span>
+<span class="s1">}</span>
+
+
+<span class="s2">class </span><span class="s1">DebugInterpreter(ast.NodeVisitor):</span>
+    <span class="s0">&quot;&quot;&quot;Interpret AST nodes to gleam useful debugging information. &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">frame):</span>
+        <span class="s1">self.frame = frame</span>
+
+    <span class="s2">def </span><span class="s1">generic_visit(self</span><span class="s2">, </span><span class="s1">node):</span>
+        <span class="s5"># Fallback when we don't have a special implementation.</span>
+        <span class="s2">if </span><span class="s1">_is_ast_expr(node):</span>
+            <span class="s1">mod = ast.Expression(node)</span>
+            <span class="s1">co = self._compile(mod)</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">result = self.frame.eval(co)</span>
+            <span class="s2">except </span><span class="s1">Exception:</span>
+                <span class="s2">raise </span><span class="s1">Failure()</span>
+            <span class="s1">explanation = self.frame.repr(result)</span>
+            <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+        <span class="s2">elif </span><span class="s1">_is_ast_stmt(node):</span>
+            <span class="s1">mod = ast.Module([node])</span>
+            <span class="s1">co = self._compile(mod</span><span class="s2">, </span><span class="s3">&quot;exec&quot;</span><span class="s1">)</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">self.frame.exec_(co)</span>
+            <span class="s2">except </span><span class="s1">Exception:</span>
+                <span class="s2">raise </span><span class="s1">Failure()</span>
+            <span class="s2">return None, None</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">raise </span><span class="s1">AssertionError(</span><span class="s3">&quot;can't handle %s&quot; </span><span class="s1">%(node</span><span class="s2">,</span><span class="s1">))</span>
+
+    <span class="s2">def </span><span class="s1">_compile(self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">mode=</span><span class="s3">&quot;eval&quot;</span><span class="s1">):</span>
+        <span class="s2">return </span><span class="s1">compile(source</span><span class="s2">, </span><span class="s3">&quot;&lt;assertion interpretation&gt;&quot;</span><span class="s2">, </span><span class="s1">mode)</span>
+
+    <span class="s2">def </span><span class="s1">visit_Expr(self</span><span class="s2">, </span><span class="s1">expr):</span>
+        <span class="s2">return </span><span class="s1">self.visit(expr.value)</span>
+
+    <span class="s2">def </span><span class="s1">visit_Module(self</span><span class="s2">, </span><span class="s1">mod):</span>
+        <span class="s2">for </span><span class="s1">stmt </span><span class="s2">in </span><span class="s1">mod.body:</span>
+            <span class="s1">self.visit(stmt)</span>
+
+    <span class="s2">def </span><span class="s1">visit_Name(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">explanation</span><span class="s2">, </span><span class="s1">result = self.generic_visit(name)</span>
+        <span class="s5"># See if the name is local.</span>
+        <span class="s1">source = </span><span class="s3">&quot;%r in locals() is not globals()&quot; </span><span class="s1">% (name.id</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">local = self.frame.eval(co)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s5"># have to assume it isn't</span>
+            <span class="s1">local = </span><span class="s2">False</span>
+        <span class="s2">if not </span><span class="s1">local:</span>
+            <span class="s2">return </span><span class="s1">name.id</span><span class="s2">, </span><span class="s1">result</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_Compare(self</span><span class="s2">, </span><span class="s1">comp):</span>
+        <span class="s1">left = comp.left</span>
+        <span class="s1">left_explanation</span><span class="s2">, </span><span class="s1">left_result = self.visit(left)</span>
+        <span class="s2">for </span><span class="s1">op</span><span class="s2">, </span><span class="s1">next_op </span><span class="s2">in </span><span class="s1">zip(comp.ops</span><span class="s2">, </span><span class="s1">comp.comparators):</span>
+            <span class="s1">next_explanation</span><span class="s2">, </span><span class="s1">next_result = self.visit(next_op)</span>
+            <span class="s1">op_symbol = operator_map[op.__class__]</span>
+            <span class="s1">explanation = </span><span class="s3">&quot;%s %s %s&quot; </span><span class="s1">% (left_explanation</span><span class="s2">, </span><span class="s1">op_symbol</span><span class="s2">,</span>
+                                        <span class="s1">next_explanation)</span>
+            <span class="s1">source = </span><span class="s3">&quot;__exprinfo_left %s __exprinfo_right&quot; </span><span class="s1">% (op_symbol</span><span class="s2">,</span><span class="s1">)</span>
+            <span class="s1">co = self._compile(source)</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">result = self.frame.eval(co</span><span class="s2">, </span><span class="s1">__exprinfo_left=left_result</span><span class="s2">,</span>
+                                         <span class="s1">__exprinfo_right=next_result)</span>
+            <span class="s2">except </span><span class="s1">Exception:</span>
+                <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">if not </span><span class="s1">result:</span>
+                    <span class="s2">break</span>
+            <span class="s2">except </span><span class="s1">KeyboardInterrupt:</span>
+                <span class="s2">raise</span>
+            <span class="s2">except</span><span class="s1">:</span>
+                <span class="s2">break</span>
+            <span class="s1">left_explanation</span><span class="s2">, </span><span class="s1">left_result = next_explanation</span><span class="s2">, </span><span class="s1">next_result</span>
+
+        <span class="s1">rcomp = py.code._reprcompare</span>
+        <span class="s2">if </span><span class="s1">rcomp:</span>
+            <span class="s1">res = rcomp(op_symbol</span><span class="s2">, </span><span class="s1">left_result</span><span class="s2">, </span><span class="s1">next_result)</span>
+            <span class="s2">if </span><span class="s1">res:</span>
+                <span class="s1">explanation = res</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_BoolOp(self</span><span class="s2">, </span><span class="s1">boolop):</span>
+        <span class="s1">is_or = isinstance(boolop.op</span><span class="s2">, </span><span class="s1">ast.Or)</span>
+        <span class="s1">explanations = []</span>
+        <span class="s2">for </span><span class="s1">operand </span><span class="s2">in </span><span class="s1">boolop.values:</span>
+            <span class="s1">explanation</span><span class="s2">, </span><span class="s1">result = self.visit(operand)</span>
+            <span class="s1">explanations.append(explanation)</span>
+            <span class="s2">if </span><span class="s1">result == is_or:</span>
+                <span class="s2">break</span>
+        <span class="s1">name = is_or </span><span class="s2">and </span><span class="s3">&quot; or &quot; </span><span class="s2">or </span><span class="s3">&quot; and &quot;</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;(&quot; </span><span class="s1">+ name.join(explanations) + </span><span class="s3">&quot;)&quot;</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_UnaryOp(self</span><span class="s2">, </span><span class="s1">unary):</span>
+        <span class="s1">pattern = unary_map[unary.op.__class__]</span>
+        <span class="s1">operand_explanation</span><span class="s2">, </span><span class="s1">operand_result = self.visit(unary.operand)</span>
+        <span class="s1">explanation = pattern % (operand_explanation</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(pattern % (</span><span class="s3">&quot;__exprinfo_expr&quot;</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">result = self.frame.eval(co</span><span class="s2">, </span><span class="s1">__exprinfo_expr=operand_result)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_BinOp(self</span><span class="s2">, </span><span class="s1">binop):</span>
+        <span class="s1">left_explanation</span><span class="s2">, </span><span class="s1">left_result = self.visit(binop.left)</span>
+        <span class="s1">right_explanation</span><span class="s2">, </span><span class="s1">right_result = self.visit(binop.right)</span>
+        <span class="s1">symbol = operator_map[binop.op.__class__]</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;(%s %s %s)&quot; </span><span class="s1">% (left_explanation</span><span class="s2">, </span><span class="s1">symbol</span><span class="s2">,</span>
+                                      <span class="s1">right_explanation)</span>
+        <span class="s1">source = </span><span class="s3">&quot;__exprinfo_left %s __exprinfo_right&quot; </span><span class="s1">% (symbol</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">result = self.frame.eval(co</span><span class="s2">, </span><span class="s1">__exprinfo_left=left_result</span><span class="s2">,</span>
+                                     <span class="s1">__exprinfo_right=right_result)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_Call(self</span><span class="s2">, </span><span class="s1">call):</span>
+        <span class="s1">func_explanation</span><span class="s2">, </span><span class="s1">func = self.visit(call.func)</span>
+        <span class="s1">arg_explanations = []</span>
+        <span class="s1">ns = {</span><span class="s3">&quot;__exprinfo_func&quot; </span><span class="s1">: func}</span>
+        <span class="s1">arguments = []</span>
+        <span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">call.args:</span>
+            <span class="s1">arg_explanation</span><span class="s2">, </span><span class="s1">arg_result = self.visit(arg)</span>
+            <span class="s1">arg_name = </span><span class="s3">&quot;__exprinfo_%s&quot; </span><span class="s1">% (len(ns)</span><span class="s2">,</span><span class="s1">)</span>
+            <span class="s1">ns[arg_name] = arg_result</span>
+            <span class="s1">arguments.append(arg_name)</span>
+            <span class="s1">arg_explanations.append(arg_explanation)</span>
+        <span class="s2">for </span><span class="s1">keyword </span><span class="s2">in </span><span class="s1">call.keywords:</span>
+            <span class="s1">arg_explanation</span><span class="s2">, </span><span class="s1">arg_result = self.visit(keyword.value)</span>
+            <span class="s1">arg_name = </span><span class="s3">&quot;__exprinfo_%s&quot; </span><span class="s1">% (len(ns)</span><span class="s2">,</span><span class="s1">)</span>
+            <span class="s1">ns[arg_name] = arg_result</span>
+            <span class="s1">keyword_source = </span><span class="s3">&quot;%s=%%s&quot; </span><span class="s1">% (keyword.arg)</span>
+            <span class="s1">arguments.append(keyword_source % (arg_name</span><span class="s2">,</span><span class="s1">))</span>
+            <span class="s1">arg_explanations.append(keyword_source % (arg_explanation</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">if </span><span class="s1">call.starargs:</span>
+            <span class="s1">arg_explanation</span><span class="s2">, </span><span class="s1">arg_result = self.visit(call.starargs)</span>
+            <span class="s1">arg_name = </span><span class="s3">&quot;__exprinfo_star&quot;</span>
+            <span class="s1">ns[arg_name] = arg_result</span>
+            <span class="s1">arguments.append(</span><span class="s3">&quot;*%s&quot; </span><span class="s1">% (arg_name</span><span class="s2">,</span><span class="s1">))</span>
+            <span class="s1">arg_explanations.append(</span><span class="s3">&quot;*%s&quot; </span><span class="s1">% (arg_explanation</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s2">if </span><span class="s1">call.kwargs:</span>
+            <span class="s1">arg_explanation</span><span class="s2">, </span><span class="s1">arg_result = self.visit(call.kwargs)</span>
+            <span class="s1">arg_name = </span><span class="s3">&quot;__exprinfo_kwds&quot;</span>
+            <span class="s1">ns[arg_name] = arg_result</span>
+            <span class="s1">arguments.append(</span><span class="s3">&quot;**%s&quot; </span><span class="s1">% (arg_name</span><span class="s2">,</span><span class="s1">))</span>
+            <span class="s1">arg_explanations.append(</span><span class="s3">&quot;**%s&quot; </span><span class="s1">% (arg_explanation</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s1">args_explained = </span><span class="s3">&quot;, &quot;</span><span class="s1">.join(arg_explanations)</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;%s(%s)&quot; </span><span class="s1">% (func_explanation</span><span class="s2">, </span><span class="s1">args_explained)</span>
+        <span class="s1">args = </span><span class="s3">&quot;, &quot;</span><span class="s1">.join(arguments)</span>
+        <span class="s1">source = </span><span class="s3">&quot;__exprinfo_func(%s)&quot; </span><span class="s1">% (args</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">result = self.frame.eval(co</span><span class="s2">, </span><span class="s1">**ns)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s1">pattern = </span><span class="s3">&quot;%s</span><span class="s2">\n</span><span class="s3">{%s = %s</span><span class="s2">\n</span><span class="s3">}&quot;</span>
+        <span class="s1">rep = self.frame.repr(result)</span>
+        <span class="s1">explanation = pattern % (rep</span><span class="s2">, </span><span class="s1">rep</span><span class="s2">, </span><span class="s1">explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">_is_builtin_name(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">pattern = </span><span class="s3">&quot;%r not in globals() and %r not in locals()&quot;</span>
+        <span class="s1">source = pattern % (name.id</span><span class="s2">, </span><span class="s1">name.id)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">self.frame.eval(co)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">return False</span>
+
+    <span class="s2">def </span><span class="s1">visit_Attribute(self</span><span class="s2">, </span><span class="s1">attr):</span>
+        <span class="s2">if not </span><span class="s1">isinstance(attr.ctx</span><span class="s2">, </span><span class="s1">ast.Load):</span>
+            <span class="s2">return </span><span class="s1">self.generic_visit(attr)</span>
+        <span class="s1">source_explanation</span><span class="s2">, </span><span class="s1">source_result = self.visit(attr.value)</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;%s.%s&quot; </span><span class="s1">% (source_explanation</span><span class="s2">, </span><span class="s1">attr.attr)</span>
+        <span class="s1">source = </span><span class="s3">&quot;__exprinfo_expr.%s&quot; </span><span class="s1">% (attr.attr</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">result = self.frame.eval(co</span><span class="s2">, </span><span class="s1">__exprinfo_expr=source_result)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;%s</span><span class="s2">\n</span><span class="s3">{%s = %s.%s</span><span class="s2">\n</span><span class="s3">}&quot; </span><span class="s1">% (self.frame.repr(result)</span><span class="s2">,</span>
+                                              <span class="s1">self.frame.repr(result)</span><span class="s2">,</span>
+                                              <span class="s1">source_explanation</span><span class="s2">, </span><span class="s1">attr.attr)</span>
+        <span class="s5"># Check if the attr is from an instance.</span>
+        <span class="s1">source = </span><span class="s3">&quot;%r in getattr(__exprinfo_expr, '__dict__', {})&quot;</span>
+        <span class="s1">source = source % (attr.attr</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">co = self._compile(source)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">from_instance = self.frame.eval(co</span><span class="s2">, </span><span class="s1">__exprinfo_expr=source_result)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s1">from_instance = </span><span class="s2">True</span>
+        <span class="s2">if </span><span class="s1">from_instance:</span>
+            <span class="s1">rep = self.frame.repr(result)</span>
+            <span class="s1">pattern = </span><span class="s3">&quot;%s</span><span class="s2">\n</span><span class="s3">{%s = %s</span><span class="s2">\n</span><span class="s3">}&quot;</span>
+            <span class="s1">explanation = pattern % (rep</span><span class="s2">, </span><span class="s1">rep</span><span class="s2">, </span><span class="s1">explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">result</span>
+
+    <span class="s2">def </span><span class="s1">visit_Assert(self</span><span class="s2">, </span><span class="s1">assrt):</span>
+        <span class="s1">test_explanation</span><span class="s2">, </span><span class="s1">test_result = self.visit(assrt.test)</span>
+        <span class="s2">if </span><span class="s1">test_explanation.startswith(</span><span class="s3">&quot;False</span><span class="s2">\n</span><span class="s3">{False =&quot;</span><span class="s1">) </span><span class="s2">and </span><span class="s1">\</span>
+                <span class="s1">test_explanation.endswith(</span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">):</span>
+            <span class="s1">test_explanation = test_explanation[</span><span class="s4">15</span><span class="s1">:-</span><span class="s4">2</span><span class="s1">]</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;assert %s&quot; </span><span class="s1">% (test_explanation</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s2">if not </span><span class="s1">test_result:</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s2">raise </span><span class="s1">BuiltinAssertionError</span>
+            <span class="s2">except </span><span class="s1">Exception:</span>
+                <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">test_result</span>
+
+    <span class="s2">def </span><span class="s1">visit_Assign(self</span><span class="s2">, </span><span class="s1">assign):</span>
+        <span class="s1">value_explanation</span><span class="s2">, </span><span class="s1">value_result = self.visit(assign.value)</span>
+        <span class="s1">explanation = </span><span class="s3">&quot;... = %s&quot; </span><span class="s1">% (value_explanation</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">name = ast.Name(</span><span class="s3">&quot;__exprinfo_expr&quot;</span><span class="s2">, </span><span class="s1">ast.Load()</span><span class="s2">,</span>
+                        <span class="s1">lineno=assign.value.lineno</span><span class="s2">,</span>
+                        <span class="s1">col_offset=assign.value.col_offset)</span>
+        <span class="s1">new_assign = ast.Assign(assign.targets</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">lineno=assign.lineno</span><span class="s2">,</span>
+                                <span class="s1">col_offset=assign.col_offset)</span>
+        <span class="s1">mod = ast.Module([new_assign])</span>
+        <span class="s1">co = self._compile(mod</span><span class="s2">, </span><span class="s3">&quot;exec&quot;</span><span class="s1">)</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">self.frame.exec_(co</span><span class="s2">, </span><span class="s1">__exprinfo_expr=value_result)</span>
+        <span class="s2">except </span><span class="s1">Exception:</span>
+            <span class="s2">raise </span><span class="s1">Failure(explanation)</span>
+        <span class="s2">return </span><span class="s1">explanation</span><span class="s2">, </span><span class="s1">value_result</span>
+</pre>
+</body>
+</html>
