@@ -17,7 +17,7 @@ def analyse_same_periodicity(db, period):
     return names
 
 
-def analyse_longest_streaks(db, name):
+def analyse_longest_streaks_per_habit(db, name):
     data = get_habit_data(db, name)
     longest_streak = 0
     for habit in data:
@@ -39,3 +39,14 @@ def analyse_longest_streak_overall(db):
     print("The longest streak of all times is " + str(longest_streak) + " for the habit '" + winner + "'")
 
 
+def analyse_most_struggle(db):
+    names = get_habit_names(db)
+    most_struggle = 0
+    loser = None
+    for name in names:
+        data = get_habit_data(db, name)
+        for habit in data:
+            if int(habit[5]) > most_struggle:
+                most_struggle = int(habit[5])
+                loser = habit[0]
+    print("The habit you struggled the most with " + str(most_struggle) + " missed check-offs is: '" + loser + "'")

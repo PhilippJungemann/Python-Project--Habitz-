@@ -1,8 +1,8 @@
 import questionary
 from db import get_db, check_off_habit, get_habit_names, get_habit_periodicity, delete_habit
 from habit import Habit
-from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks, \
-    analyse_longest_streak_overall
+from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks_per_habit, \
+    analyse_longest_streak_overall, analyse_most_struggle
 from tracker import track_all_habitz
 from reminder import reminder
 
@@ -92,7 +92,7 @@ def cli():
             elif selected == "Make a list of the longest streaks of all my habits!":
                 names_list = get_habit_names(db)
                 for name in names_list:
-                    analyse_longest_streaks(db, name)
+                    analyse_longest_streaks_per_habit(db, name)
                 continue
             elif selected == "Show the longest streak for a particular habit!":
                 names = get_habit_names(db)
@@ -100,13 +100,14 @@ def cli():
                     "To which habit should the longest streak be displayed?",
                     choices=names
                 ).ask()
-                analyse_longest_streaks(db, name)
+                analyse_longest_streaks_per_habit(db, name)
                 continue
             elif selected == "What is my longest streak of all times?":
                 analyse_longest_streak_overall(db)
                 continue
             elif selected == "Which habit do I struggle with the most?":
-                print("stuff")
+                analyse_most_struggle(db)
+                continue
             elif selected == "Get back to the main menu":
                 continue
             else:
@@ -129,7 +130,7 @@ def cli():
         # doublecheck here if the habit really should be deleted, because that will be permanent
 
         else:
-            print("Bye Habbi!")
+            print("Good bye!")
             stop = True
 
 
