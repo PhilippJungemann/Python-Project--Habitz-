@@ -20,7 +20,6 @@ def track_all_habitz(db, name):
         last_check_off = datetime.strptime(new[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%W')
         current_week = date.today().strftime("%W")
-        # year change
         diff = int(current_week) - int(str(last_check_off))
         reset_streak(db, diff, new, name)
 
@@ -28,7 +27,6 @@ def track_all_habitz(db, name):
         last_check_off = datetime.strptime(new[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%m')
         current_month = date.today().strftime("%m")
-        # year change
         diff = int(current_month) - int(str(last_check_off))
         reset_streak(db, diff, new, name)
 
@@ -49,5 +47,4 @@ def reset_streak(db, diff, new, name):
         db.commit()
         print("So sorry to say, but you lost your streak in " + name + ". Don't worry keep up!")
     else:
-        print("this works!")
         return
