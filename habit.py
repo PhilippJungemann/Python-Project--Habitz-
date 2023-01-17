@@ -1,6 +1,6 @@
 from db import add_habit, create_tables
 from datetime import date
-#
+
 
 class Habit:
 
@@ -22,4 +22,3 @@ class Habit:
         create_tables(db)
         add_habit(db, self.name, self.description, self.interval, self.creation_date, self.date_of_completion,
                   self.count_streak_loss, self.count_longest_streak)
-

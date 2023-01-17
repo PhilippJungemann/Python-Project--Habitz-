@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import date, datetime
 
-#
+
 def get_db(name="main.db"):
     db = sqlite3.connect(name)
     create_tables(db)
@@ -28,10 +28,9 @@ def add_habit(db, name, description, interval, creation_date, date_of_completion
 
 def check_off_habit(db, name):
     cur = db.cursor()
-#    cur.execute("SELECT * FROM habitz WHERE name = (?) LIMIT 1", (name,))
     cur.execute("SELECT * FROM habitz WHERE name = ?", (name,))
     habit_list = cur.fetchall()
-    # Convert the tuple into a list
+    # Take the last tuple and convert it into a list
     completed_habit = habit_list.pop()
     completed_habit = list(completed_habit)
     if completed_habit[4] is None:
@@ -51,11 +50,7 @@ def check_off_habit(db, name):
             print("You have already done the habit in the defined period. Great, you are very motivated!")
         else:
             # Insert the current date as the date of completion of the habit
-            completed_habit[4] = str(date.today())
-            completed_habit[6] += 1
-            cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
-            db.commit()
-            print("Your habit has been successfully checked off. Congratulations, you're doing great!")
+            insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "weekly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%W')
@@ -65,11 +60,7 @@ def check_off_habit(db, name):
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
             # Insert the current date as the date of completion of the habit
-            completed_habit[4] = str(date.today())
-            completed_habit[6] += 1
-            cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
-            db.commit()
-            print("Your habit has been successfully checked off. Congratulations, you're doing great!")
+            insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "monthly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%m')
@@ -79,11 +70,7 @@ def check_off_habit(db, name):
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
             # Insert the current date as the date of completion of the habit
-            completed_habit[4] = str(date.today())
-            completed_habit[6] += 1
-            cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
-            db.commit()
-            print("Your habit has been successfully checked off. Congratulations, you're doing great!")
+            insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "yearly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%Y')
@@ -93,25 +80,22 @@ def check_off_habit(db, name):
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
             # Insert the current date as the date of completion of the habit
-            completed_habit[4] = str(date.today())
-            completed_habit[6] += 1
-            cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
-            db.commit()
-            print("Your habit has been successfully checked off. Congratulations, you're doing great!")
+            insert_date_of_completion(db, completed_habit, cur)
+
+
+def insert_date_of_completion(db, completed_habit, cur):
+    completed_habit[4] = str(date.today())
+    completed_habit[6] += 1
+    cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
+    db.commit()
+    print("Your habit has been successfully checked off. Congratulations, you're doing great!")
 
 
 def get_habit_names(db):
     cur = db.cursor()
     cur.execute("SELECT DISTINCT name FROM habitz")
     names = cur.fetchall()
-    names = str(names)
-    names = names.replace("(", "")
-    names = names.replace(",)", "")
-    names = names.replace("[", "")
-    names = names.replace(" '", "")
-    names = names.replace("' ", "")
-    names = names.replace("'", "")
-    names = names.replace("]", "").split(",")
+    names = [x[0] for x in names]
     return names
 
 
@@ -119,15 +103,7 @@ def get_habit_periodicity(db):
     cur = db.cursor()
     cur.execute("SELECT DISTINCT interval FROM habitz")
     periodicity = cur.fetchall()
-    periodicity = str(periodicity)
-    periodicity = periodicity.replace("(", "")
-    periodicity = periodicity.replace(",)", "")
-    periodicity = periodicity.replace("[", "")
-    periodicity = periodicity.replace(" ", "")
-    periodicity = periodicity.replace(" '", "")
-    periodicity = periodicity.replace("' ", "")
-    periodicity = periodicity.replace("'", "")
-    periodicity = periodicity.replace("]", "").split(",")
+    periodicity = [x[0] for x in periodicity]
     return periodicity
 
 
