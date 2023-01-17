@@ -16,6 +16,7 @@ def track_all_habitz(db, name):
     if new[2] == "daily":
 
 # the following can be a function for all timerangesgggg
+#kdsjfljflskjflsfj
         if diff > 1:
             new[5] += 1
             new[6] = 0
