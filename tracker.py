@@ -1,6 +1,6 @@
 from db import get_habit_data
 from datetime import date, datetime
-#
+
 
 # tracker
 def track_all_habitz(db, name):
@@ -14,6 +14,8 @@ def track_all_habitz(db, name):
     diff = today - last_check_off
     diff = int(diff.days)
     if new[2] == "daily":
+
+# the following can be a function for all timerangesgggg
         if diff > 1:
             new[5] += 1
             new[6] = 0
