@@ -1,7 +1,8 @@
 import questionary
 from db import get_db, check_off_habit, get_habit_names, get_habit_periodicity, delete_habit
 from habit import Habit
-from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks
+from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks, \
+    analyse_longest_streak_overall
 from tracker import track_all_habitz
 from reminder import reminder
 
@@ -102,7 +103,8 @@ def cli():
                 analyse_longest_streaks(db, name)
                 continue
             elif selected == "What is my longest streak of all times?":
-                print("stuff")
+                analyse_longest_streak_overall(db)
+                continue
             elif selected == "Which habit do I struggle with the most?":
                 print("stuff")
             elif selected == "Get back to the main menu":

@@ -49,7 +49,7 @@ def check_off_habit(db, name):
         if diff == 0:
             print("You have already done the habit in the defined period. Great, you are very motivated!")
         else:
-            # Insert the current date as the date of completion of the habit
+            # Insert the current date as the date of completion of the habit and increment streak
             insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "weekly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
@@ -59,7 +59,7 @@ def check_off_habit(db, name):
         if diff == 0:
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
-            # Insert the current date as the date of completion of the habit
+            # Insert the current date as the date of completion of the habit and increment streak
             insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "monthly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
@@ -69,7 +69,7 @@ def check_off_habit(db, name):
         if diff == 0:
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
-            # Insert the current date as the date of completion of the habit
+            # Insert the current date as the date of completion of the habit and increment streak
             insert_date_of_completion(db, completed_habit, cur)
     if completed_habit[2] == "yearly":
         last_check_off = datetime.strptime(completed_habit[4], '%Y-%m-%d').date()
@@ -79,7 +79,7 @@ def check_off_habit(db, name):
         if diff == 0:
             print("You have already done the habit in the desired period. Great, you are very motivated!")
         else:
-            # Insert the current date as the date of completion of the habit
+            # Insert the current date as the date of completion of the habit and increment streak
             insert_date_of_completion(db, completed_habit, cur)
 
 

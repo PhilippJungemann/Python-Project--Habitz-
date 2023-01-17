@@ -24,3 +24,18 @@ def analyse_longest_streaks(db, name):
         if int(habit[6]) > longest_streak:
             longest_streak = int(habit[6])
     print("The longest streak for '" + name + "' is " + str(longest_streak))
+
+
+def analyse_longest_streak_overall(db):
+    names = get_habit_names(db)
+    longest_streak = 0
+    winner = None
+    for name in names:
+        data = get_habit_data(db, name)
+        for habit in data:
+            if int(habit[6]) > longest_streak:
+                longest_streak = int(habit[6])
+                winner = habit[0]
+    print("The longest streak of all times is " + str(longest_streak) + " for the habit '" + winner + "'")
+
+
