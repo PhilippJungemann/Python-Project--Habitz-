@@ -45,6 +45,6 @@ def reset_streak(db, diff, new, name):
         cur = db.cursor()
         cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", new)
         db.commit()
-        print("So sorry to say, but you lost your streak in " + name + ". Don't worry keep up!")
+        print("So sorry to say, but you lost your streak in " + name + ". Don't worry and keep up!")
     else:
         return
