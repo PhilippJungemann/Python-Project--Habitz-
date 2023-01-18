@@ -11,10 +11,11 @@ from reminder import reminder
 def cli():
     # Getting connected to the database
     db = get_db()
-
+    # Tracking, if a check-off date is missed
     names_list = get_habit_names(db)
     for name in names_list:
         track_all_habitz(db, name)
+    # Reminding the user about to-dos
     for name in names_list:
         reminder(db, name)
 
@@ -48,7 +49,6 @@ def cli():
                     choices=["daily", "weekly", "monthly",
                              "yearly"]
                 ).ask()
-#                inter = questionary.text("Every how many days the habit should be checked off at the latest?").ask()
                 # The parameters are passed and the corresponding habit is stored in the database
                 habit = Habit(name, desc, inter)
                 habit.store(db)
@@ -66,7 +66,7 @@ def cli():
             check_off_habit(db, name)
 
             continue
-
+        # Shows the user the different analysis options
         elif choice == "Analyse my habits":
             selected = questionary.select(
                 "What do you want to analyse?",
@@ -76,24 +76,28 @@ def cli():
                          "What is my longest streak of all times?", "Which habit do I struggle with the most?",
                          "Get back to the main menu", "Exit Habitz"]
             ).ask()
+            # Listing of current habits
             if selected == "What are my current habits?":
                 names = analyse_habit_names(db)
                 print("Your current habits are: "+str(names))
                 continue
+            # Listing of current habits with the same periodicity
             elif selected == "Create a list of all habits with the same periodicity!":
                 periodicity = get_habit_periodicity(db)
                 period = questionary.select(
-                    "Please enter the desired periodicity in days!",
+                    "Please enter the desired periodicity!",
                     choices=periodicity
                 ).ask()
                 same_period = analyse_same_periodicity(db, period)
-                print("Your habits with a periodicity of " + period + " days are: " + str(same_period))
+                print("Your habits with a periodicity of a " + period + " period are: " + str(same_period))
                 continue
+            # Listing of current habits with the respective longest streak
             elif selected == "Make a list of the longest streaks of all my habits!":
                 names_list = get_habit_names(db)
                 for name in names_list:
                     analyse_longest_streaks_per_habit(db, name)
                 continue
+            # Longest streak for a particular habit
             elif selected == "Show the longest streak for a particular habit!":
                 names = get_habit_names(db)
                 name = questionary.select(
@@ -102,24 +106,27 @@ def cli():
                 ).ask()
                 analyse_longest_streaks_per_habit(db, name)
                 continue
+            # Longest streak overall
             elif selected == "What is my longest streak of all times?":
                 analyse_longest_streak_overall(db)
                 continue
+            # Most missed check-offs overall
             elif selected == "Which habit do I struggle with the most?":
                 analyse_most_struggle(db)
                 continue
+            # Option to get back to the main menu
             elif selected == "Get back to the main menu":
                 continue
             else:
                 stop = True
-
+        # Deleting a habit from the database
         if choice == "Delete a habit":
             names = get_habit_names(db)
             name = questionary.select(
                 "Which habit do you want to delete?",
                 choices=names
             ).ask()
-
+            # Doublecheck here if the habit really should be deleted, because that will be permanent
             confirmation = questionary.confirm("Are you sure that you want to delete '"+name+"' ?").ask()
             if confirmation:
                 delete_habit(db, name)
@@ -127,8 +134,7 @@ def cli():
             else:
                 continue
 
-        # doublecheck here if the habit really should be deleted, because that will be permanent
-
+        # If choice comes to "Exit Habitz", the while loop will be stopped
         else:
             print("Good bye!")
             stop = True
