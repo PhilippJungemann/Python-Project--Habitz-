@@ -2,6 +2,7 @@ import habit
 from db import check_off_habit, delete_habit, get_habit_data
 import sqlite3
 from datetime import date
+from analyse import analyse_habit_names
 
 
 def teardown_method():
@@ -104,12 +105,6 @@ def generate_test_data(db):
                                                              "2023-01-28", 0, 5,))
     db.commit()
 
-#        increment_counter(db, "test_counter", "2021-12-06")
-#        increment_counter(db, "test_counter", "2021-12-07")
-#
-#        increment_counter(db, "test_counter", "2021-12-09")
-#        increment_counter(db, "test_counter", "2021-12-10")
-
 
 def test_length_counter(name="Jogging",  db=get_test_db()):
     generate_test_data(db)
@@ -141,7 +136,8 @@ class Habit:
         self.count_longest_streak = 0
 
     def test_db_counter(self, name="Jogging", db=get_test_db()):
+        generate_test_data(db)
         habit.Habit.store(self, db)
         check_off_habit(db, name)
-        check_off_habit(db, name)
+        analyse_habit_names(db)
         delete_habit(db, name)
