@@ -1,16 +1,15 @@
 import habit
 from db import check_off_habit, delete_habit, get_habit_data
 import sqlite3
+from datetime import date
 
 
-def get_test_db(name="test.db"):
-    db = sqlite3.connect(name)
-    create_method(db)
-    return db
+def teardown_method():
+    import os
+    os.remove("test.db")
 
 
-#data = get_test_db()
-#cur = data.cursor()
+teardown_method()
 
 
 def create_method(db):
@@ -19,6 +18,16 @@ def create_method(db):
     cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
     name TEXT, description TEXT, interval INT, creation_date TEXT, date_of_completion TEXT, 
     count_streak_loss INT, count_longest_streak INT)""")
+
+
+def get_test_db(name="test.db"):
+    db = sqlite3.connect(name)
+    create_method(db)
+    return db
+
+
+# data = get_test_db()
+# cur = data.cursor()
 
 
 def generate_test_data(db):
@@ -102,15 +111,7 @@ def generate_test_data(db):
 #        increment_counter(db, "test_counter", "2021-12-10")
 
 
-def test_db_counter(self, db, name):
-    generate_test_data(db)
-    habit.Habit.store(self, db)
-    check_off_habit(db, name)
-    check_off_habit(db, name)
-    delete_habit(db, name)
-
-
-def test_length_counter(db, name):
+def test_length_counter(name="Jogging",  db=get_test_db()):
     generate_test_data(db)
     data = get_habit_data(db, name="Jogging")
     assert len(data) == 29
@@ -119,6 +120,28 @@ def test_length_counter(db, name):
     assert len(data) == 5
 
 
-def teardown_method():
-    import os
-    os.remove("test.db")
+class Habit:
+
+    def __init__(self, name: str, desc: str, inter: str):
+        """Counter class, to count events
+        :param self.name: the name of the counter
+        :param self.description: the description of the counter
+        :param self.interval: the interval that must not be broken in order not to lose a streak
+        :param self.creation_date: the date of the habit creation
+        :param self.date_of_completion: here the date of completion will be inserted
+        :param self.count_missed_check_off: this will be incremented if a check-off interval is missed
+        :param self.count_missed_check_off: this will be incremented if a check-off is done in time
+        """
+        self.name = name
+        self.description = desc
+        self.interval = inter
+        self.creation_date = date.today()
+        self.date_of_completion = None
+        self.count_missed_check_off = 0
+        self.count_longest_streak = 0
+
+    def test_db_counter(self, name="Jogging", db=get_test_db()):
+        habit.Habit.store(self, db)
+        check_off_habit(db, name)
+        check_off_habit(db, name)
+        delete_habit(db, name)
