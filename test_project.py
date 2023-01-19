@@ -9,6 +9,10 @@ def get_test_db(name="test.db"):
     return db
 
 
+#data = get_test_db()
+#cur = data.cursor()
+
+
 def create_method(db):
     cur = db.cursor()
 
@@ -98,20 +102,20 @@ def generate_test_data(db):
 #        increment_counter(db, "test_counter", "2021-12-10")
 
 
-def test_db_counter(db, name):
+def test_db_counter(self, db, name):
     generate_test_data(db)
-    habit.Habit.store(db)
+    habit.Habit.store(self, db)
     check_off_habit(db, name)
     check_off_habit(db, name)
     delete_habit(db, name)
 
 
-def test_length_counter(db):
+def test_length_counter(db, name):
     generate_test_data(db)
-    data = get_habit_data(db, "Jogging")
+    data = get_habit_data(db, name="Jogging")
     assert len(data) == 29
 
-    data = get_habit_data(db, "Swimming")
+    data = get_habit_data(db, name="Swimming")
     assert len(data) == 5
 
 
