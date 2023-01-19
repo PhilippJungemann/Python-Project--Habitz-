@@ -1,21 +1,24 @@
-import pytest
 import habit
-from db import get_db, check_off_habit, delete_habit, get_habit_data
+from db import check_off_habit, delete_habit, get_habit_data
+import sqlite3
 
 
-db = get_db("test.db")
-name = "Jogging"
-cur = db.cursor()
+def get_test_db(name="test.db"):
+    db = sqlite3.connect(name)
+    create_method(db)
+    return db
 
 
-def create_method():
+def create_method(db):
+    cur = db.cursor()
 
     cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
     name TEXT, description TEXT, interval INT, creation_date TEXT, date_of_completion TEXT, 
     count_streak_loss INT, count_longest_streak INT)""")
 
 
-def generate_test_data():
+def generate_test_data(db):
+    cur = db.cursor()
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
                                                              "2023-01-01", 0, 1,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
@@ -95,15 +98,16 @@ def generate_test_data():
 #        increment_counter(db, "test_counter", "2021-12-10")
 
 
-def test_db_counter(self):
-    generate_test_data()
-    habit.Habit.store(self, db)
+def test_db_counter(db, name):
+    generate_test_data(db)
+    habit.Habit.store(db)
     check_off_habit(db, name)
     check_off_habit(db, name)
     delete_habit(db, name)
 
 
-def test_length_counter():
+def test_length_counter(db):
+    generate_test_data(db)
     data = get_habit_data(db, "Jogging")
     assert len(data) == 29
 
@@ -114,7 +118,3 @@ def test_length_counter():
 def teardown_method():
     import os
     os.remove("test.db")
-
-
-
-
