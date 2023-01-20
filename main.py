@@ -24,7 +24,7 @@ def cli():
     while not stop:
         # Giving the user access to the different options to act in the app
         choice = questionary.select(
-            "What do you want to do?",
+            "Hello! What do you want to do?",
             choices=["Create a new habit", "Mark a habit as completed", "Analyse my habits",
                      "Delete a habit", "Exit Habitz"]
         ).ask()

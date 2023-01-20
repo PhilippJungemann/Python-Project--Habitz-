@@ -13,7 +13,7 @@ class Habit:
         :param self.creation_date: the date of the habit creation
         :param self.date_of_completion: here the date of completion will be inserted
         :param self.count_missed_check_off: this will be incremented if a check-off interval is missed
-        :param self.count_missed_check_off: this will be incremented if a check-off is done in time
+        :param self.count_longest_streak: this will be incremented if a check-off is done in time
         """
         self.name = name
         self.description = desc
