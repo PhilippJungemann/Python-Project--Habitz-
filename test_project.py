@@ -1,12 +1,15 @@
+import os
 import habit
 from db import check_off_habit, delete_habit, get_habit_data
 import sqlite3
 from datetime import date
-from analyse import analyse_habit_names
+from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks_per_habit, \
+    analyse_longest_streak_overall, analyse_most_struggle
+from tracker import track_all_habitz
+from reminder import reminder
 
 
 def teardown_method():
-    import os
     os.remove("test.db")
 
 
@@ -140,4 +143,10 @@ class Habit:
         habit.Habit.store(self, db)
         check_off_habit(db, name)
         analyse_habit_names(db)
+        analyse_same_periodicity(db, period="daily")
+        analyse_longest_streaks_per_habit(db, name)
+        analyse_longest_streak_overall(db)
+        analyse_most_struggle(db)
+        track_all_habitz(db, name)
+        reminder(db, name)
         delete_habit(db, name)
