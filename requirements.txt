@@ -1,4 +1,4 @@
-# For communication with the user, the "questionary" module must be installed. All other modules like "os" or "datetime" are already part of Python.
+# For communication with the user, the "questionary" module must be installed. All other modules like "os", "sqlite3" or "datetime" are already part of Python.
 questionary
 
 
