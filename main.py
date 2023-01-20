@@ -24,7 +24,7 @@ def cli():
     while not stop:
         # Giving the user access to the different options to act in the app
         choice = questionary.select(
-            "Hello! What do you want to do?",
+            "Hello! What do you wish to do?",
             choices=["Create a new habit", "Mark a habit as completed", "Analyse my habits",
                      "Delete a habit", "Exit Habitz"]
         ).ask()
@@ -69,7 +69,7 @@ def cli():
         # Shows the user the different analysis options
         elif choice == "Analyse my habits":
             selected = questionary.select(
-                "What do you want to analyse?",
+                "What would you like to analyse?",
                 choices=["What are my current habits?", "Create a list of all habits with the same periodicity!",
                          "Make a list of the longest streaks of all my habits!",
                          "Show the longest streak for a particular habit!",
