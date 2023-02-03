@@ -1,7 +1,7 @@
 # Python-Project "Habitz"
- Habit Tracker App
+# Habit Tracker App
  
- # Table of content
+ ## Table of content
  1. Introduction
  2. Communication from user to Habitz
  3. Communication from Habitz to user
