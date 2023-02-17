@@ -1,15 +1,7 @@
 import os
-import habit
-from db import check_off_habit, delete_habit, get_habit_data, get_habit_names
 import sqlite3
-from datetime import date
-from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks_per_habit, \
-    analyse_longest_streak_overall, analyse_most_struggle
-from tracker import track_all_habitz
-from reminder import reminder
-
-# data = get_test_db()
-# cur = data.cursor()
+from db import get_habit_data
+from analyse import analyse_habit_names, analyse_longest_streak_overall, analyse_most_struggle
 
 
 def teardown_method():
@@ -120,54 +112,7 @@ def test_habitz(name="Jogging",  db=get_test_db()):
     assert habit_names == "Jogging, Swimming"
     # testing if the function analyse_longest_streak_overall is working correctly
     habit_with_longest_streak = analyse_longest_streak_overall(db)
-    assert habit_with_longest_streak == "Jogging"
+    assert habit_with_longest_streak == "The longest streak of all time is 23 for the habit 'Jogging'"
+    # testing if the function analyse_most_struggle is working correctly
     habit_with_most_struggle = analyse_most_struggle(db)
-    assert habit_with_most_struggle == "Jogging"
-
-
-
-
-
-#    def test_db_counter(self, name="Jogging", db=get_test_db()):
-#        generate_test_data(db)
-#        habit.Habit.store(self, db)
-#       check_off_habit(db, name)
-#        analyse_habit_names(db)
-#        analyse_same_periodicity(db, period="daily")
-#        analyse_longest_streaks_per_habit(db, name)
-#        analyse_longest_streak_overall(db)
-#        analyse_most_struggle(db)
-#       track_all_habitz(db, name)
-#        reminder(db, name)
-#        delete_habit(db, name)
-
-
-
-
-
-
-
-
-
-
-
-#class Habit:
-
-#    def __init__(self, name: str, desc: str, inter: str):
-#        """Counter class, to count events
-#        :param self.name: the name of the habit
-#        :param self.description: the description of the habit
-#        :param self.interval: the interval that must not be broken in order not to lose a streak
-#        :param self.creation_date: the date of the habit creation
-#        :param self.date_of_completion: here the date of completion will be inserted
-#        :param self.count_missed_check_off: this will be incremented if a check-off interval is missed
-#        :param self.count_missed_check_off: this will be incremented if a check-off is done in time
-#        """
-#        self.name = name
-#        self.description = desc
-#        self.interval = inter
-#        self.creation_date = date.today()
-#        self.date_of_completion = None
-#        self.count_missed_check_off = 0
-#        self.count_longest_streak = 0
-
+    assert habit_with_most_struggle == "The habit you struggled the most with 1 missed check-offs is: 'Jogging'"

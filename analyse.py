@@ -54,9 +54,10 @@ def analyse_longest_streak_overall(db):
             if int(habit[6]) > longest_streak:
                 longest_streak = int(habit[6])
                 winner = habit[0]
-    print("The longest streak of all times is " + str(longest_streak) + " for the habit '" + winner + "'")
-    # the returning of the 'winner' is only done for the module 'test_project'
-    return winner
+    print("The longest streak of all time is " + str(longest_streak) + " for the habit '" + winner + "'")
+    # the returning of the "The longest streak of all time is " + str(longest_streak) + " for the habit '" + winner +
+    # "'" is only done for the module 'test_project'
+    return "The longest streak of all time is " + str(longest_streak) + " for the habit '" + winner + "'"
 
 
 def analyse_most_struggle(db):
@@ -75,5 +76,6 @@ def analyse_most_struggle(db):
                 most_struggle = int(habit[5])
                 loser = habit[0]
     print("The habit you struggled the most with " + str(most_struggle) + " missed check-offs is: '" + loser + "'")
-    # the returning of the 'winner' is only done for the module 'test_project'
-    return loser
+    # the returning of the "The habit you struggled the most with " + str(most_struggle) + " missed check-offs is: '"
+    # + loser + "'" is only done for the module 'test_project'
+    return "The habit you struggled the most with " + str(most_struggle) + " missed check-offs is: '" + loser + "'"
