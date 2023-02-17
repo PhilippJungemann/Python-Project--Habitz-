@@ -8,6 +8,9 @@ from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longe
 from tracker import track_all_habitz
 from reminder import reminder
 
+# data = get_test_db()
+# cur = data.cursor()
+
 
 def teardown_method():
     os.remove("test.db")
@@ -16,22 +19,18 @@ def teardown_method():
 teardown_method()
 
 
-def create_method(db):
-    cur = db.cursor()
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
-    name TEXT, description TEXT, interval INT, creation_date TEXT, date_of_completion TEXT, 
-    count_streak_loss INT, count_longest_streak INT)""")
-
-
 def get_test_db(name="test.db"):
     db = sqlite3.connect(name)
     create_method(db)
     return db
 
 
-# data = get_test_db()
-# cur = data.cursor()
+def create_method(db):
+    cur = db.cursor()
+
+    cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
+    name TEXT, description TEXT, interval INT, creation_date TEXT, date_of_completion TEXT, 
+    count_streak_loss INT, count_longest_streak INT)""")
 
 
 def generate_test_data(db):
@@ -118,6 +117,29 @@ def test_length_counter(name="Jogging",  db=get_test_db()):
     assert len(data) == 5
 
 
+#    def test_db_counter(self, name="Jogging", db=get_test_db()):
+#        generate_test_data(db)
+#        habit.Habit.store(self, db)
+#       check_off_habit(db, name)
+#        analyse_habit_names(db)
+#        analyse_same_periodicity(db, period="daily")
+#        analyse_longest_streaks_per_habit(db, name)
+#        analyse_longest_streak_overall(db)
+#        analyse_most_struggle(db)
+#       track_all_habitz(db, name)
+#        reminder(db, name)
+#        delete_habit(db, name)
+
+
+
+
+
+
+
+
+
+
+
 #class Habit:
 
 #    def __init__(self, name: str, desc: str, inter: str):
@@ -138,15 +160,3 @@ def test_length_counter(name="Jogging",  db=get_test_db()):
 #        self.count_missed_check_off = 0
 #        self.count_longest_streak = 0
 
-#    def test_db_counter(self, name="Jogging", db=get_test_db()):
-#        generate_test_data(db)
-#        habit.Habit.store(self, db)
-#       check_off_habit(db, name)
-#        analyse_habit_names(db)
-#        analyse_same_periodicity(db, period="daily")
-#        analyse_longest_streaks_per_habit(db, name)
-#        analyse_longest_streak_overall(db)
-#        analyse_most_struggle(db)
-#       track_all_habitz(db, name)
-#        reminder(db, name)
-#        delete_habit(db, name)
