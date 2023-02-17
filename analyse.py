@@ -45,7 +45,7 @@ def analyse_longest_streak_overall(db):
      """
     names = get_habit_names(db)
     longest_streak = 0
-    winner = "Wirsing"
+    winner = None
     # First looping through the names
     for name in names:
         data = get_habit_data(db, name)
@@ -55,6 +55,8 @@ def analyse_longest_streak_overall(db):
                 longest_streak = int(habit[6])
                 winner = habit[0]
     print("The longest streak of all times is " + str(longest_streak) + " for the habit '" + winner + "'")
+    # the returning of the 'winner' is only done for the module 'test_project'
+    return winner
 
 
 def analyse_most_struggle(db):
@@ -73,3 +75,5 @@ def analyse_most_struggle(db):
                 most_struggle = int(habit[5])
                 loser = habit[0]
     print("The habit you struggled the most with " + str(most_struggle) + " missed check-offs is: '" + loser + "'")
+    # the returning of the 'winner' is only done for the module 'test_project'
+    return loser

@@ -1,6 +1,6 @@
 import os
 import habit
-from db import check_off_habit, delete_habit, get_habit_data
+from db import check_off_habit, delete_habit, get_habit_data, get_habit_names
 import sqlite3
 from datetime import date
 from analyse import analyse_habit_names, analyse_same_periodicity, analyse_longest_streaks_per_habit, \
@@ -118,8 +118,11 @@ def test_habitz(name="Jogging",  db=get_test_db()):
     # testing if the function analyse_habit_names is working correctly
     habit_names = analyse_habit_names(db)
     assert habit_names == "Jogging, Swimming"
-    longest_streak = analyse_longest_streak_overall(db)
-    assert longest_streak == "The longest streak of all times is 23 for the habit 'Jogging'"
+    # testing if the function analyse_longest_streak_overall is working correctly
+    habit_with_longest_streak = analyse_longest_streak_overall(db)
+    assert habit_with_longest_streak == "Jogging"
+    habit_with_most_struggle = analyse_most_struggle(db)
+    assert habit_with_most_struggle == "Jogging"
 
 
 
