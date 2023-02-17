@@ -1,8 +1,10 @@
 from db import get_habit_data, get_habit_names
 
 
-# Getting habit names and convert them to a nice string
 def analyse_habit_names(db):
+    """analyse_habit_names function, to get habit names and convert them to a nice string
+    :param db: connection to the database
+     """
     all_habits = str(get_habit_names(db))
     all_habits = all_habits.replace("[", "")
     all_habits = all_habits.replace("'", "")
@@ -12,6 +14,10 @@ def analyse_habit_names(db):
 
 # Creating a list of habits with the same periodicity
 def analyse_same_periodicity(db, period):
+    """analyse_same_periodicity function, to create a list of habits with the same periodicity
+    :param db: connection to the database
+    :param period: period of the habit
+     """
     cur = db.cursor()
     cur.execute("SELECT DISTINCT name FROM habitz WHERE interval=?", (period,))
     names = cur.fetchall()
@@ -20,8 +26,11 @@ def analyse_same_periodicity(db, period):
     return names
 
 
-# Getting the longest streak per habit
 def analyse_longest_streaks_per_habit(db, name):
+    """analyse_longest_streaks_per_habit function, to get the longest streak per habit
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     data = get_habit_data(db, name)
     longest_streak = 0
     for habit in data:
@@ -30,8 +39,10 @@ def analyse_longest_streaks_per_habit(db, name):
     print("The longest streak for '" + name + "' is " + str(longest_streak))
 
 
-# Getting the longest streak overall
 def analyse_longest_streak_overall(db):
+    """analyse_longest_streak_overall function, to get the longest streak overall
+    :param db: connection to the database
+     """
     names = get_habit_names(db)
     longest_streak = 0
     winner = None
@@ -46,8 +57,10 @@ def analyse_longest_streak_overall(db):
     print("The longest streak of all times is " + str(longest_streak) + " for the habit '" + winner + "'")
 
 
-# Getting the habit with the biggest number of missed check-offs
 def analyse_most_struggle(db):
+    """analyse_most_struggle function, to get the habit with the biggest number of missed check-offs
+    :param db: connection to the database
+     """
     names = get_habit_names(db)
     most_struggle = 0
     loser = None

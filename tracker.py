@@ -2,8 +2,12 @@ from db import get_habit_data
 from datetime import date, datetime
 
 
-# tracker
 def track_all_habitz(db, name):
+    """track_all_habitz function, to track the current habits and, if necessary,
+    set the streak to zero if the habit has not been done in time
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     all_data = get_habit_data(db, name)
     last = all_data.pop()
     new = list(last)

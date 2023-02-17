@@ -2,8 +2,11 @@ from db import get_habit_data
 from datetime import date, datetime
 
 
-# Function for reminding the user about his current to-dos
 def reminder(db, name):
+    """reminder function, to remind the user about his current to-dos
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     all_data = get_habit_data(db, name)
     # getting the last element of the data and convert it to a list
     last = all_data.pop()
