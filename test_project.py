@@ -118,35 +118,35 @@ def test_length_counter(name="Jogging",  db=get_test_db()):
     assert len(data) == 5
 
 
-class Habit:
+#class Habit:
 
-    def __init__(self, name: str, desc: str, inter: str):
-        """Counter class, to count events
-        :param self.name: the name of the counter
-        :param self.description: the description of the counter
-        :param self.interval: the interval that must not be broken in order not to lose a streak
-        :param self.creation_date: the date of the habit creation
-        :param self.date_of_completion: here the date of completion will be inserted
-        :param self.count_missed_check_off: this will be incremented if a check-off interval is missed
-        :param self.count_missed_check_off: this will be incremented if a check-off is done in time
-        """
-        self.name = name
-        self.description = desc
-        self.interval = inter
-        self.creation_date = date.today()
-        self.date_of_completion = None
-        self.count_missed_check_off = 0
-        self.count_longest_streak = 0
+#    def __init__(self, name: str, desc: str, inter: str):
+#        """Counter class, to count events
+#        :param self.name: the name of the habit
+#        :param self.description: the description of the habit
+#        :param self.interval: the interval that must not be broken in order not to lose a streak
+#        :param self.creation_date: the date of the habit creation
+#        :param self.date_of_completion: here the date of completion will be inserted
+#        :param self.count_missed_check_off: this will be incremented if a check-off interval is missed
+#        :param self.count_missed_check_off: this will be incremented if a check-off is done in time
+#        """
+#        self.name = name
+#        self.description = desc
+#        self.interval = inter
+#        self.creation_date = date.today()
+#        self.date_of_completion = None
+#        self.count_missed_check_off = 0
+#        self.count_longest_streak = 0
 
-    def test_db_counter(self, name="Jogging", db=get_test_db()):
-        generate_test_data(db)
-        habit.Habit.store(self, db)
-        check_off_habit(db, name)
-        analyse_habit_names(db)
-        analyse_same_periodicity(db, period="daily")
-        analyse_longest_streaks_per_habit(db, name)
-        analyse_longest_streak_overall(db)
-        analyse_most_struggle(db)
-        track_all_habitz(db, name)
-        reminder(db, name)
-        delete_habit(db, name)
+#    def test_db_counter(self, name="Jogging", db=get_test_db()):
+#        generate_test_data(db)
+#        habit.Habit.store(self, db)
+#       check_off_habit(db, name)
+#        analyse_habit_names(db)
+#        analyse_same_periodicity(db, period="daily")
+#        analyse_longest_streaks_per_habit(db, name)
+#        analyse_longest_streak_overall(db)
+#        analyse_most_struggle(db)
+#       track_all_habitz(db, name)
+#        reminder(db, name)
+#        delete_habit(db, name)
