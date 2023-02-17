@@ -82,17 +82,17 @@ def generate_test_data(db):
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
                                                              "2023-01-23", 0, 23,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-24", 0, 24,))
+                                                             "2023-01-25", 1, 1,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-25", 0, 25,))
+                                                             "2023-01-26", 1, 2,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-26", 0, 26,))
+                                                             "2023-01-27", 1, 3,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-27", 0, 27,))
+                                                             "2023-01-28", 1, 4,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-28", 0, 28,))
+                                                             "2023-01-29", 1, 5,))
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
-                                                             "2023-01-29", 0, 29,))
+                                                             "2023-01-30", 1, 6,))
     db.commit()
 
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Swimming", "Swimming every week", "weekly", "2023-01-01",
@@ -108,13 +108,21 @@ def generate_test_data(db):
     db.commit()
 
 
-def test_length_counter(name="Jogging",  db=get_test_db()):
+def test_habitz(name="Jogging",  db=get_test_db()):
     generate_test_data(db)
+    # testing if the generating of the test data was done correctly
     data = get_habit_data(db, name="Jogging")
     assert len(data) == 29
-
     data = get_habit_data(db, name="Swimming")
     assert len(data) == 5
+    # testing if the function analyse_habit_names is working correctly
+    habit_names = analyse_habit_names(db)
+    assert habit_names == "Jogging, Swimming"
+    longest_streak = analyse_longest_streak_overall(db)
+    assert longest_streak == "The longest streak of all times is 23 for the habit 'Jogging'"
+
+
+
 
 
 #    def test_db_counter(self, name="Jogging", db=get_test_db()):

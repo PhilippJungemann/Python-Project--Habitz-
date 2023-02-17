@@ -45,7 +45,7 @@ def analyse_longest_streak_overall(db):
      """
     names = get_habit_names(db)
     longest_streak = 0
-    winner = None
+    winner = "Wirsing"
     # First looping through the names
     for name in names:
         data = get_habit_data(db, name)
