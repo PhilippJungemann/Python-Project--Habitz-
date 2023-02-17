@@ -7,8 +7,9 @@ from tracker import track_all_habitz
 from reminder import reminder
 
 
-# Creating a cli for the user
 def cli():
+    """cli function, to create a cli for the user
+    """
     # Getting connected to the database
     db = get_db()
     # Tracking, if a check-off date is missed

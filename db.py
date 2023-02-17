@@ -2,15 +2,19 @@ import sqlite3
 from datetime import date, datetime
 
 
-# Getting connection to the database
 def get_db(name="main.db"):
+    """get_db function, to get connection to the database
+    :param name: name of the database
+    """
     db = sqlite3.connect(name)
     create_tables(db)
     return db
 
 
-# Creating a table if it not already exists
 def create_tables(db):
+    """create_tables function, to create a table if it not already exists
+    :param db: connection to the database
+     """
     cur = db.cursor()
 
     cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
@@ -20,17 +24,29 @@ def create_tables(db):
     db.commit()
 
 
-# Adding a habit to the database
 def add_habit(db, name, description, interval, creation_date, date_of_completion, count_streak_loss,
               count_longest_streak):
+    """add_habit function, to add a habit to the database
+    :param db: connection to the database
+    :param name: the name of the habit
+    :param description: the description of the habit
+    :param interval: the interval that must not be broken in order not to lose a streak
+    :param creation_date: the date of the habit creation
+    :param date_of_completion: here the date of completion will be inserted
+    :param count_streak_loss: this will be incremented if a check-off interval is missed
+    :param count_longest_streak: this will be incremented if a check-off is done in time
+     """
     cur = db.cursor()
     cur.execute("INSERT INTO habitz VALUES (?, ?, ?, ?, ?, ?, ?)", (name, description, interval, creation_date,
                 date_of_completion, count_streak_loss, count_longest_streak))
     db.commit()
 
 
-# Checking off a habit after having done it
 def check_off_habit(db, name):
+    """check_off_habit function, to check off a habit after having it done
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     cur = db.cursor()
     cur.execute("SELECT * FROM habitz WHERE name = ?", (name,))
     habit_list = cur.fetchall()
@@ -92,8 +108,12 @@ def check_off_habit(db, name):
             insert_date_of_completion(db, completed_habit, cur)
 
 
-# Function for incrementing the streak-count and inserting the date of completion
 def insert_date_of_completion(db, completed_habit, cur):
+    """insert_date_of_completion function, to increment the streak-count and inserting the date of completion
+    :param db: connection to the database
+    :param completed_habit: the name of the  completed habit
+    :param cur: connection to the cursor in the database
+     """
     completed_habit[4] = str(date.today())
     completed_habit[6] += 1
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", completed_habit)
@@ -101,8 +121,10 @@ def insert_date_of_completion(db, completed_habit, cur):
     print("Your habit has been successfully checked off. Congratulations, you're doing great!")
 
 
-# Function for getting the names out of the database
 def get_habit_names(db):
+    """get_habit_names function, to get the names out of the database
+    :param db: connection to the database
+     """
     cur = db.cursor()
     cur.execute("SELECT DISTINCT name FROM habitz")
     names = cur.fetchall()
@@ -111,8 +133,10 @@ def get_habit_names(db):
     return names
 
 
-# Function for getting the periodicity out of the database
 def get_habit_periodicity(db):
+    """get_habit_periodicity function, to get the periodicity out of the database
+    :param db: connection to the database
+     """
     cur = db.cursor()
     cur.execute("SELECT DISTINCT interval FROM habitz")
     periodicity = cur.fetchall()
@@ -121,15 +145,21 @@ def get_habit_periodicity(db):
     return periodicity
 
 
-# Function for getting all habit data
 def get_habit_data(db, name):
+    """get_habit_data function, to get all habit data
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     cur = db.cursor()
     cur.execute("SELECT * FROM habitz WHERE name =?", (name,))
     return cur.fetchall()
 
 
-# Function for deleting a habit
 def delete_habit(db, name):
+    """delete_habit function, to delete a habit
+    :param db: connection to the database
+    :param name: the name of the habit
+     """
     cur = db.cursor()
     cur.execute("DELETE from habitz WHERE name = ?", (name,))
     db.commit()
