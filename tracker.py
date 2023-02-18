@@ -18,6 +18,7 @@ def track_all_habitz(db, name):
     diff = today - last_check_off
     diff = int(diff.days)
     if new[2] == "daily":
+        print_stuff()
         reset_streak(db, diff, new, name)
 
     if new[2] == "weekly":
@@ -50,5 +51,12 @@ def reset_streak(db, diff, new, name):
         cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", new)
         db.commit()
         print("So sorry to say, but you lost your streak in " + name + ". Don't worry and keep up!")
+        # the returning of the "So sorry to say, but you lost your streak in " + name + ". Don't worry and keep up!"
+        # is only done for the module 'test_project'
+        return "So sorry to say, but you lost your streak in " + name + ". Don't worry and keep up!"
     else:
         return
+
+
+def print_stuff():
+    return "I print stuff"

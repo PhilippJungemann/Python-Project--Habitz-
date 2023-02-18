@@ -3,6 +3,7 @@ import sqlite3
 from db import get_habit_data
 from analyse import analyse_habit_names, analyse_longest_streak_overall, analyse_most_struggle, \
     analyse_longest_streaks_per_habit, analyse_same_periodicity
+from tracker import track_all_habitz, reset_streak
 
 
 def teardown_method():
@@ -101,10 +102,10 @@ def generate_test_data(db):
     db.commit()
 
 
-def test_habitz(name="Jogging",  db=get_test_db()):
+def test_analyse_module(name="Jogging",  db=get_test_db()):
     generate_test_data(db)
     # testing if the generating of the test data was done correctly
-    data = get_habit_data(db, name="Jogging")
+    data = get_habit_data(db, name)
     assert len(data) == 29
     data = get_habit_data(db, name="Swimming")
     assert len(data) == 5
@@ -122,3 +123,8 @@ def test_habitz(name="Jogging",  db=get_test_db()):
     assert longest_streak_per_habit == "The longest streak for 'Jogging' is 23"
     habit_with_most_struggle = analyse_most_struggle(db)
     assert habit_with_most_struggle == "The habit you struggled the most with 1 missed check-offs is: 'Jogging'"
+
+
+def test_tracker_module(name="Jogging",  db=get_test_db()):
+    track_check = track_all_habitz(db, name)
+    assert track_check == "Wurd"
