@@ -23,6 +23,9 @@ def reminder(db, name):
     if new[2] == "daily":
         if diff > 0:
             print("Your habit '" + name + "' has to be done today!")
+            # the returning of "Your habit '" + name + "' has to be done today!"
+            # is only done for the module 'test_project'
+            return "Your habit '" + name + "' has to be done today!"
         # if it already was checked off, there is no action required
         else:
             print("Great - your habit '" + name + "' doesn't need to be done until tomorrow!")

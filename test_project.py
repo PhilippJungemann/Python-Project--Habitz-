@@ -1,9 +1,12 @@
 import os
 import sqlite3
-from db import get_habit_data
+from datetime import date
+from habit import Habit
+from db import get_habit_data, get_habit_names
 from analyse import analyse_habit_names, analyse_longest_streak_overall, analyse_most_struggle, \
     analyse_longest_streaks_per_habit, analyse_same_periodicity
-from tracker import track_all_habitz, reset_streak
+from tracker import track_all_habitz
+from reminder import reminder
 
 
 def teardown_method():
@@ -127,6 +130,20 @@ def test_analyse_module(name="Jogging",  db=get_test_db()):
 
 def test_tracker_module(name="Jogging",  db=get_test_db()):
     track_check = track_all_habitz(db, name)
-    # testing if the tracker module is working correctly. the streak set to 0 ([6]) and the loss_of_streak increased
-    # by 1 ([5]) show that the program is working correctly
+    # testing if the tracker module is working correctly. (The streak set to 0 ([6]) and the loss_of_streak increased
+    # by 1 ([5]) show that the program is working correctly)
     assert track_check == ['Jogging', 'Jogging everyday', 'daily', '2023-01-01', '2023-01-30', 2, 0]
+
+
+def test_reminder_module(name="Jogging",  db=get_test_db()):
+    reminding = reminder(db, name)
+    # testing if the reminder module is working correctly
+    assert reminding == "Your habit 'Jogging' has to be done today!"
+
+
+def test_habit_module(db=get_test_db(), name="Biking", desc="I want to bike every week", inter="weekly"):
+    habit = Habit(name, desc, inter)
+    habit.store(db)
+    names = get_habit_names(db)
+    # testing if the reminder module is working correctly
+    assert names[2] == 'Biking'
