@@ -6,8 +6,9 @@
  2. Communication from user to Habitz
  3. Communication from Habitz to user
  4. Interactiing of the individual modules
- 5. Benefits for the user of Habitz
- 6. Requirements
+ 5. Testing the modules
+ 6. Benefits for the user of Habitz
+ 7. Requirements
  
  
  ## 1. Introduction
@@ -42,7 +43,11 @@ The other modules and their respective functions can be accessed via the "main" 
 The "habit" module is used to create new habits. Via the class "Habit" and its function "store" a new habit is created in the module "db"(database). 
 Analyses are performed using the "analyse" module. The functions in "analysis" use functions from the "db" module to communicate with the database.
 
-## 5. Benefits for the user of Habitz:
+## 5. Testing the modules:
+There is...
+
+
+## 6. Benefits for the user of Habitz:
 
 The special benefit of the "Habitz" app lies in the bidirectional communication and the comprehensive analysis options. 
 Both contribute to an increased motivation of the user and facilitate the achievement of personal goals. 
@@ -50,7 +55,7 @@ On the one hand, the user is thus proactively informed by the app about the curr
 On the other hand, the user can perform in-depth analyses of the stored data on his habits and is motivated to keep setting new personal records. 
 
 
-## 6. Requirements: 
+## 7. Requirements: 
 
 Python Modules that have to be installed and imported:
 questionary; 
