@@ -4,7 +4,8 @@ from datetime import date, datetime
 
 def track_all_habitz(db, name):
     """track_all_habitz function, to track the current habits and, if necessary,
-    set the streak to zero if the habit has not been done in time
+    set the streak to zero if the habit has not been done in time. This is done by first examining the intervals within
+    which the habit must be checked off and then looking to see if the time was missed
     :param db: connection to the database
     :param name: the name of the habit
      """
@@ -17,25 +18,26 @@ def track_all_habitz(db, name):
     today = date.today()
     diff = today - last_check_off
     diff = int(diff.days)
+    # checking if the habit is a daily one
     if new[2] == "daily":
         reset_streak(db, diff, new, name)
         # the returning of new is only done for the test_project_module
         return new
-
+    # checking if the habit is a weekly one
     if new[2] == "weekly":
         last_check_off = datetime.strptime(new[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%W')
         current_week = date.today().strftime("%W")
         diff = int(current_week) - int(str(last_check_off))
         reset_streak(db, diff, new, name)
-
+    # checking if the habit is a monthly one
     if new[2] == "monthly":
         last_check_off = datetime.strptime(new[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%m')
         current_month = date.today().strftime("%m")
         diff = int(current_month) - int(str(last_check_off))
         reset_streak(db, diff, new, name)
-
+    # checking if the habit is a yearly one
     if new[2] == "yearly":
         last_check_off = datetime.strptime(new[4], '%Y-%m-%d').date()
         last_check_off = datetime.strftime(last_check_off, '%Y')
@@ -52,6 +54,7 @@ def reset_streak(db, diff, new, name):
     :param new: this is the list of the latest habit with its respective parameters
     :param name: the name of the habit
      """
+    # the absolute value must be taken so that no errors can occur at year changes
     if abs(diff) > 1:
         new[5] += 1
         new[6] = 0

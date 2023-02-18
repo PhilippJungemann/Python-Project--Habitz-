@@ -12,7 +12,6 @@ def analyse_habit_names(db):
     return all_habits
 
 
-# Creating a list of habits with the same periodicity
 def analyse_same_periodicity(db, period):
     """analyse_same_periodicity function, to create a list of habits with the same periodicity
     :param db: connection to the database
@@ -33,6 +32,7 @@ def analyse_longest_streaks_per_habit(db, name):
      """
     data = get_habit_data(db, name)
     longest_streak = 0
+    # For every habit looping through the data to find the highest number in longest_streak
     for habit in data:
         if int(habit[6]) > longest_streak:
             longest_streak = int(habit[6])

@@ -9,6 +9,8 @@ from reminder import reminder
 
 
 def teardown_method():
+    """teardown_method function, to remove the last test database to be able to run a new test
+     """
     os.remove("test.db")
 
 
@@ -16,12 +18,18 @@ teardown_method()
 
 
 def get_test_db(name="test.db"):
+    """get_test_db function, to create a new test database
+    :param name: the name of test database
+     """
     db = sqlite3.connect(name)
     create_method(db)
     return db
 
 
 def create_method(db):
+    """create_method function, to create a new table in the test database
+    :param db: connection to the database
+     """
     cur = db.cursor()
 
     cur.execute("""CREATE TABLE IF NOT EXISTS habitz (
@@ -30,6 +38,9 @@ def create_method(db):
 
 
 def generate_test_data(db):
+    """generate_test_data function, to create a test data set
+    :param db: connection to the database
+     """
     cur = db.cursor()
     cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Jogging", "Jogging everyday", "daily", "2023-01-01",
                                                              "2023-01-01", 0, 1,))
@@ -105,6 +116,10 @@ def generate_test_data(db):
 
 
 def test_analyse_module(name="Jogging",  db=get_test_db()):
+    """test_analyse_module function, to test the functions of the "analyse" module
+    :param name: name of the habit used by default
+    :param db: connection to the database
+     """
     generate_test_data(db)
     # testing if the generating of the test data was done correctly
     data = get_habit_data(db, name)
@@ -129,19 +144,33 @@ def test_analyse_module(name="Jogging",  db=get_test_db()):
 
 
 def test_tracker_module(name="Jogging",  db=get_test_db()):
+    """test_tracker_module function, to test the functions of the "tracker" module
+    :param name: name of the habit used by default
+    :param db: connection to the database
+     """
     track_check = track_all_habitz(db, name)
     # testing if the tracker module is working correctly. (The streak set to 0 ([6]) and the loss_of_streak increased
-    # by 1 ([5]) show that the program is working correctly)
+    # by 1 to 2 ([5]) show that the program is working correctly)
     assert track_check == ['Jogging', 'Jogging everyday', 'daily', '2023-01-01', '2023-01-30', 2, 0]
 
 
 def test_reminder_module(name="Jogging",  db=get_test_db()):
+    """test_reminder_module function, to test the functions of the "reminder" module
+    :param name: name of the habit used by default
+    :param db: connection to the database
+     """
     reminding = reminder(db, name)
     # testing if the reminder module is working correctly
     assert reminding == "Your habit 'Jogging' has to be done today!"
 
 
 def test_habit_module(db=get_test_db(), name="Biking", desc="I want to bike every week", inter="weekly"):
+    """test_habit_module function, to test the functions of the "habit" module
+    :param db: connection to the database
+    :param name: name of the habit that is to be created
+    :param
+    :param
+     """
     habit = Habit(name, desc, inter)
     habit.store(db)
     names = get_habit_names(db)

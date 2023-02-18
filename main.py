@@ -10,20 +10,20 @@ from reminder import reminder
 def cli():
     """cli function, to create a cli for the user
     """
-    # Getting connected to the database
+    # getting connected to the database
     db = get_db()
-    # Tracking, if a check-off date is missed
+    # tracking, if a check-off date is missed
     names_list = get_habit_names(db)
     for name in names_list:
         track_all_habitz(db, name)
-    # Reminding the user about to-dos
+    # reminding the user about to-dos
     for name in names_list:
         reminder(db, name)
 
-    # Starting the while-loop
+    # starting the while-loop
     stop = False
     while not stop:
-        # Giving the user access to the different options to act in the app
+        # giving the user access to the different options to act in the app
         choice = questionary.select(
             "Hello! What do you wish to do?",
             choices=["Create a new habit", "Mark a habit as completed", "Analyse my habits",
@@ -32,8 +32,8 @@ def cli():
         if choice != "Exit Habitz":
             print("Great stuff!")
 
-        # Here the user gets the option to create a new habit
-        # For this purpose the necessary parameters are requested
+        # here the user gets the option to create a new habit
+        # for this purpose the necessary parameters are requested
         if choice == "Create a new habit":
             name = questionary.text("What is the name of your new habit?").ask()
             names = get_habit_names(db)
@@ -50,13 +50,13 @@ def cli():
                     choices=["daily", "weekly", "monthly",
                              "yearly"]
                 ).ask()
-                # The parameters are passed and the corresponding habit is stored in the database
+                # the parameters are passed and the corresponding habit is stored in the database
                 habit = Habit(name, desc, inter)
                 habit.store(db)
                 print("Your new habit has been created successfully!")
                 continue
 
-        # Here the user gets the option to mark a habit as done
+        # here the user gets the option to mark a habit as done
         elif choice == "Mark a habit as completed":
             names = get_habit_names(db)
             name = questionary.select(
@@ -67,7 +67,7 @@ def cli():
             check_off_habit(db, name)
 
             continue
-        # Shows the user the different analysis options
+        # shows the user the different analysis options
         elif choice == "Analyse my habits":
             selected = questionary.select(
                 "What would you like to analyse?",
@@ -77,12 +77,12 @@ def cli():
                          "What is my longest streak of all times?", "Which habit do I struggle with the most?",
                          "Get back to the main menu", "Exit Habitz"]
             ).ask()
-            # Listing of current habits
+            # listing of current habits
             if selected == "What are my current habits?":
                 names = analyse_habit_names(db)
                 print("Your current habits are: "+str(names))
                 continue
-            # Listing of current habits with the same periodicity
+            # listing of current habits with the same periodicity
             elif selected == "Create a list of all habits with the same periodicity!":
                 periodicity = get_habit_periodicity(db)
                 period = questionary.select(
@@ -92,13 +92,13 @@ def cli():
                 same_period = analyse_same_periodicity(db, period)
                 print("Your habits with a periodicity of a " + period + " period are: " + str(same_period))
                 continue
-            # Listing of current habits with the respective longest streak
+            # listing of current habits with the respective longest streak
             elif selected == "Make a list of the longest streaks of all my habits!":
                 names_list = get_habit_names(db)
                 for name in names_list:
                     analyse_longest_streaks_per_habit(db, name)
                 continue
-            # Longest streak for a particular habit
+            # longest streak for a particular habit
             elif selected == "Show the longest streak for a particular habit!":
                 names = get_habit_names(db)
                 name = questionary.select(
@@ -107,27 +107,27 @@ def cli():
                 ).ask()
                 analyse_longest_streaks_per_habit(db, name)
                 continue
-            # Longest streak overall
+            # longest streak overall
             elif selected == "What is my longest streak of all times?":
                 analyse_longest_streak_overall(db)
                 continue
-            # Most missed check-offs overall
+            # most missed check-offs overall
             elif selected == "Which habit do I struggle with the most?":
                 analyse_most_struggle(db)
                 continue
-            # Option to get back to the main menu
+            # option to get back to the main menu
             elif selected == "Get back to the main menu":
                 continue
             else:
                 stop = True
-        # Deleting a habit from the database
+        # deleting a habit from the database
         if choice == "Delete a habit":
             names = get_habit_names(db)
             name = questionary.select(
                 "Which habit do you want to delete?",
                 choices=names
             ).ask()
-            # Doublecheck here if the habit really should be deleted, because that will be permanent
+            # doublecheck here if the habit really should be deleted, because that will be permanent
             confirmation = questionary.confirm("Are you sure that you want to delete '"+name+"' ?").ask()
             if confirmation:
                 delete_habit(db, name)
@@ -135,7 +135,7 @@ def cli():
             else:
                 continue
 
-        # If choice comes to "Exit Habitz", the while loop will be stopped
+        # if choice comes to "Exit Habitz", the while loop will be stopped
         else:
             print("Good bye!")
             stop = True

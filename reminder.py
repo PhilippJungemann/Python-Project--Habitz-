@@ -36,6 +36,7 @@ def reminder(db, name):
         last_check_off = datetime.strftime(last_check_off, '%W')
         current_week = date.today().strftime("%W")
         diff = int(current_week) - int(str(last_check_off))
+        # the absolute value must be taken so that no errors can occur at year changes
         if abs(diff) > 0:
             print("Your habit '" + name + "' has to be done this week!")
         # if it already was checked off, there is no action required
@@ -48,6 +49,7 @@ def reminder(db, name):
         last_check_off = datetime.strftime(last_check_off, '%m')
         current_month = date.today().strftime("%m")
         diff = int(current_month) - int(str(last_check_off))
+        # the absolute value must be taken so that no errors can occur at year changes
         if abs(diff) > 0:
             print("Your habit '" + name + "' has to be done this month!")
         # if it already was checked off, there is no action required
