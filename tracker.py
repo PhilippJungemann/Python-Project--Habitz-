@@ -45,6 +45,13 @@ def track_all_habitz(db, name):
 
 
 def reset_streak(db, diff, new, name):
+    """track_all_habitz function, to track the current habits and, if necessary,
+    set the streak to zero if the habit has not been done in time
+    :param db: connection to the database
+    :param diff: the calculated difference between the current date and the date of last check-off
+    :param new: this is the list of the latest habit with its respective parameters
+    :param name: the name of the habit
+     """
     if abs(diff) > 1:
         new[5] += 1
         new[6] = 0

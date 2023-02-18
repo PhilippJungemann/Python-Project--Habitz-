@@ -121,9 +121,10 @@ def test_analyse_module(name="Jogging",  db=get_test_db()):
     habit_with_longest_streak = analyse_longest_streak_overall(db)
     assert habit_with_longest_streak == "The longest streak of all time is 23 for the habit 'Jogging'"
     longest_streak_per_habit = analyse_longest_streaks_per_habit(db, name)
-    # testing if the function analyse_most_struggle is working correctly
+    # testing if the function analyse_longest_streaks_per_habit is working correctly
     assert longest_streak_per_habit == "The longest streak for 'Jogging' is 23"
     habit_with_most_struggle = analyse_most_struggle(db)
+    # testing if the function analyse_most_struggle is working correctly
     assert habit_with_most_struggle == "The habit you struggled the most with 1 missed check-offs is: 'Jogging'"
 
 
