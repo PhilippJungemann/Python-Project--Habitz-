@@ -168,8 +168,8 @@ def test_habit_module(db=get_test_db(), name="Biking", desc="I want to bike ever
     """test_habit_module function, to test the functions of the "habit" module
     :param db: connection to the database
     :param name: name of the habit that is to be created
-    :param
-    :param
+    :param desc: description of the habit to be created on a test basis
+    :param inter: period of the habit to be created on a test basis
      """
     habit = Habit(name, desc, inter)
     habit.store(db)
