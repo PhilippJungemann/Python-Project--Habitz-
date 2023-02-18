@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from datetime import date
 from habit import Habit
 from db import get_habit_data, get_habit_names
 from analyse import analyse_habit_names, analyse_longest_streak_overall, analyse_most_struggle, \
