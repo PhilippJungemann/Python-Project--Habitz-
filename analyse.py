@@ -37,6 +37,8 @@ def analyse_longest_streaks_per_habit(db, name):
         if int(habit[6]) > longest_streak:
             longest_streak = int(habit[6])
     print("The longest streak for '" + name + "' is " + str(longest_streak))
+    # the returning of the "The longest streak for '" + name + "' is " + str(longest_streak)
+    # is only done for the module 'test_project'
     return "The longest streak for '" + name + "' is " + str(longest_streak)
 
 

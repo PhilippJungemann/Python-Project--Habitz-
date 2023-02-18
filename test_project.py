@@ -2,7 +2,7 @@ import os
 import sqlite3
 from db import get_habit_data
 from analyse import analyse_habit_names, analyse_longest_streak_overall, analyse_most_struggle, \
-    analyse_longest_streaks_per_habit
+    analyse_longest_streaks_per_habit, analyse_same_periodicity
 
 
 def teardown_method():
@@ -111,6 +111,9 @@ def test_habitz(name="Jogging",  db=get_test_db()):
     # testing if the function analyse_habit_names is working correctly
     habit_names = analyse_habit_names(db)
     assert habit_names == "Jogging, Swimming"
+    # testing if the function analyse_same_periodicity is working correctly
+    daily_habits = analyse_same_periodicity(db, period="daily")
+    assert daily_habits == ['Jogging']
     # testing if the function analyse_longest_streak_overall is working correctly
     habit_with_longest_streak = analyse_longest_streak_overall(db)
     assert habit_with_longest_streak == "The longest streak of all time is 23 for the habit 'Jogging'"
