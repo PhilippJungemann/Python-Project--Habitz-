@@ -127,4 +127,6 @@ def test_analyse_module(name="Jogging",  db=get_test_db()):
 
 def test_tracker_module(name="Jogging",  db=get_test_db()):
     track_check = track_all_habitz(db, name)
-    assert track_check == "Wurd"
+    # testing if the tracker module is working correctly. the streak set to 0 ([6]) and the loss_of_streak increased
+    # by 1 ([5]) show that the program is working correctly
+    assert track_check == ['Jogging', 'Jogging everyday', 'daily', '2023-01-01', '2023-01-30', 2, 0]
