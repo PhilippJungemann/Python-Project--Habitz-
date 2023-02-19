@@ -49,11 +49,11 @@ Via "Exit Habitz" the while-loop of the program is stopped and the cli is closed
 ## 3. Communication from Habitz to user: 
 
 When the app is opened, the tracker function is executed first and checks which habits, if any, have not been completed in time. If this is the case, the counter for "Lost Streak" is increased by 1 and the counter for "Longest Streak" is set to 0. If a streak loss has occurred, the user is notified via the command line interface. 
-After the tracker function has run through, the reminder function starts. This function checks in the database which tasks are pending at which time and informs the user about them.
+After the tracker function has run through, the reminder function starts. This function checks in the database which tasks are pending at which time and informs the user about them via the cli.
 
 ## 4. Interactiing of the individual modules:
 
-The starting point of Habitz is the module "main". Here the "Command Line Interface" is opened for communication with the user. 
+The starting point of Habitz is the module "main". Here the cli is opened for communication with the user. 
 The other modules and their respective functions can be accessed via the "main" module. 
 The "habit" module is used to create new habits. Via the class "Habit" and its function "store" a new habit is created in the module "db"(database). 
 Analyses are performed using the "analyse" module. The functions in "analysis" use functions from the "db" module to communicate with the database.
