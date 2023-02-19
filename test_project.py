@@ -114,6 +114,18 @@ def generate_test_data(db):
                                                              "2023-01-28", 0, 5,))
     db.commit()
 
+    cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Hiking", "Hiking every month", "monthly", "2023-01-01",
+                                                             "2023-01-28", 0, 1,))
+    db.commit()
+
+    cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Visit the dentist", "Visiting the dentist every year",
+                                                             "yearly", "2023-01-01", "2023-01-28", 0, 1,))
+    db.commit()
+
+    cur.execute("INSERT INTO habitz VALUES(?,?,?,?,?,?,?)", ("Health checkup", "Doing health checkup every year",
+                                                             "yearly", "2023-01-01", "2023-01-30", 0, 1,))
+    db.commit()
+
 
 def test_analyse_module(name="Jogging",  db=get_test_db()):
     """test_analyse_module function, to test the functions of the "analyse" module
@@ -128,7 +140,7 @@ def test_analyse_module(name="Jogging",  db=get_test_db()):
     assert len(data) == 5
     # testing if the function analyse_habit_names is working correctly
     habit_names = analyse_habit_names(db)
-    assert habit_names == "Jogging, Swimming"
+    assert habit_names == "Jogging, Swimming, Hiking, Visit the dentist, Health checkup"
     # testing if the function analyse_same_periodicity is working correctly
     daily_habits = analyse_same_periodicity(db, period="daily")
     assert daily_habits == ['Jogging']
@@ -174,5 +186,5 @@ def test_habit_module(db=get_test_db(), name="Biking", desc="I want to bike ever
     habit = Habit(name, desc, inter)
     habit.store(db)
     names = get_habit_names(db)
-    # testing if the reminder module is working correctly
-    assert names[2] == 'Biking'
+    # testing if the habit module is working correctly
+    assert names[5] == 'Biking'
