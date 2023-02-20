@@ -8,7 +8,7 @@ from reminder import reminder
 
 
 def cli():
-    """cli function, to create a cli for the user
+    """cli function, to create a "command line interface"(cli) for the user
     """
     # getting connected to the database
     db = get_db()
