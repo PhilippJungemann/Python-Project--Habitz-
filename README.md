@@ -32,7 +32,7 @@ When the choice is made to "create a new habit", the name of the habit, the desc
 
 Once the choice is made to "mark a habit as completed", the user is prompted to select the appropriate name from a list of the current habit. After that, a function is executed that marks the habit as completed for the corresponding time period and increases the counter for the corresponding streak by 1.
 
-If "analyze my habits" is selected, it is possible to display 
+If "analyse my habits" is selected, it is possible to display 
 1. All active habits, 
 2. A list of habits with the corresponding streak, 
 3. The longest streak of all times, 
