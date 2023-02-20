@@ -41,6 +41,7 @@ If "analyse my habits" is selected, it is possible to display:
 6. A list of all habits with the same periodicity
 
 In addition to that the following options can be chosen:
+
 7. Get back to main menu and
 8. Exit Habitz. 
 
