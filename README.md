@@ -5,7 +5,7 @@
  1. Introduction
  2. Communication from user to Habitz
  3. Communication from Habitz to user
- 4. Interactiing of the individual modules
+ 4. Interacting of the individual modules
  5. Testing the modules
  6. Benefits for the user of Habitz
  7. Requirements
@@ -15,7 +15,7 @@
  
 This app helps the user to acquire positive habits. 
 Therefor, the user can define habits that he or she has to "work through" within a certain period of time. 
-The idea behind “Habitz” is to support the user as best as possible in achieving his or her goal of acquiring positive new habits. 
+The idea behind “Habitz” is to support the user as good as possible in achieving his or her goal of acquiring positive new habits. 
 Extensive analysis options and a reminder function keep the user motivated.
 
 ## 2. Communication from user to Habitz: 
@@ -35,13 +35,10 @@ Once the choice is made to "mark a habit as completed", the user is prompted to 
 If "analyse my habits" is selected, it is possible to display: 
 1. All active habits, 
 2. A list of habits with the corresponding streak, 
-3. The longest streak of all times, 
+3. The longest streak of all time, 
 4. The habit with the most missed completions, 
 5. The longest streak for a particular habit, 
-6. A list of all habits with the same periodicity
-
-In addition to that the following options can be chosen:
-
+6. A list of all habits with the same periodicity and in addition to that the following options can be chosen:
 7. Get back to main menu and
 8. Exit Habitz. 
 
@@ -54,7 +51,7 @@ Via "Exit Habitz" the While-Loop of the program is stopped and the cli is closed
 When the app is opened, the tracker function is executed first and checks which habits, if any, have not been completed in time. If this is the case, the counter for "Lost Streak" is increased by 1 and the counter for "Longest Streak" is set to 0. If a streak loss has occurred, the user is notified via the command line interface. 
 After the tracker function has run through, the reminder function starts. This function checks in the database which tasks are pending at which time and informs the user about them via the cli.
 
-## 4. Interactiing of the individual modules:
+## 4. Interacting of the individual modules:
 
 The starting point of Habitz is the module "main". Here the cli is opened for communication with the user. 
 The other modules and their respective functions can be accessed via the "main" module. 
@@ -80,5 +77,5 @@ On the other hand, the user can perform in-depth analyses of the stored data on 
 Python Modules that have to be installed and imported:
 questionary; 
 
-Python Modules that have to be imported but do not to be be installed, because they are already part of the python package:
+Python Modules that have to be imported but do not to be installed, because they are already part of the python package:
 sqlite3; datetime; os
