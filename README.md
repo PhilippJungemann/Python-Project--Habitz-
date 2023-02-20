@@ -40,7 +40,7 @@ If "analyse my habits" is selected, it is possible to display
 5. The longest streak for a particular habit, 
 6. A list of all habits with the same periodicity,
 7. Get back to main menu and
-8. Exit habitz. 
+8. Exit Habitz. 
 
 If the user selects "Delete a habit", the program will first ask for further confirmation of the operation, as the deletion of the property with all the associated data in the database will be final. 
 
